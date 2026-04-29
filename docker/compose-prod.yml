@@ -1,0 +1,27 @@
+# Production deployment on Unraid.
+# - Same path / port / container name as the legacy upstream image
+#   so Node-RED and Loxone reach the same address before and after cutover.
+# - All prototype flags off by default — flag state is in
+#   /mnt/user/appdata/emhass/contrib-flags.yaml (NOT in this file).
+
+services:
+  emhass:
+    image: emhass-contrib/prod:v0.17.2-c1
+    container_name: emhass
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - /mnt/user/appdata/emhass:/app/data
+      - /mnt/user/appdata/emhass/options.json:/data/options.json:ro
+    environment:
+      # Upstream EMHASS env vars (HA URL/key etc.) — copy from existing container template
+      URL: "${HA_URL}"
+      KEY: "${HA_KEY}"
+      TIME_ZONE: "${TIME_ZONE:-Europe/Berlin}"
+      LAT: "${LAT}"
+      LON: "${LON}"
+      ALT: "${ALT}"
+    labels:
+      com.emhass.upstream-pin: "v0.17.2"
+      com.emhass.contrib-rev: "c1"

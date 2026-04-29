@@ -1,0 +1,14 @@
+# Dev-only flag config — all prototypes ON for full smoke testing.
+# Production flags live at /mnt/user/appdata/emhass/contrib-flags.yaml on Unraid
+# and start with everything OFF.
+prototypes:
+  api_last_run:
+    enabled: true
+    cache_seconds: 30
+  api_healthz:
+    enabled: true
+  openapi_gen:
+    enabled: true
+
+logging:
+  level: DEBUG

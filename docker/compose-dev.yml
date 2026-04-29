@@ -1,0 +1,26 @@
+# Local dev / repro stack.
+# - Separate data path (no production-data overwrite risk)
+# - Port 5050 (parallel to prod 5000)
+# - Mounts a dev contrib-flags.yaml with all prototype flags ON for full smoke test.
+
+services:
+  emhass:
+    image: emhass-contrib/prod:dev
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prototypes
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-emhass-base:dev}
+    container_name: emhass-contrib-dev
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./dev-data:/app/data
+      - ./contrib-flags.dev.yaml:/app/data/contrib-flags.yaml:ro
+    environment:
+      URL: "${HA_URL:-http://localhost}"
+      KEY: "${HA_KEY:-dev-key}"
+      TIME_ZONE: "${TIME_ZONE:-Europe/Berlin}"
+      LAT: "${LAT:-50.0}"
+      LON: "${LON:-10.0}"
+      ALT: "${ALT:-100}"
