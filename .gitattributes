@@ -1,0 +1,12 @@
+# Default: text, normalize line endings to LF on commit
+* text=auto eol=lf
+
+# Binary files — never normalize
+*.png binary
+*.jpg binary
+*.ico binary
+*.tar binary
+*.tar.gz binary
+
+# Submodule directory — don't normalize anything inside
+upstream/** -text

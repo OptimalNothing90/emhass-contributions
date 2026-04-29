@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Repomix output (on-demand only, never committed)
+repomix-output.*
+
+# Build / Docker artefacts
+*.tar
+*.tar.gz
+.docker/
+
+# Local-only test data
+data/
+contrib-flags.yaml         # only the example lives in repo; actual config lives in container volume
