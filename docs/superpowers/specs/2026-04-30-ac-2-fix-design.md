@@ -127,7 +127,7 @@ Re-verified against current `master` tip on 2026-04-30 — all 5 still hold.
 
 1. JSON syntax: `python -c "import json; json.load(open('src/emhass/static/data/param_definitions.json', encoding='utf-8'))"` → no error.
 2. Re-run audit reproducer (`audits/2026-04-28-param-definitions.md` §6 script) → expect §3 mismatch list **empty**.
-3. `pytest tests/` → green. No test references these keys' schema defaults; sanity check against unexpected coupling.
+3. `pytest tests/` → green. No test loads `param_definitions.json` (verified via grep); existing tests touch the same keys only through `config_defaults.json` / `utils.py`, which are unchanged. Run as sanity check against unexpected coupling.
 4. Container / UI smoke (per AGENTS.md §5): `docker compose up`, browser → config page, the five fields show new defaults.
 
 **Post-merge:**
