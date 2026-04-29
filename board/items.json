@@ -409,7 +409,7 @@
       "title": "AC-2-fix: Correct audit-found mismatches in param_definitions.json",
       "type": "draft",
       "body": "Fix 7 default/type mismatches found during the schema audit that produced AC-2a (unit field) and PR #817 (regression_model typo). Sibling fix-PR — same audit pass, different concern.\n\nSource: schema audit cross-checked param_definitions.json defaults/types vs src/emhass/data/config_defaults.json + utils.treat_runtimeparams (lines ~597-1334).\n\nConfirmed mismatches (re-verify before PR):\n- sensor_replace_zero default\n- historic_days_to_retrieve default (2 vs 9)\n- (full list to be re-derived from audit; schema-audit script can reproduce)\n\nProcess: per-mismatch verification against config_defaults.json + utils.treat_runtimeparams, then single PR with clear before/after table in description.\n\nBackward-compat: only correct-the-default fixes — no breaking schema additions. Each mismatch independently verifiable.\n\nOut of scope: AC-2a (unit field, separate concern), AC-2b (runtime params block).\n\nEffort: XS to S depending on how many mismatches survive re-verification.\n\n**PR:** https://github.com/davidusb-geek/emhass/pull/830 (opened 2026-04-30, awaiting maintainer review)",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1",
       "Priority": "P2",
