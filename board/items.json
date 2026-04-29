@@ -204,7 +204,7 @@
       "id": "DISC-824",
       "title": "Discussion #824: EV use-cases follow-up to #789",
       "type": "draft",
-      "body": "Crowdsource EV-charging use-cases for the docs cookbook section. 9 distinct EV patterns extracted from #789 plus xitation's pure-HA guide. Discussion-Only — collect feedback, then propose docs structure.\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824",
+      "body": "Crowdsource EV-charging use-cases for the docs cookbook section. 9 distinct EV patterns extracted from #789 plus xitation's pure-HA guide. Discussion-Only — collect feedback, then propose docs structure.\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824\n\n## Status update (2026-04-29)\n\nTwo parallel tracks emerged from the discussion:\n\n**Track 1 — Cookbook recipes (DOC-cookbook card):** David approved a `docs/cookbook/` folder in #824. Recipes for patterns that work today with existing EMHASS features. Immediate next step: template + first 2 EV recipes (daily-commute, surplus-only).\n\n**Track 2 — Persistent flexible loads RFC (not yet on board):** Architectural proposal for native stateful load support in EMHASS — would benefit EV, heat pump, and DHW scheduling. RFC in preparation, will be discussed with David and sokorn before any code. @informatico-madrid (#820, EV Trip Planner) invited to review the draft.\n\nKey community findings:\n- `minimum_power_of_deferrable_loads` and `operating_timesteps_of_each_deferrable_load` already work but are undocumented (tracked via #826, #827)\n- @TD944: dynamic kWh target per MPC call solves surplus-only charging\n- @PerretDavid: non-semi-continuous deferrables already support modulating power\n- @marst444: proposed A/B/C/D grouping of use-cases + new use-case 10 (dynamic load balancing)\n- @informatico-madrid (#820): 12k LOC HA component for multi-trip EV scheduling with backward deficit propagation — validates the statefulness gap\n- @tomvanacker85: 3-day horizon (288 timesteps), MPC every 3 min, EpexPredictor for prices",
       "Status": "In Progress",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 1",
@@ -480,7 +480,7 @@
       "id": "EV-9",
       "title": "EV-9: NR/MQTT/EVCC simplified setup guide (study_cases section)",
       "type": "draft",
-      "body": "New section in `docs/study_cases/` for users running EMHASS on Node-RED/MQTT/EVCC stacks (no Home Assistant). Maintainer explicitly invited xitation/this contributor to file in #789.",
+      "body": "New section in docs for users running EMHASS on Node-RED/MQTT/EVCC stacks (no Home Assistant). Maintainer explicitly invited xitation/this contributor to file in #789.\n\nUpdate (2026-04-29): Target folder changed from `docs/study_cases/` to `docs/cookbook/` after David approved the cookbook structure in #824. Recipes are short, focused, copy-pasteable — better fit for this guide than the narrative walkthrough format in study_cases/.\n\nCoordinate with DOC-cookbook (folder setup + template) — EV-9 lands as a recipe in the new cookbook folder once the structure is in place.",
       "Status": "Ideas",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 4",
@@ -606,6 +606,18 @@
       "Phase": "Phase 5",
       "Priority": "P3",
       "Effort": "XL",
+      "Scope": "Upstream"
+    },
+    {
+      "id": "DOC-cookbook",
+      "title": "DOC-cookbook: docs/cookbook/ folder + recipe template",
+      "type": "draft",
+      "body": "New `docs/cookbook/` folder for short, copy-pasteable recipes. Approved by David in Discussion #824 (comment 2026-04-28):\n\n> \"Yes a cookbook section is probably a good idea. Maybe let's the study cases section house the simple onboarding cases [...] But then complete walkthroughs on a cookbook section.\"\n\nSeparation: `study_cases/` = tutorials + simple onboarding. `cookbook/` = focused recipes (config + snippet + caveats, each stands alone).\n\nFirst PR deliverables:\n- `docs/cookbook/` folder\n- Recipe template (fixed structure: Goal / Prerequisites / Config / Snippet / Caveats)\n- 1-2 initial EV recipes to seed the folder (daily-commute pattern, surplus-only pattern)\n- Index page linking to recipes, cross-linked from study_cases/ev.md\n\nLater recipes (from #824 discussion): multi-day weekend window, calendar-driven departure, EVCC dispatcher coupling, modulating-power chargers, negative-price aware charging. Plus non-EV recipes from #823 (good-practices crowdsourcing).\n\nCoordinate with DISC-824 (EV use-cases) and EV-9 (NR/MQTT/EVCC guide — will land in cookbook/ instead of study_cases/).\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824#discussioncomment-16726498",
+      "Status": "Todo",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 1.5",
+      "Priority": "P1",
+      "Effort": "S",
       "Scope": "Upstream"
     }
   ]
