@@ -21,8 +21,12 @@ from typing import Any
 
 import yaml
 
+# /data is the upstream EMHASS runtime data dir (see upstream/Dockerfile).
+# /app/data holds *seed* files baked into the image and is overlaid on first
+# boot only — mounting a host volume there would shadow the seeds and break
+# the upstream init script. So the production flag file lives under /data.
 DEFAULT_FLAGS_PATH = Path(
-    os.environ.get("EMHASS_CONTRIB_FLAGS_PATH", "/app/data/contrib-flags.yaml")
+    os.environ.get("EMHASS_CONTRIB_FLAGS_PATH", "/data/contrib-flags.yaml")
 )
 CACHE_TTL_SECONDS = 5
 

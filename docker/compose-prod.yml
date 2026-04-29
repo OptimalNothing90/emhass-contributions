@@ -12,7 +12,12 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - /mnt/user/appdata/emhass:/app/data
+      # Persist runtime data at /data (upstream's runtime data dir).
+      # Confirm the legacy container's mount target with
+      #   docker inspect emhass --format '{{.Mounts}}'
+      # before cutover; if the legacy setup mounts /share/emhass instead,
+      # mirror that mount here too so secrets_emhass.yaml is found.
+      - /mnt/user/appdata/emhass:/data
       - /mnt/user/appdata/emhass/options.json:/data/options.json:ro
     environment:
       # Upstream EMHASS env vars (HA URL/key etc.) — copy from existing container template

@@ -22,4 +22,5 @@ repomix-output.*
 
 # Local-only test data
 data/
+docker/dev-data/
 contrib-flags.yaml         # only the example lives in repo; actual config lives in container volume

@@ -8,7 +8,7 @@ Initial scaffold — `flags.py` (config reader) lives here. Concrete feature mod
 
 ## Flag file
 
-Production reads flags from `/app/data/contrib-flags.yaml` (mounted from host). Schema:
+Production reads flags from `/data/contrib-flags.yaml` (the upstream EMHASS runtime data dir, mounted from host). Schema:
 
 ```yaml
 prototypes:

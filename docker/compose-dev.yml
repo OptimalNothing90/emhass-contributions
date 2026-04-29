@@ -15,8 +15,11 @@ services:
     ports:
       - "5050:5000"
     volumes:
-      - ./dev-data:/app/data
-      - ./contrib-flags.dev.yaml:/app/data/contrib-flags.yaml:ro
+      # Persist runtime data (model pkls, opt results) across container restarts.
+      # Mounted at /data — the upstream EMHASS runtime data dir — NOT /app/data
+      # (which holds image-baked seeds the entrypoint copies on first boot).
+      - ./dev-data:/data
+      - ./contrib-flags.dev.yaml:/data/contrib-flags.yaml:ro
     environment:
       URL: "${HA_URL:-http://localhost}"
       KEY: "${HA_KEY:-dev-key}"
