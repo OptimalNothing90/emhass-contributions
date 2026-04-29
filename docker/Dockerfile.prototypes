@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+# emhass-contrib production image
+# Layers prototypes/ on top of upstream EMHASS image (built separately from upstream/Dockerfile).
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# Copy prototypes/ alongside upstream EMHASS source.
+# /opt/emhass-contrib/ is added to PYTHONPATH by the entrypoint.
+COPY prototypes/ /opt/emhass-contrib/prototypes/
+
+# Install minimal extra deps for prototypes/. EMHASS already has Flask/Quart, etc.
+# pyyaml is the only dependency for prototypes/flags.py.
+RUN python -m pip install --no-cache-dir pyyaml
+
+# Wrapper entrypoint that ensures prototypes/ is importable and surfaces
+# import errors as warnings, not crashes.
+COPY docker/entrypoint.sh /usr/local/bin/contrib-entrypoint.sh
+RUN chmod +x /usr/local/bin/contrib-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/contrib-entrypoint.sh"]
+
+# Labels for traceability (filled at build time via --label)
+LABEL com.emhass.contrib.repo="OptimalNothing90/emhass-contributions"
