@@ -11,6 +11,7 @@ and continues with vanilla EMHASS (does NOT crash the container).
 
 See AGENTS.md > "Adding a new prototype" for the contributor flow.
 """
+
 from __future__ import annotations
 
 # Re-export flags utilities so prototype modules can `from prototypes import flags`

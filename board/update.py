@@ -8,6 +8,7 @@ Apply post-migration corrections to the EMHASS AI agents dev board:
 Idempotent? No — runs once. Existing items don't get duplicates because we update by ID.
 New items will be added every run, so DON'T re-run after success without commenting out the create section.
 """
+
 import json
 import subprocess
 import sys
@@ -32,44 +33,50 @@ DRAFT_IDS = {
 
 
 def gh(args, stdin=None):
-    r = subprocess.run(["gh"] + args, capture_output=True, text=True, encoding="utf-8", input=stdin)
+    r = subprocess.run(
+        ["gh"] + args, capture_output=True, text=True, encoding="utf-8", input=stdin
+    )
     if r.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args[:2])} failed: {r.stderr}")
     return r.stdout
 
 
 def update_draft(draft_id: str, body: str) -> None:
-    q = f'''mutation($body: String!) {{
+    q = f"""mutation($body: String!) {{
       updateProjectV2DraftIssue(input: {{
         draftIssueId: "{draft_id}"
         body: $body
       }}) {{ draftIssue {{ id title }} }}
-    }}'''
+    }}"""
     out = gh(["api", "graphql", "-f", f"query={q}", "-f", f"body={body}"])
-    print(f"  updated {json.loads(out)['data']['updateProjectV2DraftIssue']['draftIssue']['title']}")
+    print(
+        f"  updated {json.loads(out)['data']['updateProjectV2DraftIssue']['draftIssue']['title']}"
+    )
 
 
-def add_draft_with_fields(title: str, body: str, fields: dict, option_ids: dict, field_ids: dict) -> str:
+def add_draft_with_fields(
+    title: str, body: str, fields: dict, option_ids: dict, field_ids: dict
+) -> str:
     body_esc = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
     title_esc = title.replace("\\", "\\\\").replace('"', '\\"')
-    q = f'''mutation {{
+    q = f"""mutation {{
       addProjectV2DraftIssue(input: {{
         projectId: "{PROJECT_ID}"
         title: "{title_esc}"
         body: "{body_esc}"
       }}) {{ projectItem {{ id }} }}
-    }}'''
+    }}"""
     out = gh(["api", "graphql", "-f", f"query={q}"])
     item_id = json.loads(out)["data"]["addProjectV2DraftIssue"]["projectItem"]["id"]
     for fname, fval in fields.items():
-        fq = f'''mutation {{
+        fq = f"""mutation {{
           updateProjectV2ItemFieldValue(input: {{
             projectId: "{PROJECT_ID}"
             itemId: "{item_id}"
             fieldId: "{field_ids[fname]}"
             value: {{ singleSelectOptionId: "{option_ids[fname][fval]}" }}
           }}) {{ projectV2Item {{ id }} }}
-        }}'''
+        }}"""
         gh(["api", "graphql", "-f", f"query={fq}"])
     print(f"  created [{item_id}] {title}")
     return item_id
@@ -83,7 +90,7 @@ option_ids = data["_meta"]["option_ids"]
 
 # === BODY UPDATES ===
 NEW_BODIES = {
-    "AC-1": '''Document published columns of the optimization output as `docs/plan_output_schema.md`. Plus a `emhass_schema_version` constant for downstream-consumer version-pinning.
+    "AC-1": """Document published columns of the optimization output as `docs/plan_output_schema.md`. Plus a `emhass_schema_version` constant for downstream-consumer version-pinning.
 
 Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 - 5 publish helpers in src/emhass/command_line.py:
@@ -100,9 +107,8 @@ Deliverable (single PR):
 - Add emhass_schema_version constant in command_line.py (e.g. "1.0") published alongside results.
 - Cross-link from docs/study_cases/ where relevant.
 
-Sign-convention verification needed before publishing schema (P_grid sign, P_batt charge vs discharge convention) — flag in PR for maintainer confirmation.''',
-
-    "AC-2": '''**Umbrella card.** Track of structured-schema work on src/emhass/static/data/param_definitions.json (Maintainer-preferred surface, per #808). Split into deliverables tracked as separate cards:
+Sign-convention verification needed before publishing schema (P_grid sign, P_batt charge vs discharge convention) — flag in PR for maintainer confirmation.""",
+    "AC-2": """**Umbrella card.** Track of structured-schema work on src/emhass/static/data/param_definitions.json (Maintainer-preferred surface, per #808). Split into deliverables tracked as separate cards:
 
 - **AC-2a** (separate card): Add structured `unit` field to all 87 existing entries. Issue-first; specific scope.
 - **AC-2b** (this card, future scope): Add ~30+ runtime/MPC params currently undocumented (prediction_horizon, soc_init/final, def_total_hours/timestep, prod_price_forecast, load_cost_forecast, pv_power_forecast, load_power_forecast, min_temperatures, max_temperatures, def_start_timestep, def_end_timestep, plus runtime overrides like battery_nominal_energy_capacity). Today only documented in passing_data.md prose.
@@ -114,9 +120,8 @@ Current state (verified 2026-04-28 against upstream/master):
 - 87 entries / 6 categories: Local (18), System (23), Tariff (6), Solar System PV (11), Deferrable Loads (10), Battery (19)
 - Schema: friendly_name + Description + input + default_value (+ optional select_options, requires, input_attributes)
 - Missing per-entry: structured unit, formal type, range, required-flag
-- Missing entirely: runtime/MPC params block''',
-
-    "AC-3": '''Read-only JSON endpoint exposing the last optimization run's metadata: stage_times dict (PR #806 plumbing), solver status, infeasibility flag, schema_version (AC-1 dependency).
+- Missing entirely: runtime/MPC params block""",
+    "AC-3": """Read-only JSON endpoint exposing the last optimization run's metadata: stage_times dict (PR #806 plumbing), solver status, infeasibility flag, schema_version (AC-1 dependency).
 
 Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 - src/emhass/command_line.py line 749/847: `_prepare_dayahead_optim` and `_prepare_naive_mpc_optim` accept `stage_times: dict | None = None` parameter.
@@ -127,9 +132,8 @@ Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 
 Threat model per #808 Maintainer comment: code-injection (NOT auth-bypass / data-leakage). Endpoint reads in-memory state only — no DB writes, no FS writes, no shell-out, no dynamic-code execution surface.
 
-Deliverable: ~30-50 LOC in web_server.py, JSON response schema documented, security-pitch in PR description.''',
-
-    "AC-4": '''Liveness/readiness endpoint for container watchdog. Exposes boot status, last-successful-run timestamp, EMHASS version + solver lib versions.
+Deliverable: ~30-50 LOC in web_server.py, JSON response schema documented, security-pitch in PR description.""",
+    "AC-4": """Liveness/readiness endpoint for container watchdog. Exposes boot status, last-successful-run timestamp, EMHASS version + solver lib versions.
 
 Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 - 9 routes in web_server.py (see AC-3 list); no /healthz.
@@ -145,9 +149,8 @@ Deliverable: ~15 LOC in web_server.py. Response schema:
   "versions": {"emhass": "...", "python": "...", "cvxpy": "...", "solver": "..."}
 }
 ```
-Auth-flag-aware: same gating as existing /get-config. Read-only. No sensitive data.''',
-
-    "AM-1": '''Commit src/emhass/static/openapi.json + scripts/generate_openapi.py to the repo. Tool consumers (Node-RED validators, EVCC adapters, HA cards, IDE tooling) read the API contract without booting EMHASS.
+Auth-flag-aware: same gating as existing /get-config. Read-only. No sensitive data.""",
+    "AM-1": """Commit src/emhass/static/openapi.json + scripts/generate_openapi.py to the repo. Tool consumers (Node-RED validators, EVCC adapters, HA cards, IDE tooling) read the API contract without booting EMHASS.
 
 Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 - No openapi.json, no openapi.yaml in the repo.
@@ -159,9 +162,8 @@ Deliverable:
 - scripts/generate_openapi.py: reads param_definitions.json + plan_output_schema.md → emits openapi.json
 - openapi.json committed at repo root or src/emhass/static/openapi.json
 - CI workflow check: re-run script on PR, fail if generated diff != committed file
-- Folge zu #808 Layer 2.''',
-
-    "AM-3": '''Strategy pattern for forecast providers. Reduce merge conflicts between parallel provider PRs (#787 Octopus, #745 Solcast-cap, #803 InfluxDB-Math).
+- Folge zu #808 Layer 2.""",
+    "AM-3": """Strategy pattern for forecast providers. Reduce merge conflicts between parallel provider PRs (#787 Octopus, #745 Solcast-cap, #803 InfluxDB-Math).
 
 Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 Three independent if/elif cascades in src/emhass/forecast.py:
@@ -171,9 +173,8 @@ Three independent if/elif cascades in src/emhass/forecast.py:
 
 Pilot scope: refactor ONE cascade (recommend get_load_cost_forecast — smallest, lowest risk). Pattern: abstract base class + concrete subclasses per method. New providers register via subclass + class attribute (not if/elif edit). Existing call site stays binary-compatible.
 
-Issue-first per #808 corridor — RFC issue with proposed ABC + one example provider conversion. Wait for maintainer architecture green-light before code PR.''',
-
-    "AM-4": '''Extract HA-specific glue code from src/emhass/retrieve_hass.py + command_line.py into src/emhass/adapters/ subfolder. Makes the #789 Maintainer line ("agnostic glue layer via NR/MQTT/HA") structurally explicit.
+Issue-first per #808 corridor — RFC issue with proposed ABC + one example provider conversion. Wait for maintainer architecture green-light before code PR.""",
+    "AM-4": """Extract HA-specific glue code from src/emhass/retrieve_hass.py + command_line.py into src/emhass/adapters/ subfolder. Makes the #789 Maintainer line ("agnostic glue layer via NR/MQTT/HA") structurally explicit.
 
 Current state (verified 2026-04-28 against upstream/master @ 6537c47):
 - No adapters/ folder in src/emhass/.
@@ -183,7 +184,7 @@ Pilot scope: create adapters/{ha,nodered,mqtt}.py skeletons. Move HA-specific co
 
 Depends on AM-3 pattern being established — same Strategy/Adapter style. Issue-first.
 
-Sequencing: AM-3 first (provider abstraction proves pattern in small surface) → AM-4 (apply same pattern to glue layer).''',
+Sequencing: AM-3 first (provider abstraction proves pattern in small surface) → AM-4 (apply same pattern to glue layer).""",
 }
 
 # === NEW ITEMS ===
@@ -191,7 +192,7 @@ NEW_ITEMS = [
     {
         "id": "AC-2a",
         "title": "AC-2a: Add `unit` field to param_definitions.json",
-        "body": '''Add structured `unit` field to all ~80 existing entries in src/emhass/static/data/param_definitions.json. Parse-friendly metadata enables openapi-spec generation (AM-1), Pydantic models, and AI-readable schemas.
+        "body": """Add structured `unit` field to all ~80 existing entries in src/emhass/static/data/param_definitions.json. Parse-friendly metadata enables openapi-spec generation (AM-1), Pydantic models, and AI-readable schemas.
 
 Source: detailed prompt at docs/superpowers/specs/2026-04-28-emhass-board-migration-items.json (item AC-2a).
 
@@ -234,7 +235,7 @@ Account: switch to OptimalNothing90 before push, switch back to mschaepers after
 
 Out of scope (separate cards): AC-2-fix (audit mismatches), AC-2b (runtime params), Description-trim cleanup.
 
-Success criteria: Issue opened + maintainer responded → PR opened with single concern (unit field) → all ~80 entries have unit → UI renders cleanly.''',
+Success criteria: Issue opened + maintainer responded → PR opened with single concern (unit field) → all ~80 entries have unit → UI renders cleanly.""",
         "Status": "Candidates",
         "Category": "Infra",
         "Phase": "Phase 3",
@@ -245,7 +246,7 @@ Success criteria: Issue opened + maintainer responded → PR opened with single 
     {
         "id": "AC-2-fix",
         "title": "AC-2-fix: Correct audit-found mismatches in param_definitions.json",
-        "body": '''Fix 7 default/type mismatches found during the schema audit that produced AC-2a (unit field) and PR #817 (regression_model typo). Sibling fix-PR — same audit pass, different concern.
+        "body": """Fix 7 default/type mismatches found during the schema audit that produced AC-2a (unit field) and PR #817 (regression_model typo). Sibling fix-PR — same audit pass, different concern.
 
 Source: schema audit cross-checked param_definitions.json defaults/types vs src/emhass/data/config_defaults.json + utils.treat_runtimeparams (lines ~597-1334).
 
@@ -262,7 +263,7 @@ Out of scope: AC-2a (unit field, separate concern), AC-2b (runtime params block)
 
 Effort: XS to S depending on how many mismatches survive re-verification.
 
-Account: switch to OptimalNothing90 before push.''',
+Account: switch to OptimalNothing90 before push.""",
         "Status": "Ideas",
         "Category": "A: Code-Lifecycle",
         "Phase": "Phase 1",
@@ -282,8 +283,13 @@ print("\n=== Creating new cards ===")
 new_item_ids = {}
 for item in NEW_ITEMS:
     print(f"{item['id']}:")
-    fields = {k: item[k] for k in ("Status", "Category", "Phase", "Priority", "Effort", "Scope")}
-    iid = add_draft_with_fields(item["title"], item["body"], fields, option_ids, field_ids)
+    fields = {
+        k: item[k]
+        for k in ("Status", "Category", "Phase", "Priority", "Effort", "Scope")
+    }
+    iid = add_draft_with_fields(
+        item["title"], item["body"], fields, option_ids, field_ids
+    )
     new_item_ids[item["id"]] = iid
 
 # Sync JSON
@@ -297,9 +303,18 @@ for item_id, body in NEW_BODIES.items():
 # Insert new items into JSON in sensible position (after AC-2)
 ac2_idx = next(i for i, it in enumerate(data["items"]) if it["id"] == "AC-2")
 for new in reversed(NEW_ITEMS):
-    json_entry = {"id": new["id"], "title": new["title"], "type": "draft", "body": new["body"],
-                  "Status": new["Status"], "Category": new["Category"], "Phase": new["Phase"],
-                  "Priority": new["Priority"], "Effort": new["Effort"], "Scope": new["Scope"]}
+    json_entry = {
+        "id": new["id"],
+        "title": new["title"],
+        "type": "draft",
+        "body": new["body"],
+        "Status": new["Status"],
+        "Category": new["Category"],
+        "Phase": new["Phase"],
+        "Priority": new["Priority"],
+        "Effort": new["Effort"],
+        "Scope": new["Scope"],
+    }
     data["items"].insert(ac2_idx + 1, json_entry)
     print(f"  added {new['id']} to items.json")
 

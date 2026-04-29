@@ -10,6 +10,7 @@ Behavior on errors:
 Caching: 5-second TTL with mtime invalidation to keep request-time
 overhead minimal.
 """
+
 from __future__ import annotations
 
 import logging
@@ -64,9 +65,7 @@ def _get_cached(path: Path) -> dict[str, Any]:
 def is_enabled(feature: str, *, path: Path | None = None) -> bool:
     """Return True if the named prototype feature is enabled in the flags file."""
     flags_dict = _get_cached(path or DEFAULT_FLAGS_PATH)
-    return bool(
-        flags_dict.get("prototypes", {}).get(feature, {}).get("enabled", False)
-    )
+    return bool(flags_dict.get("prototypes", {}).get(feature, {}).get("enabled", False))
 
 
 def get_setting(

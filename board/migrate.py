@@ -6,6 +6,7 @@ Reads `2026-04-28-emhass-board-migration-items.json` and runs gh graphql mutatio
 Usage:
     python migrate-emhass-board.py [--dry-run] [--start N]
 """
+
 import json
 import subprocess
 import sys
@@ -31,7 +32,9 @@ def gh_graphql(query: str) -> dict:
         return {"data": {"_dry_run": True}}
     result = subprocess.run(
         ["gh", "api", "graphql", "-f", f"query={query}"],
-        capture_output=True, text=True, encoding="utf-8",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise RuntimeError(f"gh failed: {result.stderr}")
@@ -44,7 +47,7 @@ def gh_graphql(query: str) -> dict:
 def add_draft(project_id: str, title: str, body: str) -> str:
     body_escaped = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
     title_escaped = title.replace("\\", "\\\\").replace('"', '\\"')
-    q = f'''mutation {{
+    q = f"""mutation {{
       addProjectV2DraftIssue(input: {{
         projectId: "{project_id}"
         title: "{title_escaped}"
@@ -52,26 +55,34 @@ def add_draft(project_id: str, title: str, body: str) -> str:
       }}) {{
         projectItem {{ id }}
       }}
-    }}'''
+    }}"""
     r = gh_graphql(q)
-    return r["data"]["addProjectV2DraftIssue"]["projectItem"]["id"] if not DRY_RUN else "ITEM_ID_DRY"
+    return (
+        r["data"]["addProjectV2DraftIssue"]["projectItem"]["id"]
+        if not DRY_RUN
+        else "ITEM_ID_DRY"
+    )
 
 
 def add_link(project_id: str, content_id: str) -> str:
-    q = f'''mutation {{
+    q = f"""mutation {{
       addProjectV2ItemById(input: {{
         projectId: "{project_id}"
         contentId: "{content_id}"
       }}) {{
         item {{ id }}
       }}
-    }}'''
+    }}"""
     r = gh_graphql(q)
-    return r["data"]["addProjectV2ItemById"]["item"]["id"] if not DRY_RUN else "ITEM_ID_DRY"
+    return (
+        r["data"]["addProjectV2ItemById"]["item"]["id"]
+        if not DRY_RUN
+        else "ITEM_ID_DRY"
+    )
 
 
 def set_field(project_id: str, item_id: str, field_id: str, option_id: str) -> None:
-    q = f'''mutation {{
+    q = f"""mutation {{
       updateProjectV2ItemFieldValue(input: {{
         projectId: "{project_id}"
         itemId: "{item_id}"
@@ -80,7 +91,7 @@ def set_field(project_id: str, item_id: str, field_id: str, option_id: str) -> N
       }}) {{
         projectV2Item {{ id }}
       }}
-    }}'''
+    }}"""
     gh_graphql(q)
 
 
@@ -109,7 +120,14 @@ def main():
             else:
                 raise ValueError(f"unknown type: {item['type']}")
 
-            for field_name in ("Status", "Category", "Phase", "Priority", "Effort", "Scope"):
+            for field_name in (
+                "Status",
+                "Category",
+                "Phase",
+                "Priority",
+                "Effort",
+                "Scope",
+            ):
                 if field_name in item:
                     set_field(
                         project_id,

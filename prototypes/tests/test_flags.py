@@ -1,4 +1,5 @@
 """Tests for prototypes/flags.py."""
+
 from __future__ import annotations
 
 import os
@@ -49,7 +50,9 @@ prototypes:
     assert flags.is_enabled("api_healthz", path=cfg) is False  # other feature still off
 
 
-def test_invalid_yaml_returns_false_with_log(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+def test_invalid_yaml_returns_false_with_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
     """Malformed YAML should not crash; should log warning + return all-off."""
     bad = tmp_path / "bad.yaml"
     bad.write_text(":\n  - not really yaml [\n")
@@ -79,8 +82,13 @@ prototypes:
     _reset_cache()
 
     assert flags.get_setting("api_last_run", "cache_seconds", path=cfg) == 60
-    assert flags.get_setting("api_last_run", "missing_key", default="x", path=cfg) == "x"
-    assert flags.get_setting("nonexistent_feature", "anything", default=None, path=cfg) is None
+    assert (
+        flags.get_setting("api_last_run", "missing_key", default="x", path=cfg) == "x"
+    )
+    assert (
+        flags.get_setting("nonexistent_feature", "anything", default=None, path=cfg)
+        is None
+    )
 
 
 def test_cache_invalidates_on_mtime_change(tmp_path: Path):

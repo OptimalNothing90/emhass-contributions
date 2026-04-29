@@ -7,6 +7,7 @@ Extend EMHASS AI agents board with contributor-focused items:
 - Add AG-B1 (Public Skills Plugin distribution)
 - Sync items.json
 """
+
 import json
 import subprocess
 import sys
@@ -21,44 +22,52 @@ AG7_DRAFT_ID = "DI_lAHOAfZrVs4BV1jUzgKbxAY"
 
 
 def gh(args, stdin=None):
-    r = subprocess.run(["gh"] + args, capture_output=True, text=True, encoding="utf-8", input=stdin)
+    r = subprocess.run(
+        ["gh"] + args, capture_output=True, text=True, encoding="utf-8", input=stdin
+    )
     if r.returncode != 0:
         raise RuntimeError(f"gh failed: {r.stderr}")
     return r.stdout
 
 
 def update_draft(draft_id: str, body: str) -> None:
-    q = '''mutation($body: String!) {
+    q = (
+        '''mutation($body: String!) {
       updateProjectV2DraftIssue(input: {
-        draftIssueId: "''' + draft_id + '''"
+        draftIssueId: "'''
+        + draft_id
+        + """"
         body: $body
       }) { draftIssue { id title } }
-    }'''
+    }"""
+    )
     out = gh(["api", "graphql", "-f", f"query={q}", "-f", f"body={body}"])
-    print(f"  updated {json.loads(out)['data']['updateProjectV2DraftIssue']['draftIssue']['title']}")
+    print(
+        f"  updated {json.loads(out)['data']['updateProjectV2DraftIssue']['draftIssue']['title']}"
+    )
 
 
 def add_draft_with_fields(title, body, fields, option_ids, field_ids):
     body_esc = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
     title_esc = title.replace("\\", "\\\\").replace('"', '\\"')
-    q = f'''mutation {{
+    q = f"""mutation {{
       addProjectV2DraftIssue(input: {{
         projectId: "{PROJECT_ID}"
         title: "{title_esc}"
         body: "{body_esc}"
       }}) {{ projectItem {{ id }} }}
-    }}'''
+    }}"""
     out = gh(["api", "graphql", "-f", f"query={q}"])
     item_id = json.loads(out)["data"]["addProjectV2DraftIssue"]["projectItem"]["id"]
     for fname, fval in fields.items():
-        fq = f'''mutation {{
+        fq = f"""mutation {{
           updateProjectV2ItemFieldValue(input: {{
             projectId: "{PROJECT_ID}"
             itemId: "{item_id}"
             fieldId: "{field_ids[fname]}"
             value: {{ singleSelectOptionId: "{option_ids[fname][fval]}" }}
           }}) {{ projectV2Item {{ id }} }}
-        }}'''
+        }}"""
         gh(["api", "graphql", "-f", f"query={fq}"])
     print(f"  created [{item_id}] {title}")
     return item_id
@@ -69,7 +78,7 @@ with DATA_FILE.open(encoding="utf-8") as f:
 field_ids = data["_meta"]["field_ids"]
 option_ids = data["_meta"]["option_ids"]
 
-AG7_BODY = '''Top-level `AGENTS.md` at repo root — vendor-neutral rules consumed by Claude Code, Cursor, Aider, Copilot, Codex. Workflow-Demo gate cleared via #808 reply 2026-04-27 (David: "rich in concrete examples, that was what was needed").
+AG7_BODY = """Top-level `AGENTS.md` at repo root — vendor-neutral rules consumed by Claude Code, Cursor, Aider, Copilot, Codex. Workflow-Demo gate cleared via #808 reply 2026-04-27 (David: "rich in concrete examples, that was what was needed").
 
 ## Section 1 — Canonical commands
 - Build / install / dev setup (per `pyproject.toml`)
@@ -146,13 +155,13 @@ Per Discussion #808 + Issue #789:
 - Mention `repomix` as on-demand tool, not committed artefact.
 - Cross-link from `docs/study_cases/index.md` and `CONTRIBUTING.md` if it exists.
 
-Coordinate with AC-5 (llms.txt extension) and AG-onboarding (human-facing contributor doc) — same #808 Layer-1 deliverable theme.'''
+Coordinate with AC-5 (llms.txt extension) and AG-onboarding (human-facing contributor doc) — same #808 Layer-1 deliverable theme."""
 
 NEW_ITEMS = [
     {
         "id": "AG-onboarding",
         "title": "AG-onboarding: AI-coder contributor onboarding doc",
-        "body": '''Human-facing companion to AG-7 AGENTS.md. Where AGENTS.md instructs the **agent**, this doc instructs the **contributor driving the agent**. Different audience, different concerns.
+        "body": """Human-facing companion to AG-7 AGENTS.md. Where AGENTS.md instructs the **agent**, this doc instructs the **contributor driving the agent**. Different audience, different concerns.
 
 Lives at: `docs/contributing/ai-coders.md` (or section in `CONTRIBUTING.md` if one exists).
 
@@ -201,7 +210,7 @@ Tone: friendly, factual, NOT condescending. Assumes contributor is competent but
 
 Sequencing: depends on AG-7 being merged first (this doc references AGENTS.md sections). Issue-first per usual.
 
-Coordinate with AC-5 (Sphinx llms-full.txt) — possibly add a contributor-onboarding entry there too.''',
+Coordinate with AC-5 (Sphinx llms-full.txt) — possibly add a contributor-onboarding entry there too.""",
         "Status": "Ideas",
         "Category": "B: End-User-Ops",
         "Phase": "Phase 1.5",
@@ -212,7 +221,7 @@ Coordinate with AC-5 (Sphinx llms-full.txt) — possibly add a contributor-onboa
     {
         "id": "AG-pr-readiness",
         "title": "AG-pr-readiness: Pre-PR guard skill (local + future plugin)",
-        "body": '''Local Claude Code skill that runs before `gh pr create`. Checks the in-flight changes against AGENTS.md conventions and maintainer-scope-corridors. Fails loud if something is missing.
+        "body": """Local Claude Code skill that runs before `gh pr create`. Checks the in-flight changes against AGENTS.md conventions and maintainer-scope-corridors. Fails loud if something is missing.
 
 Lives at: `.claude/skills/emhass-pr-readiness/SKILL.md` (loxonesmarthome local). Public plugin variant covered by AG-B1 if uptake justifies it.
 
@@ -248,7 +257,7 @@ Sequencing: after AG-7 AGENTS.md merged (skill reads from it). Issue-first if go
 Out of scope:
 - Linting / type-checking — handled by AM-5 DevX-stack (ruff, mypy)
 - Test-coverage % calculation — separate concern
-- Auto-fix attempts — only diagnose, do not modify code''',
+- Auto-fix attempts — only diagnose, do not modify code""",
         "Status": "Ideas",
         "Category": "B: End-User-Ops",
         "Phase": "Phase 5",
@@ -259,7 +268,7 @@ Out of scope:
     {
         "id": "AG-B1",
         "title": "AG-B1: Public skill plugin distribution (anonymized variants)",
-        "body": '''Anonymized public variants of local AG-1 / AG-2 / AG-3 skills, distributed via Claude Code Plugin Marketplace. From Meisterplan §3.3 B.2.
+        "body": """Anonymized public variants of local AG-1 / AG-2 / AG-3 skills, distributed via Claude Code Plugin Marketplace. From Meisterplan §3.3 B.2.
 
 Goal: lower barrier for ANY EMHASS end-user to use AI-assisted troubleshooting / config-validation / plan-explanation, without needing the OptimalNothing90 local Loxone/Tibber/EVCC stack.
 
@@ -287,7 +296,7 @@ Effort: M per skill (anonymization + testing on a non-personal setup), so 3 × M
 
 Out of scope:
 - Cursor / Copilot variants — separate plugin per IDE if appetite
-- AG-4 (anomaly), AG-5 (calibrate) — too coupled to specific Carnot model + InfluxDB schema; less generic-able''',
+- AG-4 (anomaly), AG-5 (calibrate) — too coupled to specific Carnot model + InfluxDB schema; less generic-able""",
         "Status": "Ideas",
         "Category": "B: End-User-Ops",
         "Phase": "Phase 5",
@@ -304,8 +313,13 @@ print("\n=== Adding new cards ===")
 new_ids = {}
 for item in NEW_ITEMS:
     print(f"{item['id']}:")
-    fields = {k: item[k] for k in ("Status", "Category", "Phase", "Priority", "Effort", "Scope")}
-    new_ids[item["id"]] = add_draft_with_fields(item["title"], item["body"], fields, option_ids, field_ids)
+    fields = {
+        k: item[k]
+        for k in ("Status", "Category", "Phase", "Priority", "Effort", "Scope")
+    }
+    new_ids[item["id"]] = add_draft_with_fields(
+        item["title"], item["body"], fields, option_ids, field_ids
+    )
 
 print("\n=== Sync items.json ===")
 existing = {it["id"]: it for it in data["items"]}
@@ -315,9 +329,18 @@ print("  AG-7 body updated")
 # Insert new items after AG-7 in the JSON
 ag7_idx = next(i for i, it in enumerate(data["items"]) if it["id"] == "AG-7")
 for new in reversed(NEW_ITEMS):
-    json_entry = {"id": new["id"], "title": new["title"], "type": "draft", "body": new["body"],
-                  "Status": new["Status"], "Category": new["Category"], "Phase": new["Phase"],
-                  "Priority": new["Priority"], "Effort": new["Effort"], "Scope": new["Scope"]}
+    json_entry = {
+        "id": new["id"],
+        "title": new["title"],
+        "type": "draft",
+        "body": new["body"],
+        "Status": new["Status"],
+        "Category": new["Category"],
+        "Phase": new["Phase"],
+        "Priority": new["Priority"],
+        "Effort": new["Effort"],
+        "Scope": new["Scope"],
+    }
     data["items"].insert(ag7_idx + 1, json_entry)
     print(f"  added {new['id']} to items.json")
 
