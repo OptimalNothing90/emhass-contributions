@@ -6,6 +6,8 @@ Source-of-truth for the [EMHASS AI agents project](https://github.com/users/davi
 
 - `design.md` — project board structure spec (status pipeline, custom fields, views)
 - `items.json` — every card with all field values (the canonical state)
+- `lib.py` — shared helpers: gh wrapper, items.json IO, idempotent body-append, field setter
+- `fetch.py` — pull live state into `items.json` and report drift (run before any mutation)
 - `migrate.py` — bulk-add 41 items (initial migration; idempotent via `--start N`)
 - `update.py` — body updates with verified source-state for AC-1/AC-2/AC-3/etc.
 - `extend.py` — add new cards (AG-onboarding, AG-pr-readiness, AG-B1)
@@ -13,13 +15,21 @@ Source-of-truth for the [EMHASS AI agents project](https://github.com/users/davi
 
 ## Workflow
 
-The board on github.com is the live state. `items.json` is the offline source-of-truth. They should match. When David, sokorn, or someone moves a card on the website, the JSON falls behind — that's expected. Periodically pull live state into JSON via a fetch script (TODO).
+The board on github.com is the live state. `items.json` is the offline source-of-truth. They drift whenever David, sokorn, or anyone moves a card on the website — and any mutation script that reads stale `items.json` and writes back will silently overwrite those edits.
 
-To make changes:
+Hard rule: **always `python fetch.py` first**, inspect the drift report, commit the JSON refresh, then run mutation scripts.
 
-1. Edit `items.json` (or write a new mutation script).
-2. Run the script, which calls `gh api graphql` to apply.
-3. Commit the JSON change with the same commit as the script.
+```bash
+gh auth switch --user OptimalNothing90
+python fetch.py             # refresh items.json from live, print drift
+git diff board/items.json   # review
+git commit -m "chore(board): sync items.json with live"
+python <mutation-script>.py
+```
+
+For body edits to existing draft cards, use `lib.append_to_body_idempotent(draft_id, marker, suffix)` — it fetches the live body first and only appends if `marker` is not already present. This avoids both the stale-body overwrite *and* the double-append on re-run.
+
+`item_id` (PVTI_*) and `draft_id` (DI_*) are stored on every entry after `fetch.py` runs, so new mutation scripts can look them up instead of hardcoding.
 
 ## GitHub project ID
 

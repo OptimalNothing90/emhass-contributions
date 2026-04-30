@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "spec_version": "1.0",
+    "spec_version": "1.1",
     "date": "2026-04-28",
     "project_id": "PVT_kwHOAfZrVs4BV1jU",
     "project_url": "https://github.com/users/davidusb-geek/projects/2",
@@ -53,7 +53,8 @@
         "Local": "15cea9b3",
         "Discussion-Only": "ebc27c4b"
       }
-    }
+    },
+    "fetched_at": "2026-04-30T23:39:09+00:00"
   },
   "items": [
     {
@@ -66,7 +67,9 @@
       "Phase": "Phase 0",
       "Priority": "P0",
       "Effort": "M",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP6x4",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw7I"
     },
     {
       "id": "CE-3",
@@ -78,7 +81,9 @@
       "Phase": "Phase 0",
       "Priority": "P0",
       "Effort": "S",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7Sc",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw8c"
     },
     {
       "id": "AG-1",
@@ -90,7 +95,9 @@
       "Phase": "Phase 0",
       "Priority": "P0",
       "Effort": "M",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7Z4",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw8o"
     },
     {
       "id": "AG-2",
@@ -102,11 +109,13 @@
       "Phase": "Phase 0",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7eA",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw84"
     },
     {
       "id": "PR-812",
-      "title": "PR #812: study_cases restructure (Phase 1 of 2)",
+      "title": "docs(study_cases): restructure study_case section per #808 (Phase 1)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7VyIL-",
       "Status": "Done / Wont Do",
@@ -114,11 +123,15 @@
       "Phase": "Phase 1",
       "Priority": "P0",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7hw",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/812",
+      "repository": "davidusb-geek/emhass",
+      "number": 812
     },
     {
       "id": "PR-813",
-      "title": "PR #813: DHW walkthrough (Phase 1.1)",
+      "title": "docs(study_cases): add DHW walkthrough (Phase 1.1, depends on #812)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7VyN9M",
       "Status": "Done / Wont Do",
@@ -126,11 +139,15 @@
       "Phase": "Phase 1",
       "Priority": "P0",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7ko",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/813",
+      "repository": "davidusb-geek/emhass",
+      "number": 813
     },
     {
       "id": "PR-814",
-      "title": "PR #814: docs fix broken link config_defaults.json (D-7)",
+      "title": "docs: fix broken link to config_defaults.json (#810)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7V10XU",
       "Status": "Done / Wont Do",
@@ -138,11 +155,15 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7ow",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/814",
+      "repository": "davidusb-geek/emhass",
+      "number": 814
     },
     {
       "id": "PR-816",
-      "title": "PR #816: docs fix influxdb_measurement example (D-8)",
+      "title": "docs: fix influxdb_measurement example value in passing_data.md (#809)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7V1-WK",
       "Status": "Done / Wont Do",
@@ -150,11 +171,15 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7tM",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/816",
+      "repository": "davidusb-geek/emhass",
+      "number": 816
     },
     {
       "id": "PR-817",
-      "title": "PR #817: regression_model default typo (PD-1)",
+      "title": "fix: regression_model default typo (AdaBoostRegression -> AdaBoostRegressor)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7V3l-3",
       "Status": "Done / Wont Do",
@@ -162,11 +187,15 @@
       "Phase": "Phase 1",
       "Priority": "P0",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP7xw",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/817",
+      "repository": "davidusb-geek/emhass",
+      "number": 817
     },
     {
       "id": "PR-822",
-      "title": "PR #822: study_cases doc-accuracy follow-up",
+      "title": "docs(study_cases): fix incorrect default-value claims and SOC pairing wording",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7WN-Yi",
       "Status": "Done / Wont Do",
@@ -174,11 +203,15 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP720",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/822",
+      "repository": "davidusb-geek/emhass",
+      "number": 822
     },
     {
       "id": "ISSUE-818",
-      "title": "Issue #818: ignore_pv_feedback_during_curtailment unwired (PD-3)",
+      "title": "ignore_pv_feedback_during_curtailment runtime flag has no wiring — read site always falls back to False",
       "type": "link",
       "content_id": "I_kwDOGC8VbM8AAAABAlStfA",
       "Status": "Review",
@@ -186,7 +219,11 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP77Q",
+      "content_url": "https://github.com/davidusb-geek/emhass/issues/818",
+      "repository": "davidusb-geek/emhass",
+      "number": 818
     },
     {
       "id": "DISC-823",
@@ -198,7 +235,9 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Discussion-Only"
+      "Scope": "Discussion-Only",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8DY",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw-o"
     },
     {
       "id": "DISC-824",
@@ -210,7 +249,9 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Discussion-Only"
+      "Scope": "Discussion-Only",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8IY",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw_E"
     },
     {
       "id": "U-3",
@@ -222,7 +263,9 @@
       "Phase": "Phase 1",
       "Priority": "P0",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8ME",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw_c"
     },
     {
       "id": "U-4",
@@ -234,7 +277,9 @@
       "Phase": "Phase 1",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8Q0",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbw_w"
     },
     {
       "id": "U-6",
@@ -246,7 +291,9 @@
       "Phase": "Phase 1",
       "Priority": "P0",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8XY",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxAI"
     },
     {
       "id": "AG-7",
@@ -258,19 +305,25 @@
       "Phase": "Phase 1.5",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8ac",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxAY"
     },
     {
       "id": "PR-831",
-      "title": "PR #831: AGENTS.md (vendor-neutral agent rules) (AG-7)",
+      "title": "docs: add AGENTS.md (vendor-neutral rules for AI coding agents)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7W6A7Z",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1.5",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgraerQ",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/831",
+      "repository": "davidusb-geek/emhass",
+      "number": 831
     },
     {
       "id": "AG-onboarding",
@@ -282,7 +335,9 @@
       "Phase": "Phase 1.5",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrR9a0",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKb2Yg"
     },
     {
       "id": "AG-pr-readiness",
@@ -294,7 +349,9 @@
       "Phase": "Phase 5",
       "Priority": "P2",
       "Effort": "M",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrR9ck",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKb2Yo"
     },
     {
       "id": "AG-B1",
@@ -306,7 +363,9 @@
       "Phase": "Phase 5",
       "Priority": "P2",
       "Effort": "M",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrR9ew",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKb2Yw"
     },
     {
       "id": "AC-5",
@@ -318,7 +377,9 @@
       "Phase": "Phase 1.5",
       "Priority": "P2",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8eY",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxAg"
     },
     {
       "id": "U-1",
@@ -330,11 +391,13 @@
       "Phase": "Phase 2",
       "Priority": "P0",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8kE",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxA8"
     },
     {
       "id": "ISSUE-807-U-2",
-      "title": "Issue #807: max_dis AC vs DC convention (U-2)",
+      "title": "Feature Request: Dynamic Battery Charge Power Limit Based on Forecasted SoC",
       "type": "link",
       "content_id": "I_kwDOGC8VbM8AAAABAbYr4A",
       "Status": "Candidates",
@@ -342,7 +405,11 @@
       "Phase": "Phase 2",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8lk",
+      "content_url": "https://github.com/davidusb-geek/emhass/issues/807",
+      "repository": "davidusb-geek/emhass",
+      "number": 807
     },
     {
       "id": "U-5",
@@ -354,7 +421,9 @@
       "Phase": "Phase 2",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8qg",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxBM"
     },
     {
       "id": "U-7",
@@ -366,7 +435,9 @@
       "Phase": "Phase 2",
       "Priority": "P3",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8uQ",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxBY"
     },
     {
       "id": "U-8",
@@ -378,31 +449,37 @@
       "Phase": "Phase 2",
       "Priority": "P2",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP8xg",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxBg"
     },
     {
       "id": "AC-1",
       "title": "AC-1: Plan-output schema doc (`docs/plan_output_schema.md`)",
       "type": "draft",
-      "body": "Document published columns of the optimization output as `docs/plan_output_schema.md`. Plus a `emhass_schema_version` constant for downstream-consumer version-pinning.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- 5 publish helpers in src/emhass/command_line.py:\n  - _publish_standard_forecasts (line 2152) — P_Load, P_PV, P_PV_curtailment, P_hybrid_inverter\n  - _publish_deferrable_loads (line 2215) — P_deferrable{k}, optim_status\n  - _publish_thermal_loads (line 2260) — predicted_temp_heater{k}, heating_demand_heater{k}\n  - _publish_battery_data (line 2305) — P_batt, SOC_opt\n  - _publish_grid_and_costs (line 2342) — P_grid, cost_fun_*, unit_load_cost, unit_prod_price\n- Aggregator at line 2464-2468 in publish helper.\n- No docs/plan_output_schema.md exists today.\n\nDeliverable (single PR):\n- New file docs/plan_output_schema.md listing each column with: name, source helper, units, sign convention, conditional presence (e.g. SOC_opt only when set_use_battery=true), HA-scaling note for SOC_opt (0..1 in CSV vs ×100 in HA).\n- Add emhass_schema_version constant in command_line.py (e.g. \"1.0\") published alongside results.\n- Cross-link from docs/study_cases/ where relevant.\n\nSign-convention verification needed before publishing schema (P_grid sign, P_batt charge vs discharge convention) — flag in PR for maintainer confirmation.",
+      "body": "Document published columns of the optimization output as `docs/plan_output_schema.md`. Plus a `emhass_schema_version` constant for downstream-consumer version-pinning.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- 5 publish helpers in src/emhass/command_line.py:\n  - _publish_standard_forecasts (line 2152) — P_Load, P_PV, P_PV_curtailment, P_hybrid_inverter\n  - _publish_deferrable_loads (line 2215) — P_deferrable{k}, optim_status\n  - _publish_thermal_loads (line 2260) — predicted_temp_heater{k}, heating_demand_heater{k}\n  - _publish_battery_data (line 2305) — P_batt, SOC_opt\n  - _publish_grid_and_costs (line 2342) — P_grid, cost_fun_*, unit_load_cost, unit_prod_price\n- Aggregator at line 2464-2468 in publish helper.\n- No docs/plan_output_schema.md exists today.\n\nDeliverable (single PR):\n- New file docs/plan_output_schema.md listing each column with: name, source helper, units, sign convention, conditional presence (e.g. SOC_opt only when set_use_battery=true), HA-scaling note for SOC_opt (0..1 in CSV vs ×100 in HA).\n- Add emhass_schema_version constant in command_line.py (e.g. \"1.0\") published alongside results.\n- Cross-link from docs/study_cases/ where relevant.\n\nSign-convention verification needed before publishing schema (P_grid sign, P_batt charge vs discharge convention) — flag in PR for maintainer confirmation.\n\n---\n\n**Filed upstream as #828** (2026-04-28): https://github.com/davidusb-geek/emhass/issues/828\n\n**Audit doc (output side):** <private-repo-link-redacted>\n\nHelpers verified at lines `2152-2405` (aggregator `publish_data` line `2408`). 7 sign-convention questions flagged for maintainer confirmation (P_grid, P_batt, P_PV, P_PV_curtailment, P_hybrid_inverter, heating_demand_heater, predicted_temp_heater) — see audit Section 4.",
       "Status": "Ideas",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP81U",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxBs"
     },
     {
       "id": "AC-2",
       "title": "AC-2: param_definitions.json extension",
       "type": "draft",
       "body": "**Umbrella card.** Track of structured-schema work on src/emhass/static/data/param_definitions.json (Maintainer-preferred surface, per #808). Split into deliverables tracked as separate cards:\n\n- **AC-2a** (separate card): Add structured `unit` field to all 87 existing entries. Issue-first; specific scope.\n- **AC-2b** (this card, future scope): Add ~30+ runtime/MPC params currently undocumented (prediction_horizon, soc_init/final, def_total_hours/timestep, prod_price_forecast, load_cost_forecast, pv_power_forecast, load_power_forecast, min_temperatures, max_temperatures, def_start_timestep, def_end_timestep, plus runtime overrides like battery_nominal_energy_capacity). Today only documented in passing_data.md prose.\n- **AC-2-fix** (separate card): Audit-found mismatches between param_definitions.json defaults/types and config_defaults.json + utils.treat_runtimeparams.\n\nSequencing: AC-2a first (additive, no risk) → AC-2-fix in parallel (independent fix PR) → AC-2b after AC-2a merge → unblocks AM-1 (openapi.json) and AM-2 (auto-gen config.md).\n\n## Scope alignment with `docs/develop.md`\n\nUpstream `docs/develop.md` documents the canonical 4-step workflow for **adding a new parameter** to EMHASS:\n\n1. Append to `associations.csv` (build_params() routing)\n2. Append to `config_defaults.json` (default-value fallback)\n3. Update `param_definitions.json` (Web UI generation + AI/openapi metadata)\n4. Update `OptimizationCacheKey` in `command_line.py` if the parameter affects MILP structure (cache invalidation)\n5. Plus `check_def_loads()` for list-parameters that must match `number_of_deferrable_loads`\n\n**Implication for AC-2 audits:** the schema audit reproducer must cross-check **all four sources**, not only `param_definitions.json` + `config_defaults.json`. Adds:\n- `associations.csv` — coverage check (every param_definitions key has a routing line)\n- `OptimizationCacheKey` dataclass — coverage check (every MILP-affecting param has a cache field)\n- `check_def_loads()` calls in `utils.build_params()` — coverage check (every deferrable-list param has padding)\n\n## Current state (verified 2026-04-28 against upstream/master @ 6537c47)\n\n- 87 entries / 6 categories: Local (18), System (23), Tariff (6), Solar System PV (11), Deferrable Loads (10), Battery (19)\n- Schema: friendly_name + Description + input + default_value (+ optional select_options, requires, input_attributes)\n- Missing per-entry: structured unit, formal type, range, required-flag\n- Missing entirely: runtime/MPC params block\n\n## Audit-reproducer requirements (for emhass-contributions/audits/reproducer.py)\n\nOutput a unified table with these columns: param_name, in_param_def, in_config_defaults, in_associations_csv, in_optimization_cache_key, in_runtimeparams, default_match, type_match, suggested_unit, severity, notes.",
-      "Status": "Ideas",
+      "Status": "Candidates",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP85w",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxB8"
     },
     {
       "id": "AC-2a",
@@ -414,7 +491,9 @@
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrQM58",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxqc"
     },
     {
       "id": "AC-2-fix",
@@ -426,11 +505,13 @@
       "Phase": "Phase 1",
       "Priority": "P2",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrQM78",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxqk"
     },
     {
       "id": "PR-830",
-      "title": "PR #830: param_definitions.json default mismatches (AC-2-fix)",
+      "title": "fix(schema): correct 5 default mismatches in param_definitions.json",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7W5jdY",
       "Status": "Review",
@@ -438,7 +519,11 @@
       "Phase": "Phase 1",
       "Priority": "P2",
       "Effort": "XS",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgraSF4",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/830",
+      "repository": "davidusb-geek/emhass",
+      "number": 830
     },
     {
       "id": "AC-3",
@@ -450,7 +535,9 @@
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9Ac",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCE"
     },
     {
       "id": "AC-4",
@@ -462,7 +549,9 @@
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9Do",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCU"
     },
     {
       "id": "AM-1",
@@ -474,7 +563,9 @@
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9GI",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCY"
     },
     {
       "id": "AM-2",
@@ -486,7 +577,9 @@
       "Phase": "Phase 3",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9JU",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCg"
     },
     {
       "id": "AM-5",
@@ -498,7 +591,9 @@
       "Phase": "Phase 3",
       "Priority": "P2",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9NI",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCk"
     },
     {
       "id": "EV-9",
@@ -510,7 +605,9 @@
       "Phase": "Phase 4",
       "Priority": "P0",
       "Effort": "M",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9QI",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCs"
     },
     {
       "id": "AG-3",
@@ -522,7 +619,9 @@
       "Phase": "Phase 4",
       "Priority": "P2",
       "Effort": "S",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9YM",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCw"
     },
     {
       "id": "AG-4",
@@ -534,7 +633,9 @@
       "Phase": "Phase 4",
       "Priority": "P1",
       "Effort": "M",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9eM",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxC8"
     },
     {
       "id": "AG-5",
@@ -546,7 +647,9 @@
       "Phase": "Phase 4",
       "Priority": "P2",
       "Effort": "M",
-      "Scope": "Local"
+      "Scope": "Local",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9og",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxDQ"
     },
     {
       "id": "AG-9",
@@ -558,7 +661,9 @@
       "Phase": "Phase 5",
       "Priority": "P3",
       "Effort": "XL",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9wU",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxDY"
     },
     {
       "id": "AC-8",
@@ -570,7 +675,9 @@
       "Phase": "Phase 5",
       "Priority": "P2",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP92U",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxDg"
     },
     {
       "id": "CE-7",
@@ -582,7 +689,9 @@
       "Phase": "Phase 5",
       "Priority": "P2",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP-GM",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxDs"
     },
     {
       "id": "AG-8",
@@ -594,7 +703,9 @@
       "Phase": "Phase 5",
       "Priority": "P3",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP-Rw",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxD0"
     },
     {
       "id": "AM-3",
@@ -606,7 +717,9 @@
       "Phase": "Phase 5",
       "Priority": "P2",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP-V0",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxEM"
     },
     {
       "id": "AM-4",
@@ -618,7 +731,9 @@
       "Phase": "Phase 5",
       "Priority": "P2",
       "Effort": "L",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP-aU",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxEY"
     },
     {
       "id": "AM-6",
@@ -630,19 +745,23 @@
       "Phase": "Phase 5",
       "Priority": "P3",
       "Effort": "XL",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP-gE",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxEc"
     },
     {
       "id": "DOC-cookbook",
       "title": "DOC-cookbook: docs/cookbook/ folder + recipe template",
       "type": "draft",
-      "body": "New `docs/cookbook/` folder for short, copy-pasteable recipes. Approved by David in Discussion #824 (comment 2026-04-28):\n\n> \"Yes a cookbook section is probably a good idea. Maybe let's the study cases section house the simple onboarding cases [...] But then complete walkthroughs on a cookbook section.\"\n\nSeparation: `study_cases/` = tutorials + simple onboarding. `cookbook/` = focused recipes (config + snippet + caveats, each stands alone).\n\nFirst PR deliverables:\n- `docs/cookbook/` folder\n- Recipe template (fixed structure: Goal / Prerequisites / Config / Snippet / Caveats)\n- 1-2 initial EV recipes to seed the folder (daily-commute pattern, surplus-only pattern)\n- Index page linking to recipes, cross-linked from study_cases/ev.md\n\nLater recipes (from #824 discussion): multi-day weekend window, calendar-driven departure, EVCC dispatcher coupling, modulating-power chargers, negative-price aware charging. Plus non-EV recipes from #823 (good-practices crowdsourcing).\n\nCoordinate with DISC-824 (EV use-cases) and EV-9 (NR/MQTT/EVCC guide — will land in cookbook/ instead of study_cases/).\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824#discussioncomment-16726498",
+      "body": "New `docs/cookbook/` folder for short, copy-pasteable recipes. Approved by David in Discussion #824 (comment 2026-04-28):\n\n> \"Yes a cookbook section is probably a good idea. Maybe let's the study cases section house the simple onboarding cases (the current Tutorial section) and possibly some simple version of the How-to guides. But then complete walkthroughs on a cookbook section.\"\n\nSeparation: `study_cases/` = tutorials + simple onboarding. `cookbook/` = focused recipes (config + snippet + caveats, each stands alone).\n\nFirst PR deliverables:\n- `docs/cookbook/` folder\n- Recipe template (fixed structure: Goal / Prerequisites / Config / Snippet / Caveats)\n- 1-2 initial EV recipes to seed the folder (daily-commute pattern, surplus-only pattern)\n- Index page linking to recipes, cross-linked from study_cases/ev.md\n\nLater recipes (from #824 discussion): multi-day weekend window, calendar-driven departure, EVCC dispatcher coupling, modulating-power chargers, negative-price aware charging. Plus non-EV recipes from #823 (good-practices crowdsourcing).\n\nCoordinate with DISC-824 (EV use-cases) and EV-9 (NR/MQTT/EVCC guide — will land in cookbook/ instead of study_cases/).\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824#discussioncomment-16726498",
       "Status": "Todo",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1.5",
       "Priority": "P1",
       "Effort": "S",
-      "Scope": "Upstream"
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrZw3Y",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKcH64"
     }
   ]
 }
