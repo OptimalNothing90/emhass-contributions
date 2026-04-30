@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-04-30T23:39:09+00:00"
+    "fetched_at": "2026-04-30T23:57:11+00:00"
   },
   "items": [
     {
@@ -214,7 +214,7 @@
       "title": "ignore_pv_feedback_during_curtailment runtime flag has no wiring — read site always falls back to False",
       "type": "link",
       "content_id": "I_kwDOGC8VbM8AAAABAlStfA",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1",
       "Priority": "P1",
@@ -224,6 +224,22 @@
       "content_url": "https://github.com/davidusb-geek/emhass/issues/818",
       "repository": "davidusb-geek/emhass",
       "number": 818
+    },
+    {
+      "id": "PR-829",
+      "title": "fix(utils): wire ignore_pv_feedback_during_curtailment runtime flag (#818)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7W5ieP",
+      "Status": "Done / Wont Do",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 1",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrhSKs",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/829",
+      "repository": "davidusb-geek/emhass",
+      "number": 829
     },
     {
       "id": "DISC-823",
