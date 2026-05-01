@@ -24,3 +24,7 @@ repomix-output.*
 data/
 docker/dev-data/
 contrib-flags.yaml         # only the example lives in repo; actual config lives in container volume
+
+# Claude Code per-user state (skills + shared settings ARE tracked)
+.claude/settings.local.json
+.claude/projects/
