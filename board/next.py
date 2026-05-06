@@ -10,10 +10,10 @@ are responsible for conversational presentation and live-API behavior.
 
 from __future__ import annotations
 
-import argparse  # noqa: F401
+import argparse
 import json
 import re
-import sys  # noqa: F401
+import sys
 from pathlib import Path
 
 DEFAULT_ITEMS = Path(__file__).parent / "items.json"
@@ -175,9 +175,9 @@ def why_strategic(item: dict) -> str:
 
 def _row(item: dict, why: str) -> str:
     return (
-        f"| {item.get('id','')} | {goal_fit(item)} | {item.get('title','')} | "
-        f"{item.get('Phase','')} | {item.get('Priority','')} | "
-        f"{item.get('Effort','')} | {why} |"
+        f"| {item.get('id', '')} | {goal_fit(item)} | {item.get('title', '')} | "
+        f"{item.get('Phase', '')} | {item.get('Priority', '')} | "
+        f"{item.get('Effort', '')} | {why} |"
     )
 
 
@@ -240,5 +240,62 @@ def render_json(
     return json.dumps(payload, indent=2, ensure_ascii=False)
 
 
+def main(argv: list[str] | None = None) -> int:
+    import datetime as _dt
+
+    p = argparse.ArgumentParser(
+        prog="board/next.py",
+        description="Pick next emhass board items (Quick-Win + Strategic).",
+    )
+    p.add_argument("--mode", choices=("quickwin", "strategic", "both"), default="both")
+    p.add_argument("--include-bugs", action="store_true")
+    p.add_argument("--scope", choices=("upstream", "local", "both"), default="upstream")
+    p.add_argument("--limit", type=int, default=5)
+    p.add_argument("--format", choices=("md", "json"), default="md")
+    p.add_argument(
+        "--items",
+        type=Path,
+        default=DEFAULT_ITEMS,
+        help="Path to items.json (default: board/items.json)",
+    )
+    p.add_argument(
+        "--today",
+        default=None,
+        help="Override date string (YYYY-MM-DD); default: today.",
+    )
+    args = p.parse_args(argv)
+
+    today = args.today or _dt.date.today().isoformat()
+    data = load_items(args.items)
+    items = data["items"]
+    cands = filter_candidates(
+        items,
+        scope=args.scope,
+        include_bugs=args.include_bugs,
+    )
+
+    qw = rank_quickwin(cands)[: args.limit] if args.mode in ("quickwin", "both") else []
+    st = (
+        rank_strategic(cands)[: args.limit]
+        if args.mode in ("strategic", "both")
+        else []
+    )
+
+    # Edge case: everything in flight (no Todo items at all matched filters)
+    if args.format == "md" and not qw and not st:
+        msg = (
+            f"# Next emhass items — {today}\n\n"
+            "_Picker empty — everything in flight, wait for merges._\n"
+        )
+        sys.stdout.write(msg)
+        return 0
+
+    if args.format == "json":
+        sys.stdout.write(render_json(qw, st, today=today) + "\n")
+    else:
+        sys.stdout.write(render_markdown(qw, st, today=today) + "\n")
+    return 0
+
+
 if __name__ == "__main__":
-    raise SystemExit("CLI not yet wired; later task adds argparse + render.")
+    raise SystemExit(main())
