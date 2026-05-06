@@ -136,5 +136,20 @@ def rank_strategic(items: list[dict]) -> list[dict]:
     )
 
 
+GOAL_PREFIX_MAP = {
+    "AC": "LLM-ready",
+    "EV": "EV-EVCC",
+}
+
+
+def goal_fit(item: dict) -> str:
+    g = item.get("Goal")
+    if g:
+        return g
+    item_id = item.get("id", "")
+    prefix = item_id.split("-", 1)[0] if "-" in item_id else item_id
+    return GOAL_PREFIX_MAP.get(prefix, "")
+
+
 if __name__ == "__main__":
     raise SystemExit("CLI not yet wired; later task adds argparse + render.")

@@ -98,3 +98,17 @@ def test_strategic_sort_order(items):
     for p1_id in ("AC-3", "GOAL-FIELD", "DRAFT-DONE-BLOCKER"):
         if p1_id in ids:
             assert p0_idx < ids.index(p1_id)
+
+
+def test_goal_fit_field_wins(items):
+    item = next(it for it in items if it["id"] == "GOAL-FIELD")
+    assert picker.goal_fit(item) == "LLM-ready"
+
+
+def test_goal_fit_prefix_fallback(items):
+    ac = next(it for it in items if it["id"] == "AC-3")
+    ev = next(it for it in items if it["id"] == "EV-7")
+    inf = next(it for it in items if it["id"] == "INF-1")
+    assert picker.goal_fit(ac) == "LLM-ready"
+    assert picker.goal_fit(ev) == "EV-EVCC"
+    assert picker.goal_fit(inf) == ""
