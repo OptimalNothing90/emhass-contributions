@@ -6,6 +6,7 @@ filter / ranking / rendering functions. No GitHub API, no live items.json.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -128,3 +129,27 @@ def test_render_markdown_includes_goalfit_column(items):
     assert "Quick wins" in md
     assert "Strategic next" in md
     assert "Goal-fit" in md
+
+
+def test_json_output_schema(items):
+    cands = picker.filter_candidates(items, scope="upstream", include_bugs=False)
+    qw = picker.rank_quickwin(cands)
+    st = picker.rank_strategic(cands)
+    payload = picker.render_json(qw, st, today="2026-05-07")
+    parsed = json.loads(payload)
+    assert parsed["date"] == "2026-05-07"
+    assert isinstance(parsed["quickwins"], list)
+    assert isinstance(parsed["strategics"], list)
+    if parsed["quickwins"]:
+        sample = parsed["quickwins"][0]
+        for key in (
+            "id",
+            "title",
+            "phase",
+            "priority",
+            "effort",
+            "scope",
+            "goal_fit",
+            "why",
+        ):
+            assert key in sample, f"missing key: {key}"

@@ -213,5 +213,32 @@ def render_markdown(
     return "\n".join(parts)
 
 
+def _json_entry(item: dict, why: str) -> dict:
+    return {
+        "id": item.get("id", ""),
+        "title": item.get("title", ""),
+        "phase": item.get("Phase", ""),
+        "priority": item.get("Priority", ""),
+        "effort": item.get("Effort", ""),
+        "scope": item.get("Scope", ""),
+        "goal_fit": goal_fit(item),
+        "why": why,
+    }
+
+
+def render_json(
+    quickwins: list[dict],
+    strategics: list[dict],
+    *,
+    today: str,
+) -> str:
+    payload = {
+        "date": today,
+        "quickwins": [_json_entry(it, why_quick(it)) for it in quickwins],
+        "strategics": [_json_entry(it, why_strategic(it)) for it in strategics],
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     raise SystemExit("CLI not yet wired; later task adds argparse + render.")
