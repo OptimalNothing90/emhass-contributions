@@ -85,5 +85,56 @@ def filter_candidates(
     return out
 
 
+PHASE_ORDER = {
+    "Phase 0": 0,
+    "Phase 1": 1,
+    "Phase 1.5": 2,
+    "Phase 2": 3,
+    "Phase 3": 4,
+    "Phase 4": 5,
+    "Phase 5": 6,
+}
+PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+EFFORT_ORDER = {"XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4}
+
+
+def _phase_rank(item: dict) -> int:
+    return PHASE_ORDER.get(item.get("Phase", ""), 99)
+
+
+def _priority_rank(item: dict) -> int:
+    return PRIORITY_ORDER.get(item.get("Priority", ""), 99)
+
+
+def _effort_rank(item: dict) -> int:
+    return EFFORT_ORDER.get(item.get("Effort", ""), 99)
+
+
+def rank_quickwin(items: list[dict]) -> list[dict]:
+    pre = [it for it in items if it.get("Effort") in ("XS", "S")]
+    return sorted(
+        pre,
+        key=lambda it: (
+            _phase_rank(it),
+            _priority_rank(it),
+            _effort_rank(it),
+            it.get("id", ""),
+        ),
+    )
+
+
+def rank_strategic(items: list[dict]) -> list[dict]:
+    pre = [it for it in items if it.get("Priority") in ("P0", "P1")]
+    return sorted(
+        pre,
+        key=lambda it: (
+            _priority_rank(it),
+            _phase_rank(it),
+            _effort_rank(it),
+            it.get("id", ""),
+        ),
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit("CLI not yet wired; later task adds argparse + render.")

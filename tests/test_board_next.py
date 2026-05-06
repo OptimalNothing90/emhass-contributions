@@ -63,3 +63,38 @@ def test_filter_blocked_by_marker(items):
     assert "DRAFT-BLOCKED" not in ids
     # DRAFT-DONE-BLOCKER itself is plain Todo, not blocked, should remain
     assert "DRAFT-DONE-BLOCKER" in ids
+
+
+def test_quickwin_only_xs_s(items):
+    cands = picker.filter_candidates(items, scope="upstream", include_bugs=False)
+    qw = picker.rank_quickwin(cands)
+    assert all(it["Effort"] in ("XS", "S") for it in qw)
+    # EV-7 is M Effort → must be excluded
+    assert "EV-7" not in {it["id"] for it in qw}
+
+
+def test_strategic_only_p0_p1(items):
+    cands = picker.filter_candidates(items, scope="upstream", include_bugs=False)
+    st = picker.rank_strategic(cands)
+    assert all(it["Priority"] in ("P0", "P1") for it in st)
+    assert "AG-99" not in {it["id"] for it in st}  # P2
+
+
+def test_quickwin_sort_order(items):
+    cands = picker.filter_candidates(items, scope="upstream", include_bugs=False)
+    qw = picker.rank_quickwin(cands)
+    ids = [it["id"] for it in qw]
+    # AC-3 (Phase 1, P1, XS) before AG-99 (Phase 1, P2, S)
+    # INF-1 (Phase 0, P3, XS) before AC-3 because Phase 0 < Phase 1
+    assert ids.index("INF-1") < ids.index("AC-3") < ids.index("AG-99")
+
+
+def test_strategic_sort_order(items):
+    cands = picker.filter_candidates(items, scope="upstream", include_bugs=False)
+    st = picker.rank_strategic(cands)
+    ids = [it["id"] for it in st]
+    # EV-7 is P0 → must come before any P1 item
+    p0_idx = ids.index("EV-7")
+    for p1_id in ("AC-3", "GOAL-FIELD", "DRAFT-DONE-BLOCKER"):
+        if p1_id in ids:
+            assert p0_idx < ids.index(p1_id)
