@@ -112,3 +112,19 @@ def test_goal_fit_prefix_fallback(items):
     assert picker.goal_fit(ac) == "LLM-ready"
     assert picker.goal_fit(ev) == "EV-EVCC"
     assert picker.goal_fit(inf) == ""
+
+
+def test_empty_lists_render_placeholder():
+    md = picker.render_markdown([], [], today="2026-05-07")
+    assert "(no items match these criteria)" in md
+    assert "# Next emhass items — 2026-05-07" in md
+
+
+def test_render_markdown_includes_goalfit_column(items):
+    cands = picker.filter_candidates(items, scope="upstream", include_bugs=False)
+    qw = picker.rank_quickwin(cands)[:3]
+    st = picker.rank_strategic(cands)[:3]
+    md = picker.render_markdown(qw, st, today="2026-05-07")
+    assert "Quick wins" in md
+    assert "Strategic next" in md
+    assert "Goal-fit" in md

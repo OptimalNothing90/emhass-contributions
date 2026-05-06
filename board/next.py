@@ -19,6 +19,8 @@ from pathlib import Path
 DEFAULT_ITEMS = Path(__file__).parent / "items.json"
 
 BLOCKED_RE = re.compile(r"^\s*Blocked-by:\s*([A-Za-z0-9_-]+)", re.MULTILINE)
+LINKED_RE = re.compile(r"linked\s+#(\d+)", re.IGNORECASE)
+EMPTY_PLACEHOLDER = "_(no items match these criteria)_"
 
 
 def load_items(path: Path) -> dict:
@@ -149,6 +151,66 @@ def goal_fit(item: dict) -> str:
     item_id = item.get("id", "")
     prefix = item_id.split("-", 1)[0] if "-" in item_id else item_id
     return GOAL_PREFIX_MAP.get(prefix, "")
+
+
+def why_quick(item: dict) -> str:
+    body = item.get("body") or ""
+    m = LINKED_RE.search(body)
+    effort = item.get("Effort", "")
+    if m:
+        return f"linked #{m.group(1)}, {effort} effort"
+    g = goal_fit(item)
+    if g:
+        return f"{g}, {effort} effort"
+    return f"{effort} effort, {item.get('Phase', '')}"
+
+
+def why_strategic(item: dict) -> str:
+    g = goal_fit(item)
+    phase = item.get("Phase", "")
+    if g:
+        return f"goal-fit: {g}, {phase}"
+    return f"{phase} / {item.get('Priority', '')}"
+
+
+def _row(item: dict, why: str) -> str:
+    return (
+        f"| {item.get('id','')} | {goal_fit(item)} | {item.get('title','')} | "
+        f"{item.get('Phase','')} | {item.get('Priority','')} | "
+        f"{item.get('Effort','')} | {why} |"
+    )
+
+
+def render_markdown(
+    quickwins: list[dict],
+    strategics: list[dict],
+    *,
+    today: str,
+) -> str:
+    parts = [f"# Next emhass items — {today}", ""]
+
+    parts.append("## Quick wins (Effort XS/S, Todo, no block)")
+    parts.append("")
+    parts.append("| ID | Goal-fit | Title | Phase | Pri | Effort | Why quick |")
+    parts.append("|----|----------|-------|-------|-----|--------|-----------|")
+    if quickwins:
+        for it in quickwins:
+            parts.append(_row(it, why_quick(it)))
+    else:
+        parts.append(EMPTY_PLACEHOLDER)
+    parts.append("")
+
+    parts.append("## Strategic next (P0/P1, lowest Phase)")
+    parts.append("")
+    parts.append("| ID | Goal-fit | Title | Phase | Pri | Effort | Why strategic |")
+    parts.append("|----|----------|-------|-------|-----|--------|---------------|")
+    if strategics:
+        for it in strategics:
+            parts.append(_row(it, why_strategic(it)))
+    else:
+        parts.append(EMPTY_PLACEHOLDER)
+
+    return "\n".join(parts)
 
 
 if __name__ == "__main__":
