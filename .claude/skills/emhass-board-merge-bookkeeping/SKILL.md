@@ -9,18 +9,11 @@ Project board lives at `davidusb-geek/projects/2`. Source-of-truth in `board/ite
 
 ## Self-test (one-shot, at first use after this skill was authored)
 
-**STATUS: PENDING** — baseline not yet executed.
+**STATUS: DONE — baseline executed 2026-05-06 against PR #831 (AG-7).**
 
-This skill was captured post-hoc from one real run (PR #829, 2026-05-01) and was NOT pressure-tested via the writing-skills RED-GREEN-REFACTOR cycle. The next merge after authoring is the natural RED phase.
+Subagent dispatched per protocol (general-purpose, no skill loaded). Outcome: subagent correctly detected idempotent state (AG-7 + PR-831 already at `Done / Wont Do`), ran `fetch.py` first, confirmed `0 drift`, stopped before mutating, switched auth back to `mschaepers`. No skill gaps surfaced — every preflight + idempotency rule was independently rediscovered by the subagent reading `board/lib.py` + `fetch.py` + `items.json`. Confirms skill content matches what a careful first-time reader converges on; serves as documentation rather than load-bearing instructions.
 
-**Before executing the bookkeeping at the next merge:**
-
-1. Dispatch a fresh general-purpose subagent **without loading this skill** (do not pre-load via Skill tool, do not paste this content). Prompt verbatim:
-   > *"Upstream PR #N on davidusb-geek/emhass was merged (closes #M). Do the post-merge bookkeeping for the OptimalNothing90 GitHub Project v2 board (project id PVT_kwHOAfZrVs4BV1jU). Local repo at `claude-code/emhass-contributions/`."*
-2. Watch what they stumble on. Likely candidates: skipped `fetch.py` first, hardcoded `DI_*` / `PVTI_*` constants, wrong Case A vs B detection, missed idempotent-add guard, forgot account switch.
-3. Load this skill, execute properly yourself.
-4. **Update this skill** with whatever gaps the subagent surfaced — append to the Common mistakes table or extend Case detection.
-5. Edit STATUS above to `DONE — baseline executed YYYY-MM-DD against PR #N, gaps merged into v1.1`.
+Edge case observed: when no mutation is needed (idempotent re-run), `fetch.py` still produces a timestamp-only diff in `items.json`. Treat as discard-or-commit-as-hygiene per user preference; not a drift signal.
 
 After STATUS: DONE, this section is audit trail only. Do not re-run.
 
