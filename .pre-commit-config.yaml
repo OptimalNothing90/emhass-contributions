@@ -35,3 +35,9 @@ repos:
         # - upstream/  : submodule content, not ours
         # - scripts/scrub-private-refs.py : defines the patterns; would self-match
         exclude: '^(upstream/|scripts/scrub-private-refs\.py$)'
+      - id: pytest-board-next
+        name: pytest tests/test_board_next.py
+        entry: python -m pytest tests/test_board_next.py -q
+        language: system
+        files: ^(board/next\.py|tests/(test_board_next\.py|fixtures/items_sample\.json))$
+        pass_filenames: false
