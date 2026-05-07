@@ -12,7 +12,12 @@ covered by `tests/test_board_next.py`.
 
 ## Self-test (one-shot, at first use after this skill was authored)
 
-**STATUS: PENDING.**
+**STATUS: DONE — baseline executed 2026-05-07 against live `board/items.json`.**
+
+Outcome: picker produced ranked Quick-Win + Strategic lists. Two consecutive runs
+yielded identical output (idempotent). JSON output parsed cleanly. No bug-label
+leakage (live items.json has no `labels` field populated; filter is dormant by
+design until fetch.py is extended).
 
 On first use after authoring, run:
 
