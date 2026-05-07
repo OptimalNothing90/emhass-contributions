@@ -1,6 +1,6 @@
 ---
 name: emhass-board-merge-bookkeeping
-description: Use when an upstream emhass PR is merged or closed-not-merged and the davidusb-geek/projects/2 board needs post-merge card moves. Triggers on phrases like "PR #N merged", "bookkeeping for PR", "board update for the merge", "ISSUE-N closed", or any merge-commit reference paired with the project board.
+description: Use when an upstream emhass PR is merged OR closed-without-merge and the davidusb-geek/projects/2 board needs post-PR card moves. Triggers on phrases like "PR #N merged", "PR #N closed", "PR #N wurde geschlossen, nicht gemerged", "won't-do for PR #N", "bookkeeping for PR", "board update for the merge", "ISSUE-N closed", or any PR-close reference paired with the project board.
 ---
 
 # EMHASS Board Merge Bookkeeping
@@ -95,6 +95,59 @@ Reference: `board/2026-05-01-pr-829-merged.py` (Case B), `board/2026-04-30-pr-83
 2. `git add` script + items.json, commit `chore(board): PR #N merged upstream ...`
 3. `gh auth switch --user mschaepers` (default account hygiene)
 4. Push only when user explicitly asks. Never push autonomously.
+
+## Closed-without-merge mode
+
+Trigger detection: `gh pr view <N> --repo davidusb-geek/emhass --json state,mergedAt`.
+
+| `state` | `mergedAt` | Mode |
+|---|---|---|
+| `MERGED` | non-null | Standard merge bookkeeping (sections above) |
+| `CLOSED` | `null` | Won't-do mode (this section) |
+
+Won't-do mode: same Status target as merge bookkeeping (`Done / Wont Do` is a single
+combined option in the project schema), but the script template marks PR-sibling
+addition with a "closed-without-merge" intent and the commit message phrasing differs.
+
+### Won't-do mode actions
+
+1. **Read maintainer rationale** — `gh pr view <N> --repo davidusb-geek/emhass --comments`.
+   Last 1-3 owner comments captured for documentation.
+2. **Same case detection** — Case A (draft umbrella) or Case B (issue-only) per the
+   sections above. Logic identical to merge path.
+3. **Same Status target** — both Board-Card and PR-link card → `Status: Done / Wont Do`.
+4. **PR-link card body** — when adding the PR-sibling card via `add_content_to_project`,
+   the script template (Case B) populates the same fields, but the commit message reads
+   `chore(board): PR #N closed without merge` (not `merged upstream`).
+
+### Won't-do script template variant
+
+```python
+# Same imports + setup as merge template above
+from lib import add_content_to_project, find_item, load_items, save_items, set_field
+
+# Won't-do mode: same Status, different intent recorded in commit message.
+PR_FIELDS = {"Status": "Done / Wont Do", "Category": "A: Code-Lifecycle",
+             "Phase": "...", "Priority": "...", "Effort": "...", "Scope": "Upstream"}
+WONT_DO_REASON = "<one-line summary of maintainer rationale>"  # for commit body
+
+# ... rest identical to merge template ...
+```
+
+Commit message:
+
+```
+chore(board): PR #N closed without merge — <reason>
+```
+
+NOT `chore(board): PR #N merged upstream`.
+
+### When to use
+
+Invoke this mode when the user reports "PR #N wurde geschlossen, nicht gemerged" or when
+`emhass-cross-repo-flow` Phase 8 detects `state=CLOSED, mergedAt=null` and the user picks
+"Won't Do" from the spec §12.c options. Wait & escalate or Re-do paths do NOT trigger
+this skill.
 
 ## Common mistakes
 
