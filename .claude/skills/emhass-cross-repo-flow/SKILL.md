@@ -16,7 +16,19 @@ explicitly out of scope per spec Decision #6.
 
 ## Self-test (one-shot, at first use after this skill was authored)
 
-**STATUS: PENDING.**
+**STATUS: DONE — baseline executed 2026-05-07 against AC-2a (board id `AC-2a`).**
+
+Outcome: routing-assessment correctly recommended `plan-light` (audit + no bug + no
+maintainer engagement). Spec + plan written at expected paths; handoff-prompt section
+appended with all placeholders resolved including `branch_name=feat/ac-2a-unit-field`
+(deterministic per `feedback_branch_naming`). Board card moved Candidates → In Progress and
+back to Candidates for cleanup (deviation: live AC-2a was Status=Candidates/Phase 3, not
+Todo/Phase 1 as expected — board state had evolved since spec was written; mutation
+mechanism validated equivalently). Self-test stopped before fork session as designed; no
+upstream PR opened. Spec + plan retained as `_self-test artefact_` — kept as audit
+trail.
+
+After STATUS: DONE, this section is audit trail only.
 
 First live use after authoring runs the skill against AC-2a (board id `AC-2a`) per spec §13.2 / §13.3:
 
