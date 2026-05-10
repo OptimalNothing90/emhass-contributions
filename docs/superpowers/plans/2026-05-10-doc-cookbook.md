@@ -343,7 +343,7 @@ return msg;
 
 ## Caveats
 
-The following are observed-in-production patterns from running this flow shape for months across multiple EMHASS versions (V4.2 thermal/deferrable, V4.5 audit+API). Specific thresholds shown are illustrative — tune to your inverter, sensors, and tariff.
+The following are observed-in-production patterns from running this flow shape for months. Specific thresholds shown are illustrative — tune to your inverter, sensors, and tariff.
 
 - **Field-name versioning.** Runtime-param names are EMHASS-version-sensitive. If you upgrade EMHASS, regrep `src/emhass/utils.py` for the names you use; key renames are not always called out in release notes.
 - **MPC timeout.** Default Node-RED `http request` timeout is too short. Raise to ≥ 120 s. In production, naive-MPC with several deferrables + thermal regularly takes 90-120 s; day-ahead longer.
@@ -730,10 +730,10 @@ This is a final paranoia pass. Spec D4c requires zero leaks of private-repo cont
 - [ ] **Step 9.1: Run the broad lint**
 
 ```bash
-grep -riE "loxone|loxonesmarthome|192\.168|10\.0\.|172\.(1[6-9]|2[0-9]|3[01])\.|\.lan\b|\.local\b|U:/|U:\\\\|/nodered/|Ottenhofen|SOLCAST_API_KEY|INFLUXDB_TOKEN|ce3wd000tab|f235d8fbcc04334a|882f627fbb0afc5f|6\.96 ?kWp|48\.21|11\.87" docs/cookbook/
+grep -riE "loxone|loxonesmarthome|192\.168|10\.0\.|172\.(1[6-9]|2[0-9]|3[01])\.|\.lan\b|\.local\b|U:/|U:\\\\|/nodered/|Ottenhofen|SOLCAST_API_KEY|INFLUXDB_TOKEN|ce3wd000tab|f235d8fbcc04334a|882f627fbb0afc5f|6\.96 ?kWp|48\.21|11\.87|V[0-9]+\.[0-9]+|Audit \+ API|thermal/deferrable" docs/cookbook/
 ```
 
-Expected: zero matches. If any match: investigate, redact, re-grep, then proceed. Pattern catches: Loxone references, RFC1918 private IPs, `.lan` / `.local` mDNS, drive paths, location specifics (Ottenhofen, lat/lon, kWp values from production-PV setup), secret-env-variable names, and known node-id strings from the production flows.json that were extracted for the Caveats sections.
+Expected: zero matches. If any match: investigate, redact, re-grep, then proceed. Pattern catches: Loxone references, RFC1918 private IPs, `.lan` / `.local` mDNS, drive paths, location specifics (Ottenhofen, lat/lon, kWp values from production-PV setup), secret-env-variable names, known node-id strings from the production flows.json, and **internal flow-iteration version tags** like `V4.2 thermal/deferrable` / `V4.5 Audit + API` (those are private Node-RED tab labels, NOT EMHASS upstream versions which are in the 0.x range).
 
 - [ ] **Step 9.2: Sanity-check for obvious private hostnames / device names**
 
