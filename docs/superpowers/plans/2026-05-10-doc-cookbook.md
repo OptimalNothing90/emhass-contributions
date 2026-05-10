@@ -343,17 +343,23 @@ return msg;
 
 ## Caveats
 
+The following are observed-in-production patterns from running this flow shape for months across multiple EMHASS versions (V4.2 thermal/deferrable, V4.5 audit+API). Specific thresholds shown are illustrative — tune to your inverter, sensors, and tariff.
+
 - **Field-name versioning.** Runtime-param names are EMHASS-version-sensitive. If you upgrade EMHASS, regrep `src/emhass/utils.py` for the names you use; key renames are not always called out in release notes.
-- **MPC timeout.** Default Node-RED `http request` timeout is short; raise to 120 s+ or the call will fail before EMHASS finishes the solve.
-- **State between ticks.** Use `flow.set(...)` and `flow.get(...)` (not `context.set/get`) so the values survive Node-RED redeploys of unrelated tabs.
-- **Error handling.** Wire a `catch` node downstream of the `http request` node; EMHASS returns HTTP 500 with a JSON error body on infeasible solves.
+- **MPC timeout.** Default Node-RED `http request` timeout is too short. Raise to ≥ 120 s. In production, naive-MPC with several deferrables + thermal regularly takes 90-120 s; day-ahead longer.
+- **Watchdog with separated signals.** Publish two retained MQTT topics from this flow: one heartbeat from the orchestrator itself (every tick), one `cycle-ok` signal flipped when the EMHASS POST returns 200. A downstream consumer (Loxone, HA, dashboards) can then distinguish "orchestrator down" from "EMHASS down". Threshold pattern: WARN at ~2× MPC cadence with no tick, CRITICAL at ~4×. For a 15-min cadence that is 30 / 60 min. Production audit logs have ~7-h gaps that go unnoticed without this.
+- **Override layer.** EMHASS plan is a *recommendation*, not a binding command. In the function node downstream of the response, add an override layer for edge cases the optimizer misses — e.g. divert PV-surplus to battery even when EMHASS said "hold", if battery has headroom (`SOC ≥ 90%`) and `pv_surplus > ~500 W`. Log the override reason as a separate audit field.
+- **Audit triplet.** Wire every long-running flow with three nodes: `catch` (errors), `status` (state changes), and a `function` that formats both into a JSONL line appended to a rotating audit log. Pay-off-post-mortem fields per tick: `{ts, status, mode, soc_target, price_cents, pv, load, next_action}`. Without this, debugging a misbehaving night is impossible.
+- **Hysteresis dead-band.** Add ~50 W (or your inverter's noise floor) of dead-band around charge/discharge mode-transition boundaries so the orchestrator doesn't flap between modes as PV and load wiggle around equilibrium.
+- **Forecast resilience.** Single PV-forecast source is a single point of failure. Production-grade orchestrators run primary (commercial: Solcast, Forecast.Solar, etc.) + physics-fallback (Open-Meteo `global_tilted_irradiance` × DC_kWp × eta, clipped to inverter AC max) + a daily auto-calibration step (EMA-update of a correction factor from real-vs-modeled PV).
+- **State between ticks.** Use `flow.set(...)` / `flow.get(...)` (not `context.set/get`) so the values survive Node-RED redeploys of unrelated tabs.
 - **Length of price arrays.** `load_cost_forecast` and `prod_price_forecast` must have at least `horizon_steps` entries, otherwise EMHASS pads / truncates and you may not notice silent misalignment.
 - **Battery SOC unit.** EMHASS expects `soc_init` as a fraction in [0, 1]. The HA SOC sensor is typically percent; divide by 100. See [Battery-aware runtime params](battery_aware_runtime_params.md) for the full story.
 
 ## Credits
 
 - Prior art: long-form MPC walkthrough at `docs/study_cases/mpc.md`.
-- Pattern derived from author's production Node-RED setup (no private flow JSON included; only generic shape).
+- Patterns extracted from author's production Node-RED setup (months in service; multiple EMHASS-version iterations). Generic patterns only — no private flow JSON, sensor names, IPs, secrets, or location-specific data copied.
 - Field names verified against `src/emhass/utils.py:treat_runtimeparams` and `src/emhass/data/config_defaults.json` on 2026-05-11.
 ````
 
@@ -484,15 +490,33 @@ Wire this `function` node in series before the `http request` node from the [Nod
 
 ## Caveats
 
+The following are observed-in-production patterns from months running this normalization across multiple sensor sources.
+
 - **#1 bug: percent vs fraction.** EMHASS works in fraction (0..1). Most sensor sources expose percent (0..100). Always check the unit. Symptoms of getting it wrong: optimizer plans aggressive discharge (thinks battery is "full" at 80 because it sees 0.8 as 80% margin headroom), or plans aggressive charge (thinks battery is empty). See the [Plan-output schema](plan_output_schema.md) for the symmetric output-side scaling trap on `SOC_opt`.
-- **Stale sensor.** If your battery sensor publishes only on change and your MPC ticks every 5 min, a long idle period can serve stale SOC. Wire a `delay` node with `last value` semantics, or read a "last_updated" timestamp and reject readings older than 2× MPC period.
-- **Bound rejection is silent in the optimizer.** EMHASS *only* logs a warning when `soc_init` is out of range; the solve continues with the fallback. If you depend on the value being honored, validate before sending (the snippet above does this).
+- **Dual-format robustness.** The same sensor in different transport stacks may publish fraction *or* percent. Pattern that handles both without branching:
+
+  ```javascript
+  const socPct = soc <= 1 ? soc * 100 : soc;
+  ```
+
+  Treat any value ≤ 1 as fraction-form and scale; anything else as already-percent. Production has seen the same battery exposed as fraction over Modbus and as percent over the inverter's cloud API on the same day.
+- **Defensive fallback.** Battery sensors regularly return garbage during startup, after BMS calibration, or during firmware updates (`NaN`, negative values, or `> 100`). Prefer a known-safe default over propagating bad data:
+
+  ```javascript
+  let soc = parseFloat(msg.payload) || 0;
+  if (soc < 0 || soc > 100 || isNaN(soc)) soc = 50;
+  ```
+
+  A `NaN` propagated into `runtime_params.soc_init` can crash the parsing layer between your orchestrator and EMHASS *before* EMHASS gets the chance to reject the bound-violation cleanly.
+- **Stale sensor.** If your battery sensor publishes only on change and your MPC ticks regularly (e.g. every 5-15 min), a long idle period can serve a stale SOC. Wire a `delay` node with `last value` semantics, or read a "last_updated" timestamp and reject readings older than ~2× MPC period.
+- **Bound rejection is silent in the optimizer.** EMHASS only logs a warning when `soc_init` is out of range; the solve continues with the fallback (`battery_target_state_of_charge`). If you depend on the value being honored, validate before sending (the snippet above does this).
 - **Hardware BMS still owns safety.** EMHASS does not enforce battery safety limits — it computes a *plan*. Your battery's BMS / inverter must still enforce its own thermal, voltage, and current limits. EMHASS plans things the hardware can refuse.
 - **SOC at horizon end.** EMHASS plans to land at `battery_target_state_of_charge` by horizon end by default. If you want a different terminal SOC for a specific call, pass `soc_final` in runtime params. (Out of scope for this recipe — see EMHASS naive-MPC docs for the full runtime-param list.)
 
 ## Credits
 
 - SOC fraction-vs-percent gotcha discovered while building [PR #835 plan-output schema doc](https://github.com/davidusb-geek/emhass/pull/835). See `docs/plan_output_schema.md` (once #835 merges) for the symmetric output-side story.
+- Dual-format robustness + defensive fallback patterns extracted from author's production Node-RED setup (months in service). Generic only — no private sensor names, IPs, or stack-specific identifiers copied.
 - Field names verified against `src/emhass/utils.py:treat_runtimeparams` and `src/emhass/optimization.py` battery constraints on 2026-05-11.
 - Pattern derived from author's production setup (battery in EMHASS-Optim; generic only, no private config).
 ````
@@ -706,10 +730,10 @@ This is a final paranoia pass. Spec D4c requires zero leaks of private-repo cont
 - [ ] **Step 9.1: Run the broad lint**
 
 ```bash
-grep -riE "loxone|loxonesmarthome|192\.168|10\.0\.|172\.(1[6-9]|2[0-9]|3[01])\.|\.lan\b|\.local\b|U:/|U:\\\\|/nodered/" docs/cookbook/
+grep -riE "loxone|loxonesmarthome|192\.168|10\.0\.|172\.(1[6-9]|2[0-9]|3[01])\.|\.lan\b|\.local\b|U:/|U:\\\\|/nodered/|Ottenhofen|SOLCAST_API_KEY|INFLUXDB_TOKEN|ce3wd000tab|f235d8fbcc04334a|882f627fbb0afc5f|6\.96 ?kWp|48\.21|11\.87" docs/cookbook/
 ```
 
-Expected: zero matches. If any match: investigate, redact, re-grep, then proceed.
+Expected: zero matches. If any match: investigate, redact, re-grep, then proceed. Pattern catches: Loxone references, RFC1918 private IPs, `.lan` / `.local` mDNS, drive paths, location specifics (Ottenhofen, lat/lon, kWp values from production-PV setup), secret-env-variable names, and known node-id strings from the production flows.json that were extracted for the Caveats sections.
 
 - [ ] **Step 9.2: Sanity-check for obvious private hostnames / device names**
 
@@ -786,6 +810,7 @@ notes: 2 seed recipes (Node-RED MPC orchestration, battery-aware runtime params)
 Run before declaring done:
 
 - [ ] All canonical parameter names match `config_defaults.json` (no `SOCtarget`, `Pd_max`, `def_total_hours` remnants)? Verify with: `grep -E "SOCtarget|Pd_max|Pc_max|eta_disch|eta_ch|def_total_hours" docs/cookbook/` → must return zero.
+- [ ] Both recipes have a Caveats section informed by production patterns (D12)? Spot-check both files: each should contain at least 5 Caveats bullets, including the watchdog / override / audit-triplet / hysteresis / forecast-resilience cluster (`nodered_mpc_orchestration.md`) AND the dual-format + defensive-fallback cluster (`battery_aware_runtime_params.md`). LLM-default-only caveats (timeout, error-catch, version-pinning) are fine to include alongside but must NOT be the whole list.
 - [ ] Each `<!-- source: ... -->` comment cites a real `:line` number (verified in Task 4.2 / 5.2)?
 - [ ] Both recipes ≤ 200 lines?
 - [ ] Privacy lint passes on both recipes AND the index (Task 9)?
