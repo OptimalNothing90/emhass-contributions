@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-10T21:07:11+00:00"
+    "fetched_at": "2026-05-10T22:40:19+00:00"
   },
   "items": [
     {
@@ -786,7 +786,7 @@
       "title": "DOC-cookbook: docs/cookbook/ folder + recipe template",
       "type": "draft",
       "body": "New `docs/cookbook/` folder for short, copy-pasteable recipes. Approved by David in Discussion #824 (comment 2026-04-28):\n\n> \"Yes a cookbook section is probably a good idea. Maybe let's the study cases section house the simple onboarding cases (the current Tutorial section) and possibly some simple version of the How-to guides. But then complete walkthroughs on a cookbook section.\"\n\nSeparation: `study_cases/` = tutorials + simple onboarding. `cookbook/` = focused recipes (config + snippet + caveats, each stands alone).\n\nFirst PR deliverables:\n- `docs/cookbook/` folder\n- Recipe template (fixed structure: Goal / Prerequisites / Config / Snippet / Caveats)\n- 1-2 initial EV recipes to seed the folder (daily-commute pattern, surplus-only pattern)\n- Index page linking to recipes, cross-linked from study_cases/ev.md\n\nLater recipes (from #824 discussion): multi-day weekend window, calendar-driven departure, EVCC dispatcher coupling, modulating-power chargers, negative-price aware charging. Plus non-EV recipes from #823 (good-practices crowdsourcing).\n\nCoordinate with DISC-824 (EV use-cases) and EV-9 (NR/MQTT/EVCC guide — will land in cookbook/ instead of study_cases/).\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824#discussioncomment-16726498",
-      "Status": "Todo",
+      "Status": "In Progress",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1.5",
       "Priority": "P1",
