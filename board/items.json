@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-10T23:00:43+00:00"
+    "fetched_at": "2026-05-10T23:42:12+00:00"
   },
   "items": [
     {
@@ -518,7 +518,7 @@
       "title": "AC-2a: Add `unit` field to param_definitions.json",
       "type": "draft",
       "body": "Add structured `unit` field to all ~80 existing entries in src/emhass/static/data/param_definitions.json. Parse-friendly metadata enables openapi-spec generation (AM-1), Pydantic models, and AI-readable schemas.\n\nSource: detailed prompt at https://github.com/OptimalNothing90/emhass-contributions/blob/main/board/items.json (item AC-2a).\n\n## Scope clarification\n\nThis task **extends an existing schema field** for already-documented parameters. It is NOT adding new parameters. The canonical 4-step workflow for adding NEW parameters is documented in upstream `docs/develop.md` (Adding a parameter section) and is out of scope here.\n\nAC-2a only modifies `param_definitions.json` — no changes to associations.csv, config_defaults.json, or OptimizationCacheKey (those four-step touches are for new params).\n\n## Process (issue-first)\n\n1. Open issue on davidusb-geek/emhass: \"Add structured `unit` field to param_definitions.json for AI/openapi readability\". Reference #808 Layer-2 invitation. Propose enum, ask blessing before PR.\n2. Wait for maintainer response. NO code yet.\n3. After approval: branch `feat/param-definitions-unit-field` from upstream/master.\n4. Add `\"unit\": \"<value>\"` next to `default_value` for every entry. Enum:\n   - W (power), Wh / kWh (energy)\n   - €/kWh, € (price/cost — currency-neutral marker; maintainer uses €)\n   - % (percent 0..100), fraction (0..1 — distinct from %)\n   - °C (temperature), ° (degrees lat/long/azimuth)\n   - min, h, days, timesteps (time)\n   - count (dimensionless integer), s (seconds for timeouts)\n   - none (booleans/strings/sensor-IDs/method-selectors)\n5. Description text NOT touched in this PR (separate concerns).\n6. UI render test: docker container boot, browser config page, verify no JS errors.\n\n## Verified unit choices for tricky entries (audit 2026-04-28)\n\n- battery_minimum/maximum/target_state_of_charge: fraction (Description says \"(percentage/100)\")\n- battery_dynamic_max/min: fraction per hour\n- lp_solver_mip_rel_gap: fraction\n- inverter_efficiency_*, alpha, beta: fraction\n- nominal_power/min_power deferrable, max_grid_power: W\n- battery_nominal_energy_capacity: Wh\n- load_peak/offpeak_hours_cost, photovoltaic_production_sell_price, weight_battery_*, inverter/battery_stress_cost: €/kWh\n- optimization_time_step, open_meteo_cache_max_age: min\n- adjusted_pv_model_max_age: h\n- delta_forecast_daily, historic_days_to_retrieve: days\n- start/end_timesteps_of_each_deferrable_load, set_deferrable_max_startups: timesteps or count\n- operating_hours_of_each_deferrable_load: h\n- num_threads, num_lags, number_of_deferrable_loads, *_stress_segments, modules_per_string, strings_per_inverter, influxdb_port: count\n- lp_solver_timeout: s\n- adjusted_pv_solar_elevation_threshold, surface_tilt, surface_azimuth: °\n- type=select / sensor-IDs / method-selectors: none\n\nBackward-compat: consumers using `.get(\"unit\", None)` keep working. Zero-config default not broken.\n\nOut of scope (separate cards): AC-2-fix (audit mismatches), AC-2b (runtime params), Description-trim cleanup.\n\nSuccess criteria: Issue opened + maintainer responded → PR opened with single concern (unit field) → all ~80 entries have unit → UI renders cleanly.",
-      "Status": "Candidates",
+      "Status": "Todo",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -562,7 +562,7 @@
       "title": "AC-3: /api/last-run JSON endpoint",
       "type": "draft",
       "body": "Read-only JSON endpoint exposing the last optimization run's metadata: stage_times dict (PR #806 plumbing), solver status, infeasibility flag, schema_version (AC-1 dependency).\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- src/emhass/command_line.py line 749/847: `_prepare_dayahead_optim` and `_prepare_naive_mpc_optim` accept `stage_times: dict | None = None` parameter.\n- Stage timer wraps pv_forecast (line 758) and load_forecast (line 763).\n- Stage data is collected in input_data_dict — exact attachment point needs code-trace before PR.\n- src/emhass/web_server.py has 9 routes today: /, /index, /configuration, /template, /get-config, /get-config/defaults, /get-json, /set-config, /action/<action_name>.\n- No /api/last-run, no /metrics endpoint.\n\nThreat model per #808 Maintainer comment: code-injection (NOT auth-bypass / data-leakage). Endpoint reads in-memory state only — no DB writes, no FS writes, no shell-out, no dynamic-code execution surface.\n\nDeliverable: ~30-50 LOC in web_server.py, JSON response schema documented, security-pitch in PR description.",
-      "Status": "Ideas",
+      "Status": "Todo",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -576,7 +576,7 @@
       "title": "AC-4: /healthz endpoint",
       "type": "draft",
       "body": "Liveness/readiness endpoint for container watchdog. Exposes boot status, last-successful-run timestamp, EMHASS version + solver lib versions.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- 9 routes in web_server.py (see AC-3 list); no /healthz.\n- Banner from PR #806 already prints version info to logs at start of run — same data could populate /healthz response.\n\nDeliverable: ~15 LOC in web_server.py. Response schema:\n```json\n{\n  \"status\": \"ok|degraded|down\",\n  \"boot_ts\": \"<iso8601>\",\n  \"last_run_ts\": \"<iso8601>|null\",\n  \"last_run_status\": \"ok|infeasible|error|null\",\n  \"versions\": {\"emhass\": \"...\", \"python\": \"...\", \"cvxpy\": \"...\", \"solver\": \"...\"}\n}\n```\nAuth-flag-aware: same gating as existing /get-config. Read-only. No sensitive data.",
-      "Status": "Ideas",
+      "Status": "Todo",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -590,7 +590,7 @@
       "title": "AM-1: openapi.json committed + auto-gen workflow",
       "type": "draft",
       "body": "Commit src/emhass/static/openapi.json + scripts/generate_openapi.py to the repo. Tool consumers (Node-RED validators, EVCC adapters, HA cards, IDE tooling) read the API contract without booting EMHASS.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- No openapi.json, no openapi.yaml in the repo.\n- web_server.py has 9 routes (see AC-3 list). All /action/* endpoints accept similar runtime-payload bodies with no published schema.\n\nSequencing: depends on AC-2a (unit field), AC-2b (runtime params block), AC-1 (plan output schema). Once schema is structured, openapi.json generation is mechanical — Pydantic models from param_definitions.json generate request schemas; AC-1 doc gives response schema.\n\nDeliverable:\n- scripts/generate_openapi.py: reads param_definitions.json + plan_output_schema.md → emits openapi.json\n- openapi.json committed at repo root or src/emhass/static/openapi.json\n- CI workflow check: re-run script on PR, fail if generated diff != committed file\n- Folge zu #808 Layer 2.",
-      "Status": "Ideas",
+      "Status": "Todo",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
