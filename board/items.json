@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-11T08:31:53+00:00"
+    "fetched_at": "2026-05-11T10:01:13+00:00"
   },
   "items": [
     {
@@ -346,7 +346,7 @@
       "title": "AG-onboarding: AI-coder contributor onboarding doc",
       "type": "draft",
       "body": "Human-facing companion to AG-7 AGENTS.md and **explicit complement to upstream `docs/develop.md`**. Where develop.md teaches \"how to develop EMHASS\" generally and AGENTS.md instructs the **agent**, this doc instructs the **contributor driving the agent** with AI-tooling-specific concerns.\n\nLives at: `docs/contributing/ai-coders.md` (or section in `CONTRIBUTING.md` if one exists).\n\nOpening line of the doc itself: *\"This complements `docs/develop.md`. Read that first if new to EMHASS.\"*\n\n## Structure\n\n1. **How to use Claude Code / Cursor / Aider with this codebase**\n   - Recommended skills (link to public plugin once AG-B1 ships)\n   - `repomix` for full-repo context loading\n   - Setup snippets — Python venv per develop.md Method 1, ruff config (when AM-5 lands), pytest invocation\n   - When to use which agent (refactor vs review vs explain)\n\n2. **Decision tree: issue-first vs PR-direct**\n   - Visible question flow chart (1 page)\n   - Examples: U-1 → issue-first; U-3 → PR-direct; AC-2a → issue-first then PR\n\n3. **What AI WONT tell you about EMHASS**\n   - Sign conventions (P_grid, P_batt) — verify in code\n   - HA scaling traps (SOC ×100 vs 0..1)\n   - MILP infeasibility — symptom often hides actual constraint that's wrong\n   - Carnot model has implicit assumptions (no defrost cycle modeling, etc.)\n   - Thermal battery `q_input_start=0` infeasibility landmine (was PR #785)\n   - Two parallel logger subsystems (CLI + Web) — touch both or none\n   - The 4-step \"adding a parameter\" workflow from develop.md is non-obvious; AI may forget OptimizationCacheKey\n\n4. **Self-check before opening a PR**\n   - Did I file an issue first if behavior changes?\n   - Did I run pytest locally?\n   - Did I check sign conventions?\n   - Is my PR scoped to ONE concern?\n   - Did I link the issue?\n   - Did I write a reproducer if behavior-change?\n   - Did I check maintainer-scope-corridors? (#808/#789 quick-link)\n\n5. **How to know when you do NOT know**\n   - Red flags that mean stop and ask:\n     - \"AI says this is a bug but I cant explain why in my own words\"\n     - \"I cant tell what unit this number is in\"\n     - \"I dont know which subsystem owns this\"\n   - In those cases: file an issue with the question; do NOT PR.\n\n6. **Where to find help**\n   - GitHub Discussions\n   - Issue templates (link)\n   - This board (link with read-only view URL)\n   - `docs/develop.md` for EMHASS-specific dev questions\n\nTone: friendly, factual, NOT condescending. Assumes contributor is competent but new to EMHASS specifics. Length: ~1500 words target, keep readable.\n\nSequencing: depends on AG-7 being merged first (this doc references AGENTS.md sections) AND being aligned with whatever AM-5 ships (ruff/pre-commit setup). Issue-first per usual.\n\nCoordinate with AC-5 (Sphinx llms-full.txt) — possibly add a contributor-onboarding entry there too.",
-      "Status": "In Progress",
+      "Status": "Review",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 1.5",
       "Priority": "P1",
@@ -354,6 +354,22 @@
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrR9a0",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKb2Yg"
+    },
+    {
+      "id": "PR-838",
+      "title": "docs: add develop_ai_coders.md AI-coder contributor onboarding",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7aMkVU",
+      "Status": "Review",
+      "Category": "B: End-User-Ops",
+      "Phase": "Phase 1.5",
+      "Priority": "P1",
+      "Effort": "M",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgsXSN4",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/838",
+      "repository": "davidusb-geek/emhass",
+      "number": 838
     },
     {
       "id": "AG-pr-readiness",
