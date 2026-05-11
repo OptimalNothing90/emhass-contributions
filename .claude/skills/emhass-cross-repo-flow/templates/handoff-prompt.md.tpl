@@ -70,10 +70,24 @@ If during implementation you discover the plan does not match upstream code real
 - Spec edits — those happen in main session
 - Board mutations — those happen in main session via `emhass-board-merge-bookkeeping`
 - Account switching back — main session handles after merge
+
+## Session resumability — DO NOT close after HANDOFF-RESULT
+This fork-session may be needed again. After you emit the HANDOFF-RESULT block:
+- Keep this Claude Code session OPEN (do not type `/exit`, do not close the terminal).
+- Main session will instruct you to resume via `claude --resume` from
+  `C:/Users/MauricioSchäpers/claude-code/emhass/` if pivots, code-review feedback,
+  or follow-up edits arrive.
+- This preserves your walked git-tree state, grep results, and decision history —
+  far cheaper than starting fresh.
+- If you must close (e.g. machine restart), note: future-you will `claude --resume`
+  in the fork directory and pick this session from the menu (most-recent one for the
+  board id above is the right pick).
 ````
 
 After Fork-Session reports HANDOFF-RESULT, return to the main planning session and paste
 the result block. Main session will:
 - On `pr-open`: update Board-Card to `Status: Review`
-- On `blocked`: read appended Pivot Reason, re-plan
+- On `blocked`: read appended Pivot Reason, re-plan — re-routing instructions will tell
+  the user to resume the SAME fork session (`claude --resume` in fork dir, pick latest),
+  not open a new one
 - On `failed`: triage, decide

@@ -201,12 +201,21 @@ save_items(data)
 
 ## Phase 6 — Hand off to fork session
 
-Show user the rendered handoff prompt block (the fenced code block from
-`templates/handoff-prompt.md.tpl`) with all placeholders resolved. Tell them:
+Output the rendered handoff prompt block **directly in the chat message** (not only as a
+file-path reference — user preference 2026-05-11: handoff prompts always emitted inline so
+copy-paste is one click). Use the fenced code block from `templates/handoff-prompt.md.tpl`
+with all placeholders resolved.
+
+Tell the user:
 
 > "Open a NEW Claude Code session in `C:/Users/MauricioSchäpers/claude-code/emhass/`,
-> paste the prompt above. Come back here with the `HANDOFF-RESULT` block when fork-session
-> reports back."
+> paste the prompt above. **Keep that session open** after it reports back — re-routes
+> and follow-ups resume the same session via `claude --resume`, never a fresh one. Come
+> back here with the `HANDOFF-RESULT` block when fork-session reports."
+
+The handoff-prompt template carries a `## Session resumability` section at the bottom
+that instructs the fork-session not to close after HANDOFF-RESULT. This skill's Phase 7
++ Pivot pathways assume the fork session is resumable.
 
 Skill exits this phase. State is persisted in items.json + plan file. User decides
 when to re-engage.
@@ -271,6 +280,15 @@ What does NOT happen:
 - No auto-re-plan without explicit user confirmation
 - No fork-side branch deletion (user manages)
 - No bookkeeping invocation unless user picks "Drop item"
+
+When re-routing the fork-session for re-plan or re-spec, the instructions to the user
+ALWAYS read:
+
+> "Resume the fork session: `cd C:/Users/MauricioSchäpers/claude-code/emhass && claude --resume`,
+> pick the `<board-id>` session from the menu, then paste the following: [...new prompt...]"
+
+**Never** "open a new fork session" — that loses the walked context. The handoff-prompt
+template instructed the fork-session to stay resumable; honor that.
 
 ### (c) PR closed-not-merged
 
