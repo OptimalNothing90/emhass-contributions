@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-11T10:01:13+00:00"
+    "fetched_at": "2026-05-12T19:55:13+00:00"
   },
   "items": [
     {
@@ -346,7 +346,7 @@
       "title": "AG-onboarding: AI-coder contributor onboarding doc",
       "type": "draft",
       "body": "Human-facing companion to AG-7 AGENTS.md and **explicit complement to upstream `docs/develop.md`**. Where develop.md teaches \"how to develop EMHASS\" generally and AGENTS.md instructs the **agent**, this doc instructs the **contributor driving the agent** with AI-tooling-specific concerns.\n\nLives at: `docs/contributing/ai-coders.md` (or section in `CONTRIBUTING.md` if one exists).\n\nOpening line of the doc itself: *\"This complements `docs/develop.md`. Read that first if new to EMHASS.\"*\n\n## Structure\n\n1. **How to use Claude Code / Cursor / Aider with this codebase**\n   - Recommended skills (link to public plugin once AG-B1 ships)\n   - `repomix` for full-repo context loading\n   - Setup snippets — Python venv per develop.md Method 1, ruff config (when AM-5 lands), pytest invocation\n   - When to use which agent (refactor vs review vs explain)\n\n2. **Decision tree: issue-first vs PR-direct**\n   - Visible question flow chart (1 page)\n   - Examples: U-1 → issue-first; U-3 → PR-direct; AC-2a → issue-first then PR\n\n3. **What AI WONT tell you about EMHASS**\n   - Sign conventions (P_grid, P_batt) — verify in code\n   - HA scaling traps (SOC ×100 vs 0..1)\n   - MILP infeasibility — symptom often hides actual constraint that's wrong\n   - Carnot model has implicit assumptions (no defrost cycle modeling, etc.)\n   - Thermal battery `q_input_start=0` infeasibility landmine (was PR #785)\n   - Two parallel logger subsystems (CLI + Web) — touch both or none\n   - The 4-step \"adding a parameter\" workflow from develop.md is non-obvious; AI may forget OptimizationCacheKey\n\n4. **Self-check before opening a PR**\n   - Did I file an issue first if behavior changes?\n   - Did I run pytest locally?\n   - Did I check sign conventions?\n   - Is my PR scoped to ONE concern?\n   - Did I link the issue?\n   - Did I write a reproducer if behavior-change?\n   - Did I check maintainer-scope-corridors? (#808/#789 quick-link)\n\n5. **How to know when you do NOT know**\n   - Red flags that mean stop and ask:\n     - \"AI says this is a bug but I cant explain why in my own words\"\n     - \"I cant tell what unit this number is in\"\n     - \"I dont know which subsystem owns this\"\n   - In those cases: file an issue with the question; do NOT PR.\n\n6. **Where to find help**\n   - GitHub Discussions\n   - Issue templates (link)\n   - This board (link with read-only view URL)\n   - `docs/develop.md` for EMHASS-specific dev questions\n\nTone: friendly, factual, NOT condescending. Assumes contributor is competent but new to EMHASS specifics. Length: ~1500 words target, keep readable.\n\nSequencing: depends on AG-7 being merged first (this doc references AGENTS.md sections) AND being aligned with whatever AM-5 ships (ruff/pre-commit setup). Issue-first per usual.\n\nCoordinate with AC-5 (Sphinx llms-full.txt) — possibly add a contributor-onboarding entry there too.",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 1.5",
       "Priority": "P1",
@@ -360,7 +360,7 @@
       "title": "docs: add develop_ai_coders.md AI-coder contributor onboarding",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7aMkVU",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 1.5",
       "Priority": "P1",
@@ -490,7 +490,7 @@
       "title": "AC-1: Plan-output schema doc (`docs/plan_output_schema.md`)",
       "type": "draft",
       "body": "Document published columns of the optimization output as `docs/plan_output_schema.md`. Plus a `emhass_schema_version` constant for downstream-consumer version-pinning.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- 5 publish helpers in src/emhass/command_line.py:\n  - _publish_standard_forecasts (line 2152) — P_Load, P_PV, P_PV_curtailment, P_hybrid_inverter\n  - _publish_deferrable_loads (line 2215) — P_deferrable{k}, optim_status\n  - _publish_thermal_loads (line 2260) — predicted_temp_heater{k}, heating_demand_heater{k}\n  - _publish_battery_data (line 2305) — P_batt, SOC_opt\n  - _publish_grid_and_costs (line 2342) — P_grid, cost_fun_*, unit_load_cost, unit_prod_price\n- Aggregator at line 2464-2468 in publish helper.\n- No docs/plan_output_schema.md exists today.\n\nDeliverable (single PR):\n- New file docs/plan_output_schema.md listing each column with: name, source helper, units, sign convention, conditional presence (e.g. SOC_opt only when set_use_battery=true), HA-scaling note for SOC_opt (0..1 in CSV vs ×100 in HA).\n- Add emhass_schema_version constant in command_line.py (e.g. \"1.0\") published alongside results.\n- Cross-link from docs/study_cases/ where relevant.\n\nSign-convention verification needed before publishing schema (P_grid sign, P_batt charge vs discharge convention) — flag in PR for maintainer confirmation.\n\n---\n\n**Filed upstream as #828** (2026-04-28): https://github.com/davidusb-geek/emhass/issues/828\n\n**Audit doc (output side):** kept internal (cross-check reference, not linked publicly)\n\nHelpers verified at lines `2152-2405` (aggregator `publish_data` line `2408`). 7 sign-convention questions flagged for maintainer confirmation (P_grid, P_batt, P_PV, P_PV_curtailment, P_hybrid_inverter, heating_demand_heater, predicted_temp_heater) — see audit Section 4.",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -504,7 +504,7 @@
       "title": "docs(schema): publish plan-output column schema + version constant",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7aC82z",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -802,7 +802,7 @@
       "title": "DOC-cookbook: docs/cookbook/ folder + recipe template",
       "type": "draft",
       "body": "New `docs/cookbook/` folder for short, copy-pasteable recipes. Approved by David in Discussion #824 (comment 2026-04-28):\n\n> \"Yes a cookbook section is probably a good idea. Maybe let's the study cases section house the simple onboarding cases (the current Tutorial section) and possibly some simple version of the How-to guides. But then complete walkthroughs on a cookbook section.\"\n\nSeparation: `study_cases/` = tutorials + simple onboarding. `cookbook/` = focused recipes (config + snippet + caveats, each stands alone).\n\nFirst PR deliverables:\n- `docs/cookbook/` folder\n- Recipe template (fixed structure: Goal / Prerequisites / Config / Snippet / Caveats)\n- 1-2 initial EV recipes to seed the folder (daily-commute pattern, surplus-only pattern)\n- Index page linking to recipes, cross-linked from study_cases/ev.md\n\nLater recipes (from #824 discussion): multi-day weekend window, calendar-driven departure, EVCC dispatcher coupling, modulating-power chargers, negative-price aware charging. Plus non-EV recipes from #823 (good-practices crowdsourcing).\n\nCoordinate with DISC-824 (EV use-cases) and EV-9 (NR/MQTT/EVCC guide — will land in cookbook/ instead of study_cases/).\n\nSource: https://github.com/davidusb-geek/emhass/discussions/824#discussioncomment-16726498",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1.5",
       "Priority": "P1",
@@ -816,7 +816,7 @@
       "title": "docs(cookbook): scaffold cookbook section + Node-RED MPC + battery-aware seed recipes",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7aD00I",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1.5",
       "Priority": "P1",
