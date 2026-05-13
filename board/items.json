@@ -590,6 +590,22 @@
       "number": 845
     },
     {
+      "id": "PR-848",
+      "title": "docs: capture default-values SoT + add AI-coder behavioral guardrails",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7bUa5C",
+      "Status": "Review",
+      "Category": "B: End-User-Ops",
+      "Phase": "Phase 1.5",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgsrYgc",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/848",
+      "repository": "davidusb-geek/emhass",
+      "number": 848
+    },
+    {
       "id": "AC-3",
       "title": "AC-3: /api/last-run JSON endpoint",
       "type": "draft",
