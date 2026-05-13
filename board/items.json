@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-12T19:55:13+00:00"
+    "fetched_at": "2026-05-13T20:57:10+00:00"
   },
   "items": [
     {
@@ -429,7 +429,7 @@
     },
     {
       "id": "ISSUE-807-U-2",
-      "title": "Feature Request: Dynamic Battery Charge Power Limit Based on Forecasted SoC",
+      "title": "[Feature Request] Dynamic Battery Charge Power Limit Based on Forecasted SoC",
       "type": "link",
       "content_id": "I_kwDOGC8VbM8AAAABAbYr4A",
       "Status": "Candidates",
@@ -562,7 +562,7 @@
       "title": "fix(schema): correct 5 default mismatches in param_definitions.json",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7W5jdY",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 1",
       "Priority": "P2",
@@ -572,6 +572,22 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/830",
       "repository": "davidusb-geek/emhass",
       "number": 830
+    },
+    {
+      "id": "PR-845",
+      "title": "fix(config): align config_defaults.json with param_definitions.json per #830 Option-B decision",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7a1wql",
+      "Status": "Done / Wont Do",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 1",
+      "Priority": "P2",
+      "Effort": "XS",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgsqkPM",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/845",
+      "repository": "davidusb-geek/emhass",
+      "number": 845
     },
     {
       "id": "AC-3",
