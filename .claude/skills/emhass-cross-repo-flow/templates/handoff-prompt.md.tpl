@@ -7,6 +7,30 @@ You are a fork-session for emhass upstream PR work. The main planning session li
 `C:/Users/MauricioSchäpers/claude-code/emhass-contributions/`. You operate ONLY here in
 the `emhass` fork repo.
 
+## AGENTS.md is your rulebook
+
+Before Task 1, read `AGENTS.md` in the fork repo root (`cat AGENTS.md`). It is the
+single source of truth for AI-coder rules on this codebase. Follow:
+
+- **§3 Don't-touch invariants** — mandatory, do not violate without main-session sign-off.
+- **§4 Maintainer scope corridors** — cite the source if a contributor questions scope.
+- **§5 Limits and gotchas** — file-issue-not-PR rules, verify-before-done checklist,
+  no-refactor-without-issue, "Adding a parameter" / "Changing a default value" workflows,
+  forecast-feed-alignment rule, common AI hallucinations to avoid.
+- **§6 Behavioral guardrails** (if present on master): Think first / Simplicity /
+  Surgical / Goal-driven. Karpathy four-rule framework. Added by PR #848 — if not on
+  current master, apply the four rules anyway from inline note below.
+- **§7 Conventions** — commit-prefix style (`fix`/`docs`/`feat`/`chore`), Diátaxis doc style.
+
+Item-specific scope under "Out of scope (this session)" below SUPERSEDES AGENTS.md
+ONLY where named explicitly. Otherwise AGENTS.md wins.
+
+Inline fallback if §6 not yet on master:
+1. **Think first.** State assumptions; ask if uncertain; surface tradeoffs; push back on overcomplication.
+2. **Simplicity.** Minimum code that solves the stated problem; no speculative features or abstractions.
+3. **Surgical.** Touch only what the plan/spec names; match existing style; remove only orphans YOUR change created.
+4. **Goal-driven.** Verifiable success criteria; loop until verified; do not declare done before validation passes.
+
 ## Item context
 - Board ID: {{board_id}}
 - Issue: {{issue_link_or_none}}
