@@ -54,11 +54,17 @@ Use `superpowers:executing-plans` (or `superpowers:subagent-driven-development` 
 plan recommends it). Plan path: `../emhass-contributions/{{plan_relative_path}}`.
 Follow the plan step-by-step. Do NOT improvise scope.
 
-## PR creation
-After all plan tasks complete and tests pass:
+## PR creation — DRAFT FIRST
+
+Open the PR as a **draft** so CI, CodeQL, and sourcery-AI run before the maintainer sees
+it. Convention: every PR opens as draft unless the item is a true 1-3 line edit
+(direct-path XS).
+
+After all plan tasks complete and local tests pass:
 
   git push -u origin {{branch_name}}
   gh pr create \
+    --draft \
     --repo davidusb-geek/emhass \
     --base master \
     --head OptimalNothing90:{{branch_name}} \
@@ -66,6 +72,35 @@ After all plan tasks complete and tests pass:
     --body-file - <<'EOF'
 {{pr_body_skeleton}}
 EOF
+
+Then capture the PR URL and number, and proceed to the Mark-ready section below.
+
+## Mark-ready (after CI + alerts triaged)
+
+Once the draft PR is open, watch CI on the PR URL. Do **not** call
+`gh pr ready` (which un-drafts the PR) until ALL of:
+
+- Every CI check on the PR is green (build matrix, tests, lint). Use
+  `gh pr checks {{pr_number_or_url}} --watch` if you want to block here.
+- CodeQL produced **0 alerts** OR every alert is either:
+  - fixed in a follow-up commit on the same branch, OR
+  - explicitly triaged with a comment-reply on the alert explaining false-positive
+    rationale (do NOT dismiss alerts unilaterally — main session co-signs dismissal).
+- Sourcery-AI review comments either applied in a follow-up commit, OR explicitly
+  replied "won't-fix because X" with reasoning.
+- A self-review walk of the PR diff is done (read every changed line, confirm nothing
+  beyond the spec leaked in).
+- All "Out of scope (this session)" items below are truly absent from the diff.
+
+When all five gates pass:
+
+  gh pr ready {{pr_number_or_url}}
+
+Emit HANDOFF-RESULT only AFTER `gh pr ready` succeeds. The `status: pr-open` value
+means "ready for maintainer review", not "draft sitting on CI".
+
+If CI fails or alerts cannot be resolved within this session, emit HANDOFF-RESULT with
+`status: blocked` and the draft PR URL in the `notes` field. Main session will pivot.
 
 ## Return contract — required output back to main session
 Send the user a single message in this format so they can paste it into the
