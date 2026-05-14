@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-14T20:49:38+00:00"
+    "fetched_at": "2026-05-14T22:00:33+00:00"
   },
   "items": [
     {
@@ -626,7 +626,7 @@
       "title": "AC-3: /api/last-run JSON endpoint",
       "type": "draft",
       "body": "Read-only JSON endpoint exposing the last optimization run's metadata: stage_times dict (PR #806 plumbing), solver status, infeasibility flag, schema_version (AC-1 dependency).\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- src/emhass/command_line.py line 749/847: `_prepare_dayahead_optim` and `_prepare_naive_mpc_optim` accept `stage_times: dict | None = None` parameter.\n- Stage timer wraps pv_forecast (line 758) and load_forecast (line 763).\n- Stage data is collected in input_data_dict — exact attachment point needs code-trace before PR.\n- src/emhass/web_server.py has 9 routes today: /, /index, /configuration, /template, /get-config, /get-config/defaults, /get-json, /set-config, /action/<action_name>.\n- No /api/last-run, no /metrics endpoint.\n\nThreat model per #808 Maintainer comment: code-injection (NOT auth-bypass / data-leakage). Endpoint reads in-memory state only — no DB writes, no FS writes, no shell-out, no dynamic-code execution surface.\n\nDeliverable: ~30-50 LOC in web_server.py, JSON response schema documented, security-pitch in PR description.",
-      "Status": "In Progress",
+      "Status": "Review",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -634,6 +634,22 @@
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9Ac",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCE"
+    },
+    {
+      "id": "PR-851",
+      "title": "feat(api): add GET /api/v1/last-run JSON endpoint",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7br14x",
+      "Status": "Review",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgsxh5s",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/851",
+      "repository": "davidusb-geek/emhass",
+      "number": 851
     },
     {
       "id": "AC-4",
