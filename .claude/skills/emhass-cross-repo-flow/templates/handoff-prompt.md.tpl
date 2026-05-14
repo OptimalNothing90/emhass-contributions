@@ -54,13 +54,38 @@ Use `superpowers:executing-plans` (or `superpowers:subagent-driven-development` 
 plan recommends it). Plan path: `../emhass-contributions/{{plan_relative_path}}`.
 Follow the plan step-by-step. Do NOT improvise scope.
 
+## Gate 0 — Pre-PR quality pass (MANDATORY before push)
+
+After all plan tasks complete and local tests pass, BEFORE `git push`, run the
+`simplify` skill against the diff:
+
+  cat the simplify skill description first (it is registered as a top-level skill),
+  invoke it on the changed files only:
+  `git diff --name-only upstream/master..HEAD` gives the file list.
+
+Review every suggestion with strict scope discipline:
+
+- **In-scope per spec + Karpathy §3 surgical?** → apply, then commit separately:
+  `refactor: simplify pass on <files>` so the maintainer can review the quality-pass
+  in isolation from the feature commits.
+- **Out-of-scope, speculative, or "while I'm here"?** → reject. Note the rejection in
+  the commit message of the next commit OR in a scratchpad section appended to
+  `../emhass-contributions/{{plan_relative_path}}` under `## Simplify pass — rejected suggestions`.
+  Document WHY (one line each) so future-you can audit.
+- **Touches code not in this PR's diff?** → reject hard. Scope discipline.
+- **Removes pre-existing dead code that YOUR change did not orphan?** → reject. Per
+  AGENTS.md §6 / Karpathy §3, never remove pre-existing dead code unless explicitly asked.
+
+If the simplify pass produces zero applicable suggestions, log a one-line note in the
+plan file: `Simplify pass: 0 in-scope changes ({{board_id}})`. Proceed to PR creation.
+
 ## PR creation — DRAFT FIRST
 
 Open the PR as a **draft** so CI, CodeQL, and sourcery-AI run before the maintainer sees
 it. Convention: every PR opens as draft unless the item is a true 1-3 line edit
 (direct-path XS).
 
-After all plan tasks complete and local tests pass:
+After Gate 0 is done:
 
   git push -u origin {{branch_name}}
   gh pr create \
