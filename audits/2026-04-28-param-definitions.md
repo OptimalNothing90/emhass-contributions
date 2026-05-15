@@ -159,9 +159,13 @@ Grouped by purpose. These come from `treat_runtimeparams` (`utils.py:597-1334`).
 ## 5. Unit-Choice Table — AC-2a Input
 
 Recommended `unit` value per `param_definitions.json` entry, using the AC-2a enum:
-`W`, `Wh`, `kWh`, `currency/kWh`, `€`, `%`, `fraction`, `°C`, `°`, `min`, `h`, `days`, `timesteps`, `count`, `s`, `none`.
+`W`, `Wh`, `kWh`, `¤/kWh`, `€`, `%`, `fraction`, `°C`, `°`, `min`, `h`, `days`, `timesteps`, `count`, `s`, `none`.
 
-**Enum revision 2026-05-15 (during PR #850 review):** `€/kWh` replaced with `currency/kWh` for internationalisation — EMHASS users run with USD/JPY/etc. via project-level currency setting; `€/kWh` was misleading. All seven affected rows below pre-date the revision and use `€/kWh`; on PR #850 they ship as `currency/kWh`. Treat the tables below as the audit-time snapshot, not the shipped value. Additionally, `set_deferrable_startup_penalty` was revised `€/kWh → none` during the same review (dimensionless multiplier per `optimization.py:984`).
+**Enum revision sequence during PR #850 review (2026-05-15):**
+1. `€/kWh` → `currency/kWh` — internationalisation (EMHASS users run with USD/JPY/etc.; `€/kWh` was misleading).
+2. `currency/kWh` → `¤/kWh` — per @purcell-lab's pointer to U+00A4 generic currency sign; single Unicode glyph, parse-friendly, standardized for this use.
+
+All seven affected rows below pre-date both revisions and use `€/kWh`; on PR #850 they ship as `¤/kWh`. Treat the tables as the audit-time snapshot, not the shipped value. Additionally, `set_deferrable_startup_penalty` was revised `€/kWh → none` during the same review (dimensionless multiplier per `optimization.py:984`).
 
 **Skip rule:** entries with `input=select` or `input=string` for sensor-IDs / method-selectors → `unit=none`.
 
