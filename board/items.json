@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-14T22:00:33+00:00"
+    "fetched_at": "2026-05-15T09:29:59+00:00"
   },
   "items": [
     {
@@ -890,6 +890,22 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/836",
       "repository": "davidusb-geek/emhass",
       "number": 836
+    },
+    {
+      "id": "PR-858",
+      "title": "fix(test): pin load_forecast_method in test_load_deactivation_zero_operating_timesteps (#856)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7b21c1",
+      "Status": "Review",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "XS",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgs0i10",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/858",
+      "repository": "davidusb-geek/emhass",
+      "number": 858
     }
   ]
 }
