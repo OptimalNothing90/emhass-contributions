@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-19T20:21:39+00:00"
+    "fetched_at": "2026-05-19T20:54:58+00:00"
   },
   "items": [
     {
@@ -922,6 +922,22 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/866",
       "repository": "davidusb-geek/emhass",
       "number": 866
+    },
+    {
+      "id": "PR-867",
+      "title": "docs(currency): sweep €/kWh → currency/kWh across docs + code comments (#854)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7dPwi_",
+      "Status": "Review",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgtO2mo",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/867",
+      "repository": "davidusb-geek/emhass",
+      "number": 867
     }
   ]
 }
