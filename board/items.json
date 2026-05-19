@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-19T19:57:56+00:00"
+    "fetched_at": "2026-05-19T20:21:39+00:00"
   },
   "items": [
     {
@@ -906,6 +906,22 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/858",
       "repository": "davidusb-geek/emhass",
       "number": 858
+    },
+    {
+      "id": "PR-866",
+      "title": "fix(ci): skip SonarQube Scan on fork PRs (#857)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7dO46D",
+      "Status": "Review",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "XS",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgtOicQ",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/866",
+      "repository": "davidusb-geek/emhass",
+      "number": 866
     }
   ]
 }
