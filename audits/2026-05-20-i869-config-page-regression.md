@@ -134,7 +134,7 @@ Two complementary guards:
 
 Both should be added to the existing GitHub Actions matrix.
 
-## Follow-up: #876 (backend twin)
+## Follow-up: #876 (backend twin) + cost_forecast sibling
 
 The same `heat_topology` feature from PR #862 had a second null-handling hole on the Python side, surfaced on 2026-05-21 by ThomasCZ as [#876](https://github.com/davidusb-geek/emhass/issues/876). All POST `/action/*-optim` requests crash with `AttributeError: 'str' object has no attribute 'get'` when the add-on configuration carries `"heat_topology": "null"` (string literal, not JSON null).
 
@@ -142,7 +142,11 @@ Root cause is structurally identical to #869: a truthy guard in `treat_runtimepa
 
 Hotfix: [PR #878](https://github.com/davidusb-geek/emhass/pull/878), ready 2026-05-22. Two guards in `utils.py` (callee-side `isinstance` entry guard + caller-side `isinstance` pre-check with user-visible warning), four tests in `test_utils.py`. Same author and same release wave as #869.
 
-The pair (#869 + #876) is the canonical example motivating the Layer-3 contract tests: the renderer-contract test catches the JS-side input-type gap; the defaults-contract test catches the Python-side default-value-type mismatch. Spec: `.tmp/spec_layer3_contract.md` (draft, awaiting #878 merge before opening the prevention PR).
+While responding to ThomasCZ on #876, lutorm pointed out the same string-vs-JSON-null footgun in `cost_forecast_per_deferrable_load` (added by PR #861, same v0.17.3 wave). Code trace confirmed: `optimization.py:2857-2878` cost-override loop crashes via `np.asarray("n", dtype=float)` once `cost_per_load_overrides` is character-indexed on a string. Shipped default `[null, null]` flows through cleanly; the crash needs a non-default value reaching `optim_conf` (e.g. legacy add-on UI persisting `"null"` as a string).
+
+Sibling hotfix: [PR #879](https://github.com/davidusb-geek/emhass/pull/879), ready 2026-05-22. Two guards in `optimization.py` (outer-container `isinstance` + per-element `isinstance`), three tests in `test_optimization.py`. Opened in parallel to #878 via `git worktree` since the two PRs touch disjoint files (`utils.py` vs `optimization.py`).
+
+The trio (#869 + #876 + #879) is the canonical example motivating the Layer-3 contract tests: the renderer-contract test catches the JS-side input-type gap; the defaults-contract test catches the Python-side default-value-type mismatches across consumers. Spec: `.tmp/spec_layer3_contract.md` (draft, awaiting both #878 + #879 merge before opening the prevention PR).
 
 ## References
 
@@ -155,6 +159,8 @@ The pair (#869 + #876) is the canonical example motivating the Layer-3 contract 
 - PR #863 (`heat_topology` weather-comp): <https://github.com/davidusb-geek/emhass/pull/863>
 - Hotfix PR #872 (frontend): <https://github.com/davidusb-geek/emhass/pull/872>
 - Backend twin issue #876: <https://github.com/davidusb-geek/emhass/issues/876>
-- Hotfix PR #878 (backend): <https://github.com/davidusb-geek/emhass/pull/878>
+- Hotfix PR #878 (backend, heat_topology): <https://github.com/davidusb-geek/emhass/pull/878>
+- Hotfix PR #879 (backend, cost_forecast_per_deferrable_load): <https://github.com/davidusb-geek/emhass/pull/879>
+- lutorm follow-up comment on #876: <https://github.com/davidusb-geek/emhass/issues/876#issuecomment-4517690448>
 - Memory entry: `project_v0173_release_and_i869.md`
 - Layer-3 spec: `.tmp/spec_layer3_contract.md`
