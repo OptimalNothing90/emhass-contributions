@@ -140,7 +140,7 @@ The same `heat_topology` feature from PR #862 had a second null-handling hole on
 
 Root cause is structurally identical to #869: a truthy guard in `treat_runtimeparams` lets through stringly-typed values, and `compile_heat_topology` calls `.get()` without an `isinstance` check. The crash site is `src/emhass/utils.py:509` reached via `utils.py:1890`.
 
-Hotfix: [PR #878](https://github.com/davidusb-geek/emhass/pull/878), ready 2026-05-22. Two guards in `utils.py` (callee-side `isinstance` entry guard + caller-side `isinstance` pre-check with user-visible warning), four tests in `test_utils.py`. Same author and same release wave as #869.
+Hotfix: [PR #878](https://github.com/davidusb-geek/emhass/pull/878), MERGED 2026-05-22 10:55Z (`f9ebb56`). Two guards in `utils.py` (callee-side `isinstance` entry guard + caller-side `isinstance` pre-check with user-visible warning), four tests in `test_utils.py`. Same author and same release wave as #869.
 
 While responding to ThomasCZ on #876, lutorm pointed out the same string-vs-JSON-null footgun in `cost_forecast_per_deferrable_load` (added by PR #861, same v0.17.3 wave). Code trace confirmed: `optimization.py:2857-2878` cost-override loop crashes via `np.asarray("n", dtype=float)` once `cost_per_load_overrides` is character-indexed on a string. Shipped default `[null, null]` flows through cleanly; the crash needs a non-default value reaching `optim_conf` (e.g. legacy add-on UI persisting `"null"` as a string).
 
