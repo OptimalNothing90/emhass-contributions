@@ -28,3 +28,4 @@ contrib-flags.yaml         # only the example lives in repo; actual config lives
 # Claude Code per-user state (skills + shared settings ARE tracked)
 .claude/settings.local.json
 .claude/projects/
+.tmp/
