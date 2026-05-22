@@ -134,6 +134,16 @@ Two complementary guards:
 
 Both should be added to the existing GitHub Actions matrix.
 
+## Follow-up: #876 (backend twin)
+
+The same `heat_topology` feature from PR #862 had a second null-handling hole on the Python side, surfaced on 2026-05-21 by ThomasCZ as [#876](https://github.com/davidusb-geek/emhass/issues/876). All POST `/action/*-optim` requests crash with `AttributeError: 'str' object has no attribute 'get'` when the add-on configuration carries `"heat_topology": "null"` (string literal, not JSON null).
+
+Root cause is structurally identical to #869: a truthy guard in `treat_runtimeparams` lets through stringly-typed values, and `compile_heat_topology` calls `.get()` without an `isinstance` check. The crash site is `src/emhass/utils.py:509` reached via `utils.py:1890`.
+
+Hotfix: [PR #878](https://github.com/davidusb-geek/emhass/pull/878), ready 2026-05-22. Two guards in `utils.py` (callee-side `isinstance` entry guard + caller-side `isinstance` pre-check with user-visible warning), four tests in `test_utils.py`. Same author and same release wave as #869.
+
+The pair (#869 + #876) is the canonical example motivating the Layer-3 contract tests: the renderer-contract test catches the JS-side input-type gap; the defaults-contract test catches the Python-side default-value-type mismatch. Spec: `.tmp/spec_layer3_contract.md` (draft, awaiting #878 merge before opening the prevention PR).
+
 ## References
 
 - Issue: <https://github.com/davidusb-geek/emhass/issues/869>
@@ -141,5 +151,10 @@ Both should be added to the existing GitHub Actions matrix.
 - Root-cause comment: <https://github.com/davidusb-geek/emhass/issues/869#issuecomment-4498519462>
 - v0.17.3 compare: <https://github.com/davidusb-geek/emhass/compare/v0.17.2...v0.17.3>
 - PR #861 (`cost_forecast_per_deferrable_load`): <https://github.com/davidusb-geek/emhass/pull/861>
-- PR #863 (`heat_topology`): <https://github.com/davidusb-geek/emhass/pull/863>
+- PR #862 (`heat_topology` graph model): <https://github.com/davidusb-geek/emhass/pull/862>
+- PR #863 (`heat_topology` weather-comp): <https://github.com/davidusb-geek/emhass/pull/863>
+- Hotfix PR #872 (frontend): <https://github.com/davidusb-geek/emhass/pull/872>
+- Backend twin issue #876: <https://github.com/davidusb-geek/emhass/issues/876>
+- Hotfix PR #878 (backend): <https://github.com/davidusb-geek/emhass/pull/878>
 - Memory entry: `project_v0173_release_and_i869.md`
+- Layer-3 spec: `.tmp/spec_layer3_contract.md`
