@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-29T11:23:37+00:00"
+    "fetched_at": "2026-05-29T16:40:54+00:00"
   },
   "items": [
     {
@@ -684,7 +684,7 @@
       "title": "AM-1: openapi.json committed + auto-gen workflow",
       "type": "draft",
       "body": "Commit src/emhass/static/openapi.json + scripts/generate_openapi.py to the repo. Tool consumers (Node-RED validators, EVCC adapters, HA cards, IDE tooling) read the API contract without booting EMHASS.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- No openapi.json, no openapi.yaml in the repo.\n- web_server.py has 9 routes (see AC-3 list). All /action/* endpoints accept similar runtime-payload bodies with no published schema.\n\nSequencing: depends on AC-2a (unit field), AC-2b (runtime params block), AC-1 (plan output schema). Once schema is structured, openapi.json generation is mechanical — Pydantic models from param_definitions.json generate request schemas; AC-1 doc gives response schema.\n\nDeliverable:\n- scripts/generate_openapi.py: reads param_definitions.json + plan_output_schema.md → emits openapi.json\n- openapi.json committed at repo root or src/emhass/static/openapi.json\n- CI workflow check: re-run script on PR, fail if generated diff != committed file\n- Folge zu #808 Layer 2.\n\n<!-- restructure-2026-05-20 -->\n\n## Update 2026-05-20 — split into AM-1 (this card, config + plan-output) and AM-1b (runtime-payload)\n\nDependency state post-merge-wave:\n\n- AC-1 ✓ merged (#835): `plan_output_schema.md` + `EMHASS_SCHEMA_VERSION` constant\n- AC-2a ✓ merged (#850): `unit` field on all 87 `param_definitions.json` entries\n- AC-2b pending (new standalone card): ~30 runtime/MPC params not yet in `param_definitions.json`\n\n**AM-1 (this card) — scope reduced to config + plan-output side.** Generator reads\n`param_definitions.json` (post-AC-2a) + `plan_output_schema.md` (post-AC-1) → emits\n`openapi.json` covering:\n\n- `/configuration` GET/POST — request body schema from `param_definitions.json`\n- `/api/v1/last-run` GET — response schema from `last_run.read()` return shape\n- `/action/*` POST — runtime payload as `additionalProperties: true` stub (refined by AM-1b once AC-2b lands)\n\n**AM-1b — runtime-payload side, new standalone card.** Blocked on AC-2b. Regenerates\n`openapi.json` to replace `additionalProperties: true` with structured schemas per\n`/action/*` variant.\n\nCurrency convention (locked per #850 / #867): `unit` field uses `¤/kWh` (Unicode\nU+00A4 generic currency sign); prose uses `currency/kWh`.\n\nState on upstream/master `777c792` (verified 2026-05-20):\n- 10 routes in `web_server.py` (added `/api/v1/last-run` via #851)\n- No `openapi.json`, no `openapi.yaml` in repo\n- `EMHASS_SCHEMA_VERSION = \"1.0\"` at `command_line.py:33`\n- `src/emhass/last_run.py` public API: `emhass_version()`, `record()`, `read()`, `is_recent()`\n\nEffort: S (config + plan-output side standalone).\n",
-      "Status": "Todo",
+      "Status": "In Progress",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -712,11 +712,11 @@
       "title": "AM-2: Auto-generated config.md from schema",
       "type": "draft",
       "body": "Render `config.md` doc from Pydantic-or-`param_definitions.json` schema. Single source of truth — schema-annotations render docs, no drift between code and docs.",
-      "Status": "Ideas",
-      "Category": "A: Code-Lifecycle",
+      "Status": "Candidates",
+      "Category": "Infra",
       "Phase": "Phase 3",
-      "Priority": "P1",
-      "Effort": "M",
+      "Priority": "P2",
+      "Effort": "S",
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9JU",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCg"
@@ -966,6 +966,20 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/867",
       "repository": "davidusb-geek/emhass",
       "number": 867
+    },
+    {
+      "id": "AM-2-dup",
+      "title": "AM-2: param_definitions <-> config_defaults shared-default drift-guard test",
+      "type": "draft",
+      "body": "Add a CI test asserting that **shared scalar defaults agree** between\n`src/emhass/static/data/param_definitions.json` (SoT) and\n`src/emhass/data/config_defaults.json`.\n\n## Why\nDavid's 2026-05-12 decision (#830 / #845): `param_definitions.json` is the source of\ntruth for defaults; `config_defaults.json` aligns. The alignment is **not code-enforced**\n- it drifted once (4 keys: historic_days_to_retrieve, load_forecast_method,\ninverter_ac_output_max/input_max), fixed by #845. Nothing prevents recurrence.\n\nVerified 2026-05-29: **no current drift** (4 saga keys aligned, 75 shared scalar keys\nequal). This card is *prevention*, not a fix.\n\n## Deliverable\n- `tests/` test: for every key present in BOTH files with a scalar default, assert\n  `param_definitions.default_value == config_defaults[key]` (type-aware compare).\n- Exclude by design: array.* / object params (param_def stores a per-load **scalar\n  template**; config_defaults stores a runnable **example** array - e.g.\n  `nominal_power_of_deferrable_loads` 3000 vs [3000,750]) and the 8 runtime-only keys\n  config_defaults has but param_def lacks (data_path, deferrable_load_groups, model_type,\n  num_lags, perform_backtest, sklearn_model, split_date_delta, var_model).\n\n## NOT in scope\nGenerating / eliminating `config_defaults.json` from `param_definitions.json`. config_defaults\nis a runnable example config carrying multi-load example arrays + runtime-only keys param_def\ndoes not have, so mechanical generation is infeasible without a deeper redesign (param_def\ncoverage = AC-2b and beyond) + maintainer sign-off.\n\n## Related\n- AM-1 (openapi.json) sources its `default` from param_def (SoT); this test protects that\n  assumption. See `docs/superpowers/specs/2026-05-29-am-1-design.md` Decision #11.\n- SoT decision: #830 / #845.\n- PR-first, but flag in the PR body that it touches David's declared SoT domain.\n\nEffort S, prevention-priority (P2).\n",
+      "Status": "Candidates",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P2",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguLsVI",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKjmdo"
     }
   ]
 }
