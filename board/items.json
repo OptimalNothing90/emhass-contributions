@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-29T16:40:54+00:00"
+    "fetched_at": "2026-05-29T21:11:25+00:00"
   },
   "items": [
     {
@@ -670,7 +670,7 @@
       "title": "AC-4: /healthz endpoint",
       "type": "draft",
       "body": "Liveness/readiness endpoint for container watchdog. Exposes boot status, last-successful-run timestamp, EMHASS version + solver lib versions.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- 9 routes in web_server.py (see AC-3 list); no /healthz.\n- Banner from PR #806 already prints version info to logs at start of run — same data could populate /healthz response.\n\nDeliverable: ~15 LOC in web_server.py. Response schema:\n```json\n{\n  \"status\": \"ok|degraded|down\",\n  \"boot_ts\": \"<iso8601>\",\n  \"last_run_ts\": \"<iso8601>|null\",\n  \"last_run_status\": \"ok|infeasible|error|null\",\n  \"versions\": {\"emhass\": \"...\", \"python\": \"...\", \"cvxpy\": \"...\", \"solver\": \"...\"}\n}\n```\nAuth-flag-aware: same gating as existing /get-config. Read-only. No sensitive data.\n\n<!-- restructure-2026-05-20 -->\n\n## Update 2026-05-20 (post AC-3 / PR #851 merge)\n\nAC-3 (`/api/v1/last-run`) merged 2026-05-19. `src/emhass/last_run.py` now ships a\npublic API that AC-4 should reuse rather than re-discover:\n\n- `last_run.read(data_path: Path) -> dict | None` — last-run snapshot\n- `last_run.is_recent(data_path: Path, max_age_seconds: int) -> bool` — staleness check\n- `last_run.emhass_version() -> str` — public version helper\n\nUpdated implementation outline (~10-15 LOC in `src/emhass/web_server.py`):\n\n```python\nfrom emhass.last_run import read as last_run_read, emhass_version, is_recent\n\n@app.route(\"/healthz\", methods=[\"GET\"])\nasync def healthz():\n    snap = last_run_read(emhass_conf[\"data_path\"])\n    return jsonify({\n        \"status\": \"ok\" if snap and snap.get(\"status\") == \"ok\" else \"degraded\",\n        \"boot_ts\": app.config.get(\"boot_ts\"),\n        \"last_run_ts\": snap.get(\"timestamp\") if snap else None,\n        \"last_run_status\": snap.get(\"status\") if snap else None,\n        \"versions\": {\n            \"emhass\": emhass_version(),\n            \"python\": platform.python_version(),\n            \"cvxpy\": cvxpy.__version__,\n        },\n    })\n```\n\nState on upstream/master `777c792` (verified 2026-05-20):\n- 10 routes in `src/emhass/web_server.py` (added `/api/v1/last-run` at L623 via #851)\n- `EMHASS_SCHEMA_VERSION = \"1.0\"` at `src/emhass/command_line.py:33`\n- Boot timestamp not yet stored anywhere; AC-4 plan needs to add a one-line capture\n  at `app.before_serving` or equivalent and stash it in `app.config`.\n\nEffort: S (~15 LOC + 1 route + 1 boot-ts capture + minimal test). Dependency on AC-3 now MET.\n",
-      "Status": "In Progress",
+      "Status": "Review",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -712,11 +712,11 @@
       "title": "AM-2: Auto-generated config.md from schema",
       "type": "draft",
       "body": "Render `config.md` doc from Pydantic-or-`param_definitions.json` schema. Single source of truth — schema-annotations render docs, no drift between code and docs.",
-      "Status": "Candidates",
-      "Category": "Infra",
+      "Status": "Ideas",
+      "Category": "A: Code-Lifecycle",
       "Phase": "Phase 3",
-      "Priority": "P2",
-      "Effort": "S",
+      "Priority": "P1",
+      "Effort": "M",
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzgrP9JU",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKbxCg"
@@ -968,8 +968,8 @@
       "number": 867
     },
     {
-      "id": "AM-2-dup",
-      "title": "AM-2: param_definitions <-> config_defaults shared-default drift-guard test",
+      "id": "AM-7",
+      "title": "AM-7: param_definitions <-> config_defaults shared-default drift-guard test",
       "type": "draft",
       "body": "Add a CI test asserting that **shared scalar defaults agree** between\n`src/emhass/static/data/param_definitions.json` (SoT) and\n`src/emhass/data/config_defaults.json`.\n\n## Why\nDavid's 2026-05-12 decision (#830 / #845): `param_definitions.json` is the source of\ntruth for defaults; `config_defaults.json` aligns. The alignment is **not code-enforced**\n- it drifted once (4 keys: historic_days_to_retrieve, load_forecast_method,\ninverter_ac_output_max/input_max), fixed by #845. Nothing prevents recurrence.\n\nVerified 2026-05-29: **no current drift** (4 saga keys aligned, 75 shared scalar keys\nequal). This card is *prevention*, not a fix.\n\n## Deliverable\n- `tests/` test: for every key present in BOTH files with a scalar default, assert\n  `param_definitions.default_value == config_defaults[key]` (type-aware compare).\n- Exclude by design: array.* / object params (param_def stores a per-load **scalar\n  template**; config_defaults stores a runnable **example** array - e.g.\n  `nominal_power_of_deferrable_loads` 3000 vs [3000,750]) and the 8 runtime-only keys\n  config_defaults has but param_def lacks (data_path, deferrable_load_groups, model_type,\n  num_lags, perform_backtest, sklearn_model, split_date_delta, var_model).\n\n## NOT in scope\nGenerating / eliminating `config_defaults.json` from `param_definitions.json`. config_defaults\nis a runnable example config carrying multi-load example arrays + runtime-only keys param_def\ndoes not have, so mechanical generation is infeasible without a deeper redesign (param_def\ncoverage = AC-2b and beyond) + maintainer sign-off.\n\n## Related\n- AM-1 (openapi.json) sources its `default` from param_def (SoT); this test protects that\n  assumption. See `docs/superpowers/specs/2026-05-29-am-1-design.md` Decision #11.\n- SoT decision: #830 / #845.\n- PR-first, but flag in the PR body that it touches David's declared SoT domain.\n\nEffort S, prevention-priority (P2).\n",
       "Status": "Candidates",
@@ -980,6 +980,22 @@
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzguLsVI",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKjmdo"
+    },
+    {
+      "id": "PR-914",
+      "title": "feat: add /healthz liveness/readiness endpoint",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7goKpN",
+      "Status": "Review",
+      "Category": "A: Code-Lifecycle",
+      "Phase": null,
+      "Priority": null,
+      "Effort": null,
+      "Scope": null,
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguM52Q",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/914",
+      "repository": "davidusb-geek/emhass",
+      "number": 914
     }
   ]
 }

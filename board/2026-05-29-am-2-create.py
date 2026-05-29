@@ -1,4 +1,12 @@
-"""One-shot: create AM-2 board draft (param_def <-> config_defaults drift-guard test)."""
+"""One-shot: create the param_def <-> config_defaults drift-guard board draft.
+
+CORRECTION (2026-05-29): this ran with title "AM-2: ..." but AM-2 was already taken by a
+pre-existing card ("Auto-generated config.md from schema"). The created card was retitled
+live to **AM-7** (next free AM-* slot). The earlier "items() list-replica lag" narrative in
+commits 947b2ad / 9ee0994 was a misdiagnosis — the real cause was the AM-2 id collision plus
+fetch.py preserving ids by item_id. The card's fields (Candidates/Infra/Phase3/P2/S/Upstream)
+were always correct live; only items.json id-keying was wrong. Now reconciled (id AM-7).
+"""
 
 from lib import add_draft_to_project, set_field
 
