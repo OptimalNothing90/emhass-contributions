@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-05-29T23:01:05+00:00"
+    "fetched_at": "2026-05-30T10:22:36+00:00"
   },
   "items": [
     {
@@ -548,7 +548,7 @@
       "title": "AC-2b: Add runtime/MPC params to param_definitions.json",
       "type": "draft",
       "body": "Extend `src/emhass/static/data/param_definitions.json` with the ~30 runtime/MPC params\ncurrently accepted by `utils.treat_runtimeparams` but not present as schema entries.\nThese are today documented only in `docs/passing_data.md` prose, parse-feindlich for\nopenapi.json / Pydantic-model / AI-readable-schema consumers.\n\nAudit at `audits/2026-04-28-param-definitions.md` §4.2 lists the candidates. Sample:\n`prediction_horizon`, `soc_init`, `soc_final`, `def_total_hours`, `def_total_timestep`,\n`def_start_timestep`, `def_end_timestep`, `prod_price_forecast`, `load_cost_forecast`,\n`pv_power_forecast`, `load_power_forecast`, `alpha`, `beta`, `perform_backtest`, etc.\n\nCurrent state (verified 2026-05-20 against upstream/master `777c792`):\n\n- `param_definitions.json` has 87 entries with `unit` field (post AC-2a / #850).\n- `utils.treat_runtimeparams` accepts the ~30 runtime params not yet in the schema.\n- `docs/passing_data.md` still the only place they appear; review may have stale lines.\n\n## Deliverable\n\nExtend `param_definitions.json` with one entry per runtime param. Each entry follows the\nAC-2a convention:\n\n```json\n\"<param_name>\": {\n  \"friendly_name\": \"<readable label>\",\n  \"Description\": \"<concise text, no €/kWh — use currency/kWh in prose>\",\n  \"input\": \"<type>\",\n  \"default_value\": <value or null>,\n  \"unit\": \"<from locked enum: W, Wh, kWh, ¤/kWh, €, %, fraction, °C, °, min, h, days, timesteps, count, s, none>\"\n}\n```\n\nAdd a new top-level category in `param_definitions.json` (proposed: `\"Runtime\"`) OR\nextend existing categories where the runtime param is a runtime-override of a\nconfig-time entry (decision to be confirmed with maintainer).\n\n## Unblocks\n\n- AM-1b (openapi.json runtime-payload schemas)\n- AM-2 (auto-gen config.md from `param_definitions.json`)\n\n## Maintainer-loop expected\n\n- Description-text wording (concise, locale-neutral, references existing\n  `passing_data.md` semantics).\n- Decision: which params actually belong in `param_definitions.json` vs. staying\n  `passing_data.md`-only by maintainer preference (some may be deemed too transient\n  for the structured schema).\n\n## Effort\n\nM (~30 entries × Description text + audit walk + maintainer-loop). Was estimated S\ninside the umbrella; revised post-AC-2a learning.\n\n## References\n\n- Issue precedent: #826 (AC-2a)\n- Audit: `audits/2026-04-28-param-definitions.md` §4.2\n- Predecessor: PR #850 (AC-2a unit field on existing 87 entries)\n- Currency convention: PR #867 (`currency/kWh` prose, `¤/kWh` machine-field)\n",
-      "Status": "In Progress",
+      "Status": "Review",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -1010,6 +1010,22 @@
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzguNVeQ",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKjqX8"
+    },
+    {
+      "id": "PR-915",
+      "title": "feat: add runtime_params.json (machine-readable runtime param schema)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7g1io9",
+      "Status": "Review",
+      "Category": "A: Code-Lifecycle",
+      "Phase": null,
+      "Priority": null,
+      "Effort": null,
+      "Scope": null,
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguPe_0",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/915",
+      "repository": "davidusb-geek/emhass",
+      "number": 915
     }
   ]
 }

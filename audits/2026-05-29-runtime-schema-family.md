@@ -54,11 +54,14 @@ Every key `treat_runtimeparams` accepts, by bucket → destination. (Counts appr
 | `beta` | float | 0.5 | fraction |
 | `weather_forecast_cache` | boolean | false | none |
 | `weather_forecast_cache_only` | boolean | false | none |
-| `adjusted_pv_model_max_age` | float | 24 | h |
-| `open_meteo_cache_max_age` | int | 30 | min |
 | `def_current_state` | array.boolean | null | none |
 | `def_load_config` | object (externalDocs→thermal_battery.md) | null | none |
-| `time_zone` (BORDERLINE) | string | null→config tz | none |
+
+**Scan correction (AC-2b completeness gate, PR #915, 2026-05-29):** the source scan moved
+`adjusted_pv_model_max_age`, `open_meteo_cache_max_age`, and `time_zone` **out of Bucket A → Bucket C**
+— all three are config params already in `param_definitions.json` (+ `config_defaults.json` /
+`associations`), NOT runtime-only. **Locked Bucket A = the 10 keys above**, shipped in
+`runtime_params.json` via PR #915. Every other runtime key classified; zero unclassifiable.
 
 ### Bucket B — OUTPUT routing → `runtime_output.json` (AC-2c)
 - `publish_prefix` (string, default "")
@@ -76,6 +79,8 @@ Every key `treat_runtimeparams` accepts, by bucket → destination. (Counts appr
 `number_of_deferrable_loads`, `nominal_power_of_deferrable_loads`,
 `operating_hours_of_each_deferrable_load`, `start_timesteps_of_each_deferrable_load`,
 `end_timesteps_of_each_deferrable_load`, `treat_deferrable_load_as_semi_cont`,
+`adjusted_pv_model_max_age`, `open_meteo_cache_max_age`, `time_zone` (all three moved here by the
+AC-2b scan — config params, not runtime-only),
 `set_deferrable_load_single_constant`, `battery_minimum_state_of_charge`,
 `battery_maximum_state_of_charge`, `battery_target_state_of_charge`, `battery_discharge_power_max`,
 `battery_charge_power_max`, `lp_solver_timeout`, `lp_solver_mip_rel_gap`, `num_threads`,
@@ -115,7 +120,7 @@ keep the shared-default drift-guard test.
 
 ## 3. Per-item scope
 
-- **AC-2b** (this wave) → `runtime_params.json` = Bucket A (~12 knobs). Spec:
+- **AC-2b** (SHIPPED, PR #915) → `runtime_params.json` = Bucket A (**10 knobs**, scan-locked). Spec:
   `docs/superpowers/specs/2026-05-29-ac-2b-design.md`. PR-first (user override of Discussion-first).
 - **AC-2c** (new card, this audit) → `runtime_output.json` = Bucket B. Nested-object `custom_*_id`
   design + publish_prefix/entity_save/continual_publish. Own brainstorm when picked.
@@ -158,11 +163,16 @@ Its own schematization (if ever) is a separate item.
 
 ## 6. Open questions / borderline
 
-- `time_zone`: config-override (→ Bucket C) vs runtime-only (→ Bucket A)? Verify in source scan.
-- `continual_publish`: output (Bucket B) vs runtime override of a config param (Bucket C)? Likely B (it gates the publish loop) — confirm.
-- `def_load_config`: include-as-linked-object in runtime_params (recommended) vs omit.
-- `adjusted_pv_model_max_age`, `open_meteo_cache_max_age`: confirm runtime-only (not config entries) in the source scan.
-- Completeness gate (all items): full `treat_runtimeparams` scan (set_type branches + `forecast_key` list + `ml_param_defs` table) to confirm no key is unclassified.
+**RESOLVED by the AC-2b completeness scan (PR #915, 2026-05-29):**
+- `time_zone` → **Bucket C** (config-override, not runtime-only). Excluded from runtime_params.json.
+- `adjusted_pv_model_max_age`, `open_meteo_cache_max_age` → **Bucket C** (config params in param_definitions + config_defaults). Excluded.
+- `def_load_config` → **included** in runtime_params.json as a linked opaque object (externalDocs → thermal_battery.md).
+- Completeness gate for AC-2b: DONE — full `treat_runtimeparams` scan classified every key, zero unclassifiable, no STOP/pivot.
+
+**Still open (for AC-2c / AM-1b when picked):**
+- `continual_publish`: output (Bucket B) vs runtime override of a config param (Bucket C)? Likely B (gates the publish loop) — confirm in AC-2c's scan.
+- AC-2c nested-object `custom_*_id` representation (input:object opaque vs defined nested schema).
+- AM-1b + AM-7 each run their own completeness re-scan when picked.
 
 ---
 
