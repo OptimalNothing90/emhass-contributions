@@ -51,4 +51,6 @@ What hasn't been decided yet?
 
 ## Current RFCs
 
-(none yet — RFC 0001 will be /api/last-run when the corresponding prototype is staged)
+- [0001](0001-shared-plan-registry.md) — EMHASS as a stateful shared-plan service / persistent flexible-load registry (**Draft**)
+
+(The earlier note earmarking 0001 for /api/last-run is retired: `/api/v1/last-run` shipped directly via #835 without an RFC.)
