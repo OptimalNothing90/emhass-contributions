@@ -1,8 +1,8 @@
 # RFC 0001: EMHASS as a stateful shared-plan service (persistent flexible-load registry)
 
 **Status:** Draft
-**Issue:** (none yet)
-**Board card:** DISC-824 (davidusb-geek/projects/2) — "EV use-cases follow-up to #789"
+**Discussion:** (none yet)
+**Upstream context:** #824 (EV use-cases follow-up to #789)
 **Author:** OptimalNothing90
 **Date:** 2026-06-02
 
@@ -41,7 +41,7 @@ Notes on the demand space:
 - **Most "started" loads are shiftable within a window — not fixed.** A resident plugging in the EV or starting an appliance is a *trigger* to register a `shiftable` demand with a window, not an immovable load: EV → `[now, +3h]` (or by departure); washing machine → `[now, +2h]`; a dishwasher with a built-in night delay → `[02:00, 06:00]`. EMHASS schedules within the window. The truly immovable case (a dumb appliance with no delay, already running) is the rare `committed` mode — **account-only**: EMHASS can't move it but registers it so other loads yield. `hybrid` = run on surplus/cheap but guaranteed done by a deadline. Which mode applies is the EMHASS user's per-load preference.
 - **Every entry has a mandatory timeout + an update path.** A registered load carries a required `expires_at`; stale entries auto-drop, so a consumer that registers and never withdraws cannot leave a zombie demand (a safety default aligned with the failsafe philosophy). Standing/seasonal loads stay alive by *refreshing* via `PUT`; the same `PUT` updates a changing demand (new SoC, moved deadline).
 
-The registry is the concrete form of the long-parked "persistent flexible-load registry" idea (DISC-824) and the substrate for the LLM-ready goal.
+The registry is the concrete form of the long-parked "persistent flexible-load registry" idea (follow-up to #824) and the substrate for the LLM-ready goal.
 
 ## API / contract
 
