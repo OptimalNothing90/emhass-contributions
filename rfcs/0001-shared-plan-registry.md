@@ -1,7 +1,7 @@
 # RFC 0001: EMHASS as a stateful shared-plan service (persistent flexible-load registry)
 
-**Status:** Draft
-**Discussion:** (none yet)
+**Status:** Issue-filed
+**Discussion:** https://github.com/davidusb-geek/emhass/discussions/931
 **Upstream context:** #824 (EV use-cases follow-up to #789)
 **Author:** OptimalNothing90
 **Date:** 2026-06-02
