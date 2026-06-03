@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-01T15:15:00+00:00"
+    "fetched_at": "2026-06-03T21:25:21+00:00"
   },
   "items": [
     {
@@ -684,7 +684,7 @@
       "title": "AM-1: openapi.json committed + auto-gen workflow",
       "type": "draft",
       "body": "Commit src/emhass/static/openapi.json + scripts/generate_openapi.py to the repo. Tool consumers (Node-RED validators, EVCC adapters, HA cards, IDE tooling) read the API contract without booting EMHASS.\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\n- No openapi.json, no openapi.yaml in the repo.\n- web_server.py has 9 routes (see AC-3 list). All /action/* endpoints accept similar runtime-payload bodies with no published schema.\n\nSequencing: depends on AC-2a (unit field), AC-2b (runtime params block), AC-1 (plan output schema). Once schema is structured, openapi.json generation is mechanical — Pydantic models from param_definitions.json generate request schemas; AC-1 doc gives response schema.\n\nDeliverable:\n- scripts/generate_openapi.py: reads param_definitions.json + plan_output_schema.md → emits openapi.json\n- openapi.json committed at repo root or src/emhass/static/openapi.json\n- CI workflow check: re-run script on PR, fail if generated diff != committed file\n- Folge zu #808 Layer 2.\n\n<!-- restructure-2026-05-20 -->\n\n## Update 2026-05-20 — split into AM-1 (this card, config + plan-output) and AM-1b (runtime-payload)\n\nDependency state post-merge-wave:\n\n- AC-1 ✓ merged (#835): `plan_output_schema.md` + `EMHASS_SCHEMA_VERSION` constant\n- AC-2a ✓ merged (#850): `unit` field on all 87 `param_definitions.json` entries\n- AC-2b pending (new standalone card): ~30 runtime/MPC params not yet in `param_definitions.json`\n\n**AM-1 (this card) — scope reduced to config + plan-output side.** Generator reads\n`param_definitions.json` (post-AC-2a) + `plan_output_schema.md` (post-AC-1) → emits\n`openapi.json` covering:\n\n- `/configuration` GET/POST — request body schema from `param_definitions.json`\n- `/api/v1/last-run` GET — response schema from `last_run.read()` return shape\n- `/action/*` POST — runtime payload as `additionalProperties: true` stub (refined by AM-1b once AC-2b lands)\n\n**AM-1b — runtime-payload side, new standalone card.** Blocked on AC-2b. Regenerates\n`openapi.json` to replace `additionalProperties: true` with structured schemas per\n`/action/*` variant.\n\nCurrency convention (locked per #850 / #867): `unit` field uses `¤/kWh` (Unicode\nU+00A4 generic currency sign); prose uses `currency/kWh`.\n\nState on upstream/master `777c792` (verified 2026-05-20):\n- 10 routes in `web_server.py` (added `/api/v1/last-run` via #851)\n- No `openapi.json`, no `openapi.yaml` in repo\n- `EMHASS_SCHEMA_VERSION = \"1.0\"` at `command_line.py:33`\n- `src/emhass/last_run.py` public API: `emhass_version()`, `record()`, `read()`, `is_recent()`\n\nEffort: S (config + plan-output side standalone).\n",
-      "Status": "In Progress",
+      "Status": "Review",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
