@@ -41,6 +41,7 @@ Goal: board = current truth. Add what matters, cut what doesn't, re-baseline pha
 | EVCC/epic granularity | Lean — 2 goal-epics only; downstream (sibling RFCs, public example) NOT carded until #931 resonance; Ensemble glue NOT carded (private) |
 | #875 PRs | Card them (linked issues/PRs), board = truth |
 | Phases | Drop date-targets; re-theme Phase 4 → "EVCC Integration"; doc-only (Phase field option names are bare numbers) |
+| Folded themes (2026-06-04) | Add 3rd epic **Reliability** + flagship card *Optim feasibility smoke-gate*; battery-constraint + forecast-fetch = Reliability pillars (reference existing cards, no new epics); runtime-config-validation folds into LLM-ready epic; AGENTS.md-enforcement added as gated Ideas card; **T5 resonance-accelerator NOT carded** (gated on #931, stays internal strategy note) |
 
 ## Design
 
@@ -70,9 +71,11 @@ not point at a Won't-Do item. AG-4/AG-9 stand alone with inline hints.
 - Fields: Category `A: Code-Lifecycle`, Phase `Phase 3`, Priority `P1`, Effort `L`,
   Scope `Discussion-Only`. Status `In Progress`.
 - Body: the goal (machine-readable EMHASS for coding agents + LLM consumers), the
-  member items it groups (AC-2 / AC-2c / AM-1 / AM-1b / AM-2 / AM-7, plus future
-  llms.txt), and a done-criterion (schema spine published + openapi runtime payloads +
-  config.md auto-generated, no drift).
+  member items it groups (AC-2 / AC-2c / AM-1 / AM-1b / AM-2, plus future llms.txt and
+  **runtime config-validation [T6]** — Pydantic/jsonschema validation of merged config
+  against `param_definitions.json` with clear errors; attacks the #869 null-default
+  class), and a done-criterion (schema spine published + openapi runtime payloads +
+  config.md auto-generated + config validated at load, no drift).
 
 **B2 — Goal epic: EV-EVCC** (new Draft card)
 - Fields: Category `B: End-User-Ops`, Phase `Phase 4`, Priority `P1`, Effort `XL`,
@@ -91,6 +94,36 @@ not point at a Won't-Do item. AG-4/AG-9 stand alone with inline hints.
 
 Node IDs resolved at implementation time via `gh issue view <n> --json id`.
 
+**B4 — Goal epic: Reliability / Regression-Harness** (new Draft card) — folded theme T1
+- Fields: Category `Infra`, Phase `Phase 3`, Priority `P1`, Effort `XL`, Scope
+  `Discussion-Only`. Status `In Progress`.
+- Body: reliability is the floor under both strategic goals; the v0.17.x contributor
+  wave + our own #830→#875 regression show happy-path-only changes reach production.
+  Pillars:
+  1. **Optim feasibility smoke-gate** [flagship, B5] — would have caught #875 + #869.
+  2. **Schema drift-guard** — AM-7 (param_definitions ↔ config_defaults), existing card.
+  3. **Battery-MILP constraint correctness [T3]** — references existing cards #875 /
+     #935 / #936 / ISSUE-807-U-2; the SoC-clamp + `set_nodischarge_to_grid` + dynamic
+     charge-power issues all cluster in the battery constraint set.
+  4. **Forecast-fetch resilience [T4]** — references U-3 / U-5 / U-6; consistent
+     timeout/retry/fallback across all `forecast.py` providers.
+- Public-neutral. AM-7 moves from the LLM-ready epic's member list to here.
+
+**B5 — Optim feasibility smoke-gate (CI)** (new Draft card) — flagship of B4
+- Fields: Category `A: Code-Lifecycle`, Phase `Phase 3`, Priority `P1`, Effort `M`,
+  Scope `Upstream`. Status `Candidates` (well-scoped, proposable to David; can ride
+  alongside AM-7).
+- Body: a CI job that runs a full optimization over a small matrix of reference configs
+  (incl. hybrid + battery) and asserts the run is feasible and key outputs are within
+  sane bounds. Catches the regression class #875 (hybrid infeasible) and #869.
+
+**B6 — AGENTS.md enforcement tightening** (new Draft card) — folded theme T2
+- Fields: Category `A: Code-Lifecycle`, Phase `Phase 3`, Priority `P2`, Effort `S`,
+  Scope `Upstream`. Status `Ideas` (gated — do NOT promote yet).
+- Body: make `check_def_loads` mandatory + add vanilla-optim-smoke reference in
+  AGENTS.md; honor-system → enforced. **Gated on #886 + #900 landing** so AGENTS.md can
+  point at real enforcement. Card exists for visibility only until then.
+
 ### C. Phase re-baseline (`board/design.md` edits only)
 
 - §5 Phase Targets: drop the **Target** date column; restate Phase as pure cross-repo
@@ -107,9 +140,11 @@ Node IDs resolved at implementation time via `gh issue view <n> --json id`.
 1. `board/2026-06-04-reconcile-cuts.py` — move 5 cards to Won't Do (guarded by
    expected-status), de-reference AC-8 from AG-4/AG-9 via `append_to_body_idempotent` or
    a targeted body rewrite.
-2. `board/2026-06-04-reconcile-adds.py` — create 2 goal-epic draft cards
-   (`add_draft_to_project`) + set their fields; add 5 #875 issues/PRs as linked content +
-   set Phase/Scope/Status fields.
+2. `board/2026-06-04-reconcile-adds.py` — create 3 goal-epic draft cards (LLM-ready,
+   EV-EVCC, Reliability) + 2 work-item draft cards (B5 smoke-gate, B6 AGENTS.md, via
+   `add_draft_to_project`) + set their fields; add 5 #875 issues/PRs as linked content
+   (`addProjectV2ItemById`) + set Phase/Scope/Status. Title-existence guard before each
+   draft create (idempotency).
 3. `board/design.md` — §1/§5/§7 edits (manual via Edit).
 4. `board/items.json` — refreshed by each mutation script's `save_items`.
 
@@ -137,8 +172,9 @@ fetch.py (real) → commit sync → cuts.py → fetch --dry-run (0 drift) → co
 ## Testing / Verification
 
 - `python fetch.py --dry-run` after each script → must report `0 changed` (live == json).
-- Read-back: confirm 5 cards in Won't Do, 2 epics + 5 #875 cards present with correct
-  fields, AC-8 de-referenced from AG-4/AG-9 bodies.
+- Read-back: confirm 5 cards in Won't Do; 3 epics + 2 work-item cards (smoke-gate,
+  AGENTS.md) + 5 #875 cards present with correct fields; AM-7 grouped under Reliability;
+  AC-8 de-referenced from AG-4/AG-9 bodies.
 - `board/next.py` still runs clean (no schema break in items.json).
 - `git diff board/design.md` review before commit.
 
@@ -146,6 +182,9 @@ fetch.py (real) → commit sync → cuts.py → fetch --dry-run (0 drift) → co
 
 - Sibling RFCs (priority/template/MQTT), public EV-demand example — gated on #931
   resonance, not carded now.
+- **T5 EVCC resonance-accelerator** (small public worked-example to actively create
+  resonance if #931 stalls) — NOT carded; stays an internal strategy note. Revisit if
+  #931 goes quiet.
 - Ensemble/BATNA private glue layer — never on the public board.
 - GitHub Phase-field option mutation — not needed.
 - Any upstream code change — this is board + doc curation only.
