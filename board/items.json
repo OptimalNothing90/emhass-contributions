@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-03T21:25:21+00:00"
+    "fetched_at": "2026-06-04T00:11:22+00:00"
   },
   "items": [
     {
@@ -767,7 +767,7 @@
       "id": "AG-4",
       "title": "AG-4: emhass-anomaly skill",
       "type": "draft",
-      "body": "Watches action_logs.txt + InfluxDB for deviations. Threshold-checks + pattern-drift detection. Demos value of structured error catalog (AC-8).",
+      "body": "Watches action_logs.txt + InfluxDB for deviations. Threshold-checks + pattern-drift detection. Inline hints, standalone (no external error catalog).",
       "Status": "Ideas",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 4",
@@ -782,7 +782,7 @@
       "title": "AG-5: emhass-calibrate skill",
       "type": "draft",
       "body": "Compares plan vs. actual to suggest Carnot / `openmeteo_correction` updates. Requires plan-vs-real archive (CE-2) feed.",
-      "Status": "Ideas",
+      "Status": "Done / Wont Do",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 4",
       "Priority": "P2",
@@ -810,7 +810,7 @@
       "title": "AC-8: errors.yaml + error_catalog.md framework",
       "type": "draft",
       "body": "Structured error codes with hints. Logger-output linked to catalog. Foundation for AG-4 anomaly + AG-9 infeasibility-explainer.",
-      "Status": "Ideas",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 5",
       "Priority": "P2",
@@ -852,7 +852,7 @@
       "title": "AM-3: Provider-Abstraction pilot (forecast price providers)",
       "type": "draft",
       "body": "Strategy pattern for forecast providers. Reduce merge conflicts between parallel provider PRs (#787 Octopus, #745 Solcast-cap, #803 InfluxDB-Math).\n\nCurrent state (verified 2026-04-28 against upstream/master @ 6537c47):\nThree independent if/elif cascades in src/emhass/forecast.py:\n- get_weather_forecast (line 574): scrapper / solcast / solar.forecast / csv / list\n- get_load_forecast (line 1517): typical / naive / mlforecaster / csv / list\n- get_load_cost_forecast (line 1605): hp_hc_periods / ...\n\nPilot scope: refactor ONE cascade (recommend get_load_cost_forecast — smallest, lowest risk). Pattern: abstract base class + concrete subclasses per method. New providers register via subclass + class attribute (not if/elif edit). Existing call site stays binary-compatible.\n\nIssue-first per #808 corridor — RFC issue with proposed ABC + one example provider conversion. Wait for maintainer architecture green-light before code PR.",
-      "Status": "Ideas",
+      "Status": "Done / Wont Do",
       "Category": "A: Code-Lifecycle",
       "Phase": "Phase 5",
       "Priority": "P2",
@@ -880,7 +880,7 @@
       "title": "AM-6: Persistent forecast/measurement storage (LMDB/SQLite)",
       "type": "draft",
       "body": "Plan-vs-real archive (CE-2) and warm-start after container restart need historical data without external DB. Persistent storage via LMDB or SQLite.",
-      "Status": "Ideas",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 5",
       "Priority": "P3",
