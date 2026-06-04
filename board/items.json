@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-04T00:14:54+00:00"
+    "fetched_at": "2026-06-04T00:16:25+00:00"
   },
   "items": [
     {
@@ -1112,6 +1112,86 @@
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyQU",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKk3mU"
+    },
+    {
+      "id": "PR-933",
+      "title": "fix: surface infeasible optimization on publish instead of KeyError (#875)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7iJe9c",
+      "Status": "In Progress",
+      "Category": null,
+      "Phase": "Phase 2",
+      "Priority": null,
+      "Effort": null,
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyhY",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/933",
+      "repository": "davidusb-geek/emhass",
+      "number": 933
+    },
+    {
+      "id": "PR-934",
+      "title": "fix: restore hybrid inverter AC power defaults to 5000 (#875)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7iJld6",
+      "Status": "In Progress",
+      "Category": null,
+      "Phase": "Phase 2",
+      "Priority": null,
+      "Effort": null,
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyik",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/934",
+      "repository": "davidusb-geek/emhass",
+      "number": 934
+    },
+    {
+      "id": "PR-938",
+      "title": "test: raise node subprocess timeout to 120s for Windows CI flake",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7iZ4Bv",
+      "Status": "In Progress",
+      "Category": null,
+      "Phase": "Phase 2",
+      "Priority": null,
+      "Effort": null,
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyjY",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/938",
+      "repository": "davidusb-geek/emhass",
+      "number": 938
+    },
+    {
+      "id": "ISSUE-935",
+      "title": "SOC values >1 (percent vs fraction) silently produce runaway plans since 0.17.2",
+      "type": "link",
+      "content_id": "I_kwDOGC8VbM8AAAABEObVjw",
+      "Status": "Candidates",
+      "Category": null,
+      "Phase": "Phase 2",
+      "Priority": null,
+      "Effort": null,
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqykI",
+      "content_url": "https://github.com/davidusb-geek/emhass/issues/935",
+      "repository": "davidusb-geek/emhass",
+      "number": 935
+    },
+    {
+      "id": "ISSUE-936",
+      "title": "set_nodischarge_to_grid over-constrains battery discharge since 0.17.3 (#796): E<=D forbids discharge-to-local-load during export-capable timesteps",
+      "type": "link",
+      "content_id": "I_kwDOGC8VbM8AAAABEPJU3Q",
+      "Status": "Candidates",
+      "Category": null,
+      "Phase": "Phase 2",
+      "Priority": null,
+      "Effort": null,
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyks",
+      "content_url": "https://github.com/davidusb-geek/emhass/issues/936",
+      "repository": "davidusb-geek/emhass",
+      "number": 936
     }
   ]
 }
