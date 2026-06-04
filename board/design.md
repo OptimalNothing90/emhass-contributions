@@ -114,17 +114,20 @@ All views are filter-based and auto-populate. No manual curation.
 
 **Migration path if needed later:** if David explicitly wants release-tracking via Milestones in `davidusb-geek/emhass`, we add Milestones for upstream-only items as a complement to Phase. Additive, not blocking.
 
-### Phase Targets (aspirational)
+### Phase Themes (sequencing only — date targets retired 2026-06-04)
 
-| Phase | Theme | Target | Notes |
-|-------|-------|--------|-------|
-| Phase 0 | Local Sanity | 2026-05-03 | mostly shipped (CE-1 deployed, CE-3 deployed, AG-1 deployed) |
-| Phase 1 | Upstream Quick-Wins | 2026-05-17 | #812/#813 merged; #814/#816/#817 open |
-| Phase 1.5 | Workflow-Demo + AGENTS.md | 2026-05-31 | discussion #808 unblocked, board itself is the demo |
-| Phase 2 | Bug-Klärung | 2026-06-14 | U-1, U-2, U-5, U-8 issue-first |
-| Phase 3 | Schema/API + Architecture | 2026-07-12 | AC-3, AC-4, AC-1, AC-2, AM-1, AM-2 |
-| Phase 4 | EV-Coupling (local) | 2026-08-09 | EV-1..7, AG-3/AG-5 |
-| Phase 5 | Long-form | 2026-Q4+ | AG-9, AC-8, CE-7, AM-3/AM-4/AM-6 |
+> Date targets were aspirational and all elapsed; Phase is now a pure cross-repo
+> sequencing field with no calendar. Themes below are descriptive.
+
+| Phase | Theme | Notes |
+|-------|-------|-------|
+| Phase 0 | Local Sanity | shipped (CE-1, CE-3, AG-1) |
+| Phase 1 | Upstream Quick-Wins | shipped (#812/#813/#817/#814/#816/#822/#829) |
+| Phase 1.5 | Workflow-Demo + AGENTS.md | board itself is the demo (#808) |
+| Phase 2 | Bug-Klärung + regression cluster | U-1/U-8 issue-first; #875 cards #933/#934/#938/#935/#936 |
+| Phase 3 | Schema/API + LLM-ready + Reliability | EPIC-LLM, EPIC-REL, AC-2*, AM-1*, AM-2, AM-7, REL-1/REL-2, AG-8 |
+| Phase 4 | EVCC Integration | EPIC-EVCC (RFC 0001 / #931), EV-9, CE-7 — EMHASS planner / evcc executor |
+| Phase 5 | Long-form (thinned 2026-06-04) | AG-9, AM-4, AG-pr-readiness, AG-B1 (AM-6/AM-3/AG-5/AC-8 cut to Won't Do) |
 
 ---
 
