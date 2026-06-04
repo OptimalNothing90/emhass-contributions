@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-04T00:11:22+00:00"
+    "fetched_at": "2026-06-04T00:14:54+00:00"
   },
   "items": [
     {
@@ -1042,6 +1042,76 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/913",
       "repository": "davidusb-geek/emhass",
       "number": 913
+    },
+    {
+      "id": "EPIC-LLM",
+      "title": "EPIC-LLM: LLM-ready — machine-readable EMHASS",
+      "type": "draft",
+      "body": "Strategic goal epic. Make EMHASS machine-readable for coding agents + LLM consumers,\nframed as **single schema -> many generated surfaces** (`param_definitions.json` = SoT).\n\nMember items: AC-2 / AC-2c (schema), AM-1 / AM-1b (openapi), AM-2 (config.md docs),\nAG-8 (schema-driven config UI), plus future llms.txt and runtime config-validation\n(Pydantic/jsonschema of merged config -> clear errors; attacks the #869 null-default class).\n\nDone-criterion: schema spine published + openapi runtime payloads + config.md auto-generated\n+ config validated at load + config form schema-driven, with no drift between them.\n",
+      "Status": "In Progress",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "L",
+      "Scope": "Discussion-Only",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyLY",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKk3mA"
+    },
+    {
+      "id": "EPIC-EVCC",
+      "title": "EPIC-EVCC: EV-EVCC integration — shared-plan registry",
+      "type": "draft",
+      "body": "Strategic goal epic. EMHASS = whole-house planner, evcc = executor; coordinated via a\nstateful shared-plan registry (RFC 0001, posted as Discussion #931, awaiting community/\nDavid resonance).\n\nMember items: EV-9 (cookbook NR/MQTT/EVCC recipe), CE-7 (GUI EV-section).\n\nDownstream (sibling RFCs, public worked-example) is gated on #931 resonance and is not\ncarded yet. Done-criterion: a recommend-only plan-exchange contract that evcc can consume,\naccepted in EMHASS-core or shipped as an agreed integration surface.\n",
+      "Status": "In Progress",
+      "Category": "B: End-User-Ops",
+      "Phase": "Phase 4",
+      "Priority": "P1",
+      "Effort": "XL",
+      "Scope": "Discussion-Only",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyMc",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKk3mE"
+    },
+    {
+      "id": "EPIC-REL",
+      "title": "EPIC-REL: Reliability / regression-harness",
+      "type": "draft",
+      "body": "Strategic goal epic. Reliability is the floor under both other goals; the v0.17.x\ncontributor wave + our own #830 -> #875 regression show happy-path-only changes reach\nproduction.\n\nPillars:\n1. Optim feasibility smoke-gate (REL-1) — would have caught #875 (hybrid infeasible) + #869.\n2. Schema drift-guard — AM-7 (param_definitions <-> config_defaults).\n3. Battery-MILP constraint correctness — refs #875 / #935 / #936 / ISSUE-807-U-2 (SoC-clamp,\n   set_nodischarge_to_grid, dynamic charge-power all cluster in the battery constraint set).\n4. Forecast-fetch resilience — refs U-3 / U-5 / U-6 (consistent timeout/retry/fallback\n   across all forecast.py providers).\n",
+      "Status": "In Progress",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "XL",
+      "Scope": "Discussion-Only",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyNo",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKk3mI"
+    },
+    {
+      "id": "REL-1",
+      "title": "REL-1: Optim feasibility smoke-gate (CI)",
+      "type": "draft",
+      "body": "Flagship of EPIC-REL. A CI job that runs a full optimization over a small matrix of\nreference configs (incl. hybrid + battery) and asserts the run is feasible and key outputs\nare within sane bounds. Catches the regression class of #875 (hybrid infeasible) and #869.\nCan ride alongside AM-7. Issue-first, then PR.\n",
+      "Status": "Candidates",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "M",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyPE",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKk3mQ"
+    },
+    {
+      "id": "REL-2",
+      "title": "REL-2: AGENTS.md enforcement tightening",
+      "type": "draft",
+      "body": "Make `check_def_loads` mandatory + add a vanilla-optim-smoke reference in AGENTS.md;\nhonor-system -> enforced. **Gated on #886 + #900 landing** so AGENTS.md can point at real\nenforcement. Card exists for visibility only until then (Status Ideas, do not promote).\n",
+      "Status": "Ideas",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 3",
+      "Priority": "P2",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzguqyQU",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKk3mU"
     }
   ]
 }
