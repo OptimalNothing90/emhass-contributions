@@ -80,6 +80,17 @@ def update_draft_body(draft_id: str, body: str) -> str:
     return out["data"]["updateProjectV2DraftIssue"]["draftIssue"]["title"]
 
 
+def update_draft_title_body(draft_id: str, title: str, body: str) -> str:
+    """Set both title and body of a draft issue. Returns the new title."""
+    q = """mutation($id: ID!, $title: String!, $body: String!) {
+      updateProjectV2DraftIssue(input: { draftIssueId: $id, title: $title, body: $body }) {
+        draftIssue { id title }
+      }
+    }"""
+    out = gh_graphql(q, variables={"id": draft_id, "title": title, "body": body})
+    return out["data"]["updateProjectV2DraftIssue"]["draftIssue"]["title"]
+
+
 def append_to_body_idempotent(
     draft_id: str, marker: str, suffix: str
 ) -> tuple[bool, str]:
