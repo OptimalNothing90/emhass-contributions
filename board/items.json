@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-07T10:21:18+00:00"
+    "fetched_at": "2026-06-07T10:47:36+00:00"
   },
   "items": [
     {
@@ -1224,6 +1224,36 @@
       "content_url": "https://github.com/davidusb-geek/emhass/issues/936",
       "repository": "davidusb-geek/emhass",
       "number": 936
+    },
+    {
+      "id": "AM-1c",
+      "title": "AM-1c: openapi.json auto-regen (pre-commit/CI)",
+      "type": "draft",
+      "body": "Close the loop on AM-1's committed-vs-generated drift-check (#921): instead of a test that\nmerely *fails* when `param_definitions.json` changes without a regen, add an **automated\nregen** — a pre-commit hook and/or CI step running `scripts/generate_openapi.py` that\nfails-or-auto-commits on diff. Removes the recurring \"forgot to regen\" footgun.\n\n## Why\nThe drift-check is firing repeatedly: #934 (#875 5000-restore) + delta_forecast_daily +\n#373/#939 left `openapi.json` stale → master red → manual regen (#945, LesIT1). #947 + #948\n(both edit `param_definitions.json` without regen) will re-break it. Second drift incident\nof this class (cf. AM-7 param_def↔config_defaults).\n\n## Lineage / fit\nAM-1 (#921, generator + drift-check, merged) → AM-1b (runtime payloads) → AM-1c (this).\nMember of EPIC-LLM (single schema → many surfaces, kept in sync).\n\n## Sequencing\nGated on #945 merge — build on a green master, avoid colliding with the open wave.\nWe added the generator in #921, so we are the credible author for the regen half.\n",
+      "Status": "Candidates",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgu9KxI",
+      "draft_id": "DI_lAHOAfZrVs4BV1jUzgKlwo8"
+    },
+    {
+      "id": "PR-945",
+      "title": "fix: regenerate committed openapi.json (stale vs param_definitions)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7jiHFr",
+      "Status": "Review",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "XS",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgu9KyE",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/945",
+      "repository": "davidusb-geek/emhass",
+      "number": 945
     }
   ]
 }
