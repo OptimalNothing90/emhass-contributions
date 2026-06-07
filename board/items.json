@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-07T21:19:29+00:00"
+    "fetched_at": "2026-06-07T21:22:35+00:00"
   },
   "items": [
     {
@@ -1254,6 +1254,38 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/945",
       "repository": "davidusb-geek/emhass",
       "number": 945
+    },
+    {
+      "id": "PR-928",
+      "title": "Add optional intermediate battery SoC target (soc_target / soc_target_timestep) — addresses #553",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7hoELc",
+      "Status": "Done / Wont Do",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 2",
+      "Priority": "P1",
+      "Effort": "M",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgu-xww",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/928",
+      "repository": "davidusb-geek/emhass",
+      "number": 928
+    },
+    {
+      "id": "PR-948",
+      "title": "feat: add optional per-deferrable command-state sensors",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7jivLO",
+      "Status": "Done / Wont Do",
+      "Category": "B: End-User-Ops",
+      "Phase": "Phase 4",
+      "Priority": "P1",
+      "Effort": "M",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgu-xxQ",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/948",
+      "repository": "davidusb-geek/emhass",
+      "number": 948
     }
   ]
 }
