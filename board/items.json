@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-04T00:16:25+00:00"
+    "fetched_at": "2026-06-07T10:21:18+00:00"
   },
   "items": [
     {
@@ -1118,7 +1118,7 @@
       "title": "fix: surface infeasible optimization on publish instead of KeyError (#875)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7iJe9c",
-      "Status": "In Progress",
+      "Status": "Done / Wont Do",
       "Category": null,
       "Phase": "Phase 2",
       "Priority": null,
@@ -1134,7 +1134,7 @@
       "title": "fix: restore hybrid inverter AC power defaults to 5000 (#875)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7iJld6",
-      "Status": "In Progress",
+      "Status": "Done / Wont Do",
       "Category": null,
       "Phase": "Phase 2",
       "Priority": null,
@@ -1150,7 +1150,7 @@
       "title": "test: raise node subprocess timeout to 120s for Windows CI flake",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7iZ4Bv",
-      "Status": "In Progress",
+      "Status": "Done / Wont Do",
       "Category": null,
       "Phase": "Phase 2",
       "Priority": null,
