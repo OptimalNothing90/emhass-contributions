@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-07T10:47:36+00:00"
+    "fetched_at": "2026-06-07T21:19:29+00:00"
   },
   "items": [
     {
@@ -1244,7 +1244,7 @@
       "title": "fix: regenerate committed openapi.json (stale vs param_definitions)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM7jiHFr",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
