@@ -125,7 +125,7 @@ All views are filter-based and auto-populate. No manual curation.
 | Phase 1 | Upstream Quick-Wins | shipped (#812/#813/#817/#814/#816/#822/#829) |
 | Phase 1.5 | Workflow-Demo + AGENTS.md | board itself is the demo (#808) |
 | Phase 2 | Bug-Klärung + regression cluster | U-1/U-8 issue-first; #875 cards #933/#934/#938/#935/#936 |
-| Phase 3 | Schema/API + LLM-ready + Reliability | EPIC-LLM, EPIC-REL, AC-2*, AM-1*, AM-2, AM-7, REL-1/REL-2, AG-8 |
+| Phase 3 | Schema/API + LLM-ready + Reliability | EPIC-LLM, EPIC-REL, AC-2*, AM-1*, AM-7, REL-1/REL-2, AG-8 (AM-2 cut → Won't Do) |
 | Phase 4 | EVCC Integration | EPIC-EVCC (RFC 0001 / #931), EV-9, CE-7 — EMHASS planner / evcc executor |
 | Phase 5 | Long-form (thinned 2026-06-04) | AG-9, AM-4, AG-pr-readiness, AG-B1 (AM-6/AM-3/AG-5/AC-8 cut to Won't Do) |
 
