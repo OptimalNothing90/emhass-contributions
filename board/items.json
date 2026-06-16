@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-07T21:22:35+00:00"
+    "fetched_at": "2026-06-16T21:14:57+00:00"
   },
   "items": [
     {
@@ -1230,7 +1230,7 @@
       "title": "AM-1c: openapi.json auto-regen (pre-commit/CI)",
       "type": "draft",
       "body": "Close the loop on AM-1's committed-vs-generated drift-check (#921): instead of a test that\nmerely *fails* when `param_definitions.json` changes without a regen, add an **automated\nregen** — a pre-commit hook and/or CI step running `scripts/generate_openapi.py` that\nfails-or-auto-commits on diff. Removes the recurring \"forgot to regen\" footgun.\n\n## Why\nThe drift-check is firing repeatedly: #934 (#875 5000-restore) + delta_forecast_daily +\n#373/#939 left `openapi.json` stale → master red → manual regen (#945, LesIT1). #947 + #948\n(both edit `param_definitions.json` without regen) will re-break it. Second drift incident\nof this class (cf. AM-7 param_def↔config_defaults).\n\n## Lineage / fit\nAM-1 (#921, generator + drift-check, merged) → AM-1b (runtime payloads) → AM-1c (this).\nMember of EPIC-LLM (single schema → many surfaces, kept in sync).\n\n## Sequencing\nGated on #945 merge — build on a green master, avoid colliding with the open wave.\nWe added the generator in #921, so we are the credible author for the regen half.\n",
-      "Status": "Candidates",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -1286,6 +1286,38 @@
       "content_url": "https://github.com/davidusb-geek/emhass/pull/948",
       "repository": "davidusb-geek/emhass",
       "number": 948
+    },
+    {
+      "id": "PR-951",
+      "title": "chore: add prek hook to auto-regenerate openapi.json",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7jsYwy",
+      "Status": "Done / Wont Do",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgv9WSE",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/951",
+      "repository": "davidusb-geek/emhass",
+      "number": 951
+    },
+    {
+      "id": "PR-981",
+      "title": "fix: set_nodischarge_to_grid no longer blocks battery discharge to local load on AC-coupled systems (closes #936)",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7mQXJb",
+      "Status": "Review",
+      "Category": "A: Code-Lifecycle",
+      "Phase": "Phase 2",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgv9WTU",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/981",
+      "repository": "davidusb-geek/emhass",
+      "number": 981
     }
   ]
 }
