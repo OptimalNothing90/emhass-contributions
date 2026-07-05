@@ -55,3 +55,24 @@ def test_datetimes_normalized_to_utc():
     d = Demand(**_base(deadline=datetime(2026, 7, 6, 5, 0, tzinfo=cet)))
     assert d.deadline.tzinfo == timezone.utc
     assert d.deadline.hour == 3
+
+
+def test_explicit_ttl_passthrough():
+    d = Demand(**_base(ttl_s=3600))
+    assert d.ttl_s == 3600
+
+
+def test_negative_ttl_rejected():
+    with pytest.raises(ValidationError):
+        Demand(**_base(ttl_s=-1))
+
+
+def test_window_start_after_deadline_rejected():
+    now = datetime.now(timezone.utc)
+    with pytest.raises(ValidationError):
+        Demand(**_base(window_start=now + timedelta(hours=10)))
+
+
+def test_p_min_above_nominal_rejected():
+    with pytest.raises(ValidationError):
+        Demand(**_base(p_min_w=3000))
