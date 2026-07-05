@@ -87,7 +87,11 @@ Scope per RFC 0001 S1: external stateless-core sidecar owning register/refresh/w
 
 - **MVP cut:** single-writer JSON persistence (atomic tmp+rename), REST consumer API, no recurrence, no templates, no MQTT — those are follow-ons per the RFC.
 - **First two consumers:** (a) the WS1 EV flow (evcc demand registered on plug-in, withdrawn on target/unplug), (b) one recurring dummy load to prove multi-demand folding.
-- **Placement:** still David's steer. Building the MVP in `emhass-contributions/prototypes/` explicitly labeled *pre-placement prototype* does not pre-empt that call. When it runs, ping #931 with the working demo and re-ask the placement question with something concrete to place. No unilateral repo/org creation.
+- **Placement — decided preference (2026-07-05): community org, co-founded with allies.** Sequence that still honors the #931 gate:
+  1. Build the MVP in `emhass-contributions/prototypes/` first, explicitly labeled *pre-placement prototype*. No org creation before working code.
+  2. With the demo running, revive the open call proposal (LesIT1 + scruysberghs) and pitch co-founding the org there — 2–3 owners from day one, not a solo repo with extra steps.
+  3. Then ping #931/#824: org exists as a neutral home, demo attached, non-binding on EMHASS core; David is invited to reference it, not asked to decide anything. This converts the placement gate from "await steer" to "offer made, option open".
+  4. Naming: **no "emhass" in the org name** without David's blessing (no branding claim). Neutral home-energy-coordination naming; a neutral umbrella also leaves room for evcc-side adapters under the same org.
 - **Contract guard:** sidecar treats `/api/v1/plan` per its schema — act only on `status=ok`, respect the published-iff-Optimal invariant (D4a), UTC alignment.
 
 ### WS3 — N2 upstream: EV as SoC battery (the fidelity gap)
@@ -106,13 +110,14 @@ Per §3: recheck on each evcc minor release — `api/chargemode.go` for a new mo
 - **Two-master conflict (P5):** hard rule stays — evcc never controls the house battery; EMHASS owns dispatch. If evcc ever wires evopt to control, WS4 fires and the boundary must be renegotiated *before* enabling both.
 - **Happy-path risk (standing concern):** WS1/WS2 must handle `no-run`, `Infeasible`, stale plan, unavailable SoC sensor (→ safe `off`), DST deadline math. These are the exact edge classes the contributor wave keeps shipping without.
 - **Sponsor dependency:** nothing in WS1–WS3 depends on evcc sponsorship (loadpoint API is free). Only Topology B does.
-- **Placement gate:** WS2 stays a prototype until David steers; the ping happens with a demo, not another abstract ask.
+- **Placement gate:** WS2 stays a prototype until the org is co-founded at the ally call; the #931 ping happens with a demo and an existing neutral org, not another abstract ask. Solo org creation before the call is a failure mode (community in name only).
 
 ## 6. Sequence summary
 
 ```
 now ──► WS1 EV-9 bring-up + cookbook PR ──► WS3 N2 SoC PR (field-informed)
-   └──► WS2 sidecar MVP prototype ──► #931 ping w/ demo ──► placement steer
+   └──► WS2 sidecar MVP prototype ──► ally call (LesIT1+scruysberghs): co-found org
+                                      └──► #931 ping w/ demo + org ──► David references (his option)
    └──► WS4 tripwire watch (passive, per evcc release)
 ```
 
