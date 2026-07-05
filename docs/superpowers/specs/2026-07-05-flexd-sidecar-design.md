@@ -254,8 +254,12 @@ mqtt adapter.
    **ordinary demand** owned by the triggering `source` (not `config` — the trigger owner may
    `done`/withdraw it; a template is a recipe, not a standing demand). Boot validation:
    brackets must not overlap; gaps are allowed and fall back to `default_finish_in_h` with a
-   boot-time warning. Re-trigger while an instance is active = refresh of the same demand
-   (idempotent upsert, same-source rule applies).
+   boot-time warning. **Re-trigger while an instance is active = pure refresh:** the existing
+   demand's `deadline`/`window_start` are kept and only `expires_at` is bumped — deadlines are
+   computed exactly once, at the first trigger (a flapping trigger event, e.g. an integration
+   re-emitting on reconnect, must not move the deadline across a rule boundary). Same-source
+   rule applies. An intentional restart with a fresh deadline is `done` followed by a new
+   `start`.
 
    Reference consumer for the guides: BSH Home Connect appliances (Neff/Bosch/Siemens) — the
    HA `home_connect` integration reports "program selected/remote start armed" (the register
