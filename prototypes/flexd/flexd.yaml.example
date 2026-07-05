@@ -1,0 +1,30 @@
+# EMHASS base URL
+emhass_url: http://emhass:5000
+# MUST match EMHASS optimization_time_step
+timestep_min: 30
+# prediction horizon in steps
+horizon_steps: 48
+# IANA name; used for standing-demand windows and template deadline rules
+timezone: Europe/Berlin
+# registry/ledger/plan storage
+data_dir: /data
+# plan marked stale after N missed cycles
+stale_after_cycles: 2
+# expiry cushion for Simple-API registrations without explicit expiry
+default_ttl_s: 3600
+# enabled/host/port/base_topic; username/password optional
+mqtt:
+  enabled: true
+  host: mosquitto
+  port: 1883
+  base_topic: flexd
+# merged into every EMHASS optim call; flexd's own deferrable keys always win on conflict
+extra_runtime_params:
+  soc_init: 0.5
+# recurring daily loads owned by flexd config; daily_energy_wh wins over daily_hours when both given
+standing_demands:
+  - id: waterheater
+    type: generic
+    nominal_power_w: 3000
+    daily_hours: 5
+    window: "06:00-22:00"
