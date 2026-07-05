@@ -144,3 +144,39 @@ def test_simple_template_retrigger_foreign_source_409(client_with_templates):
         ).status_code
         == 409
     )
+
+
+def test_simple_standing_done_routes_to_mark_done(client):
+    assert (
+        client.post(
+            "/simple/demands/waterheater/done", params={"source": "config"}
+        ).text
+        == "1"
+    )
+
+
+def test_simple_standing_done_foreign_source_409(client):
+    assert (
+        client.post(
+            "/simple/demands/waterheater/done", params={"source": "loxone"}
+        ).status_code
+        == 409
+    )
+
+
+def test_simple_status_down(registry):
+    from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+    from flexd.transports.rest_api import create_app
+    from fastapi.testclient import TestClient
+
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    scheduler.last_result = "down"
+    app = create_app(
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        driver=FakeDriver(result=PLAN),
+    )
+    down_client = TestClient(app)
+    assert down_client.get("/simple/status").text == "down"

@@ -40,6 +40,19 @@ def create_app(
         ttl becomes time-to-that-expiry from now. That is the declared contract."""
         if demand.id != demand_id:
             raise HTTPException(status_code=400, detail="id mismatch")
+        if standing is not None and standing.is_standing(demand_id):
+            if demand.source != "config":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{demand_id} is reserved for a standing demand",
+                )
+            standing.correct(
+                demand_id,
+                remaining_hours=demand.energy_target_wh / demand.nominal_power_w,
+                now=utcnow(),
+            )
+            scheduler.notify_change()
+            return registry.get(demand_id) or demand
         reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
@@ -62,6 +75,15 @@ def create_app(
 
     @app.delete("/api/v1/demands/{demand_id}", status_code=204)
     def withdraw(demand_id: str, source: str = Query(...)):
+        if standing is not None and standing.is_standing(demand_id):
+            if source != "config":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{demand_id} is a standing demand; only source 'config' may mark it done",
+                )
+            standing.mark_done(demand_id, now=utcnow())
+            scheduler.notify_change()
+            return Response(status_code=204)
         try:
             registry.delete(demand_id, source=source)
         except KeyError:

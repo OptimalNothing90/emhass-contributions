@@ -31,8 +31,18 @@ def registry(tmp_path: Path) -> Registry:
 
 
 class FakeStandingRegistry:
+    def __init__(self):
+        self.done = []
+        self.corrections = []
+
     def is_standing(self, demand_id):
         return demand_id == "waterheater"
+
+    def mark_done(self, demand_id, now):
+        self.done.append(demand_id)
+
+    def correct(self, demand_id, *, remaining_hours, now):
+        self.corrections.append((demand_id, remaining_hours))
 
 
 @pytest.fixture

@@ -65,10 +65,24 @@ class MqttBridge:
         _, _, source, demand_id, action = parts
         try:
             if action == "set":
-                reject_standing_squat(self._standing, demand_id, source)
                 data = json.loads(payload)
                 if not isinstance(data, dict):
                     raise ValueError("payload must be a JSON object")
+                if (
+                    self._standing is not None
+                    and self._standing.is_standing(demand_id)
+                    and source == "config"
+                ):
+                    energy_target_wh = data["energy_target_wh"]
+                    nominal_power_w = data["nominal_power_w"]
+                    self._standing.correct(
+                        demand_id,
+                        remaining_hours=energy_target_wh / nominal_power_w,
+                        now=utcnow(),
+                    )
+                    self._scheduler.notify_change()
+                    return
+                reject_standing_squat(self._standing, demand_id, source)
                 data.update({"id": demand_id, "source": source})
                 self._registry.upsert(Demand(**data))
                 self._scheduler.notify_change()

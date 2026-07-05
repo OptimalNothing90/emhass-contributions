@@ -93,6 +93,15 @@ def create_simple_router(
 
     @router.post("/demands/{demand_id}/done")
     def done(demand_id: str, source: str = Query(...)):
+        if standing is not None and standing.is_standing(demand_id):
+            if source != "config":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{demand_id} is a standing demand; only source 'config' may mark it done",
+                )
+            standing.mark_done(demand_id, now=utcnow())
+            scheduler.notify_change()
+            return "1"
         try:
             registry.delete(demand_id, source=source)
         except KeyError:
@@ -117,6 +126,8 @@ def create_simple_router(
 
     @router.get("/status")
     def status():
+        if scheduler.last_result == "down":
+            return "down"
         return view.state(now=utcnow())
 
     return router

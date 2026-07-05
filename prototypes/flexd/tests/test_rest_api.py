@@ -112,3 +112,20 @@ def test_template_retrigger_foreign_source_409(client_with_templates):
         "/api/v1/templates/dishwasher/start", json={"source": "loxone"}
     )
     assert r.status_code == 409
+
+
+def test_standing_delete_routes_to_mark_done(client):
+    r = client.delete("/api/v1/demands/waterheater?source=config")
+    assert r.status_code == 204
+
+
+def test_standing_delete_foreign_source_409(client):
+    assert client.delete("/api/v1/demands/waterheater?source=loxone").status_code == 409
+
+
+def test_standing_put_config_is_correction(client):
+    payload = _payload(
+        id="waterheater", source="config", energy_target_wh=3000, nominal_power_w=3000
+    )
+    r = client.put("/api/v1/demands/waterheater", json=payload)
+    assert r.status_code == 200

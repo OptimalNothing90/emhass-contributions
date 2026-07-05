@@ -21,12 +21,16 @@ class FakePublisher:
 class FakeStandingRegistryLocal:
     def __init__(self):
         self.done = []
+        self.corrections = []
 
     def is_standing(self, demand_id):
         return demand_id == "waterheater"
 
     def mark_done(self, demand_id, now):
         self.done.append(demand_id)
+
+    def correct(self, demand_id, *, remaining_hours, now):
+        self.corrections.append((demand_id, remaining_hours))
 
 
 @pytest.fixture
@@ -202,3 +206,13 @@ async def test_template_unknown_error_event(bridge_with_templates):
     await b.handle_message("flexd/templates/ha/ghost/start", "")
     errors = [t for t, _, _ in pub.published if t.endswith("/error")]
     assert "flexd/templates/ha/ghost/error" in errors
+
+
+async def test_standing_set_config_source_is_correction(bridge):
+    b, pub, registry = bridge
+    await b.handle_message(
+        "flexd/demands/config/waterheater/set",
+        demand_json(energy_target_wh=3000, nominal_power_w=3000),
+    )
+    assert b._standing.corrections == [("waterheater", 1.0)]
+    assert registry.get("waterheater") is None
