@@ -27,6 +27,16 @@ Missing file → all flags off. Parse error → all flags off + log warning.
 |------|--------|---------|-------------|
 | (none yet) | | | |
 
+## Standalone prototypes
+
+Not every prototype is a `flags.py`-gated route module living directly in this
+directory. Some are standalone services that run alongside EMHASS in their own
+container and are not toggled through `contrib-flags.yaml`.
+
+| Prototype | Status | Description |
+|-----------|--------|-------------|
+| [`flexd`](flexd/) | pre-placement prototype | Sidecar for flexible-load demand registration (EV chargers, dishwashers, etc.); folds demands into EMHASS's `naive-mpc-optim` each cycle. See `flexd/README.md`. |
+
 ## Adding a new prototype
 
 See `../AGENTS.md` § "Adding a new prototype". Brief:

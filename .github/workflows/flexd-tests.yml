@@ -1,0 +1,35 @@
+# CI for the flexd prototype (prototypes/flexd/). This repo has no other
+# GitHub Actions workflow yet, so flexd gets its own rather than being
+# wedged into a shared one that doesn't exist.
+#
+# flexd is a standalone Python package (its own pyproject.toml, its own
+# tests/conftest.py) nested inside the monorepo. The suite must run with
+# prototypes/flexd as the working directory — running from the repo root
+# fails with ModuleNotFoundError on tests.conftest, since pytest resolves
+# the test package relative to cwd, not the installed package location.
+name: flexd tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prototypes/flexd/**"
+      - ".github/workflows/flexd-tests.yml"
+  pull_request:
+    paths:
+      - "prototypes/flexd/**"
+      - ".github/workflows/flexd-tests.yml"
+
+jobs:
+  flexd-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install flexd
+        run: python -m pip install -e "prototypes/flexd[dev]"
+      - name: Run flexd test suite
+        working-directory: prototypes/flexd
+        run: python -m pytest tests -q
