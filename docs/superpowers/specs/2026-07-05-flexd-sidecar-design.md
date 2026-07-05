@@ -193,10 +193,21 @@ mqtt adapter.
      small per-day ledger (`standing_ledger.json`: per standing id, cumulative on-hours from
      previously *adopted* plans, reset at local midnight; documented assumption: consumers
      follow the plan).
-   - Corrections (e.g. the boiler already ran manually) use the same declarative trust as
-     everything else in the MVP: send an update claiming `source: config` — structural fields
-     still come from YAML on the next reseed, so a correction is a same-day override, not a
-     config change.
+   - **Runtime ownership (who may write what, per field class):** the materializer owns
+     *structural* fields (window, nominal power, daily target — always re-derived from YAML);
+     *day-state* lives only in the ledger. External writes to a materialized instance set
+     day-state markers instead of fighting the next upsert:
+     - a correction (update claiming `source: config`, e.g. "boiler already ran, only 2 h
+       left") writes `corrected_remaining` into today's ledger entry; from then until
+       midnight the materializer uses the corrected value (minus subsequently elapsed
+       on-hours) instead of `daily_hours − elapsed`, and only keeps extending
+       `deadline`/`expires_at` within the window.
+     - a delete/`done` on a standing instance writes `done_today` into the ledger; the
+       materializer skips this id until midnight (otherwise the next cycle would just
+       re-upsert it).
+     - midnight reset clears both markers with the elapsed counter; the ledger file survives
+       restart and config reload, keyed by `(id, local_date)` — so a reload never resurrects
+       a demand the user already finished for the day.
    - Startup validation: a standing id colliding with an existing dynamic demand of another
      source is a fatal config error (loud, at boot — not a runtime surprise).
 
