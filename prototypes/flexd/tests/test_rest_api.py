@@ -114,18 +114,21 @@ def test_template_retrigger_foreign_source_409(client_with_templates):
     assert r.status_code == 409
 
 
-def test_standing_delete_routes_to_mark_done(client):
+def test_standing_delete_routes_to_mark_done(client, standing_fake):
     r = client.delete("/api/v1/demands/waterheater?source=config")
     assert r.status_code == 204
+    assert standing_fake.done == ["waterheater"]
 
 
 def test_standing_delete_foreign_source_409(client):
     assert client.delete("/api/v1/demands/waterheater?source=loxone").status_code == 409
 
 
-def test_standing_put_config_is_correction(client):
+def test_standing_put_config_is_correction(client, standing_fake):
     payload = _payload(
         id="waterheater", source="config", energy_target_wh=3000, nominal_power_w=3000
     )
     r = client.put("/api/v1/demands/waterheater", json=payload)
     assert r.status_code == 200
+    assert r.json()["corrected"] is True
+    assert standing_fake.corrections == [("waterheater", 1.0)]

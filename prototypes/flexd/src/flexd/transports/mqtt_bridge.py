@@ -73,11 +73,20 @@ class MqttBridge:
                     and self._standing.is_standing(demand_id)
                     and source == "config"
                 ):
-                    energy_target_wh = data["energy_target_wh"]
-                    nominal_power_w = data["nominal_power_w"]
+                    energy = data.get("energy_target_wh")
+                    power = data.get("nominal_power_w")
+                    if (
+                        not isinstance(energy, (int, float))
+                        or not isinstance(power, (int, float))
+                        or power <= 0
+                        or energy < 0
+                    ):
+                        raise ValueError(
+                            "correction requires numeric energy_target_wh >= 0 and nominal_power_w > 0"
+                        )
                     self._standing.correct(
                         demand_id,
-                        remaining_hours=energy_target_wh / nominal_power_w,
+                        remaining_hours=energy / power,
                         now=utcnow(),
                     )
                     self._scheduler.notify_change()

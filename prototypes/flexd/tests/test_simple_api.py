@@ -146,13 +146,14 @@ def test_simple_template_retrigger_foreign_source_409(client_with_templates):
     )
 
 
-def test_simple_standing_done_routes_to_mark_done(client):
+def test_simple_standing_done_routes_to_mark_done(client, standing_fake):
     assert (
         client.post(
             "/simple/demands/waterheater/done", params={"source": "config"}
         ).text
         == "1"
     )
+    assert standing_fake.done == ["waterheater"]
 
 
 def test_simple_standing_done_foreign_source_409(client):

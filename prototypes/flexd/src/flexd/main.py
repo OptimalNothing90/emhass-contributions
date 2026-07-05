@@ -61,9 +61,16 @@ async def run() -> None:
 
     async def on_cycle_end(state: str, swept_ids: list[str]) -> None:
         bridge = bridge_holder["bridge"]
-        if bridge is not None:
-            await bridge.clear_expired(swept_ids)  # spec: no ghost retained setpoints
-            await bridge.publish_plan(state=state)
+        if bridge is None:
+            if swept_ids:
+                # no broker right now: fail the delivery so the scheduler keeps the
+                # swept ids for redelivery — otherwise their retained topics ghost forever
+                raise RuntimeError(
+                    "mqtt bridge unavailable; swept ids kept for redelivery"
+                )
+            return
+        await bridge.clear_expired(swept_ids)  # spec: no ghost retained setpoints
+        await bridge.publish_plan(state=state)
 
     scheduler = Scheduler(
         registry=registry,
@@ -90,7 +97,12 @@ async def run() -> None:
         default_ttl_s=cfg.default_ttl_s,
     )
     server = uvicorn.Server(
-        uvicorn.Config(app, host="0.0.0.0", port=8321, log_level="info")
+        uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=int(os.environ.get("FLEXD_PORT", "8321")),
+            log_level="info",
+        )
     )
 
     async def mqtt_loop() -> None:

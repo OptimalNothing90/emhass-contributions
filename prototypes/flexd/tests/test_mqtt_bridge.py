@@ -216,3 +216,14 @@ async def test_standing_set_config_source_is_correction(bridge):
     )
     assert b._standing.corrections == [("waterheater", 1.0)]
     assert registry.get("waterheater") is None
+
+
+async def test_standing_set_config_zero_power_error_event(bridge):
+    b, pub, registry = bridge
+    await b.handle_message(
+        "flexd/demands/config/waterheater/set",
+        demand_json(energy_target_wh=3000, nominal_power_w=0),
+    )
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert "flexd/demands/config/waterheater/error" in errors
+    assert b._standing.corrections == []

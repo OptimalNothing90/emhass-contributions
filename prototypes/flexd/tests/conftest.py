@@ -46,7 +46,13 @@ class FakeStandingRegistry:
 
 
 @pytest.fixture
-def client(registry):
+def standing_fake():
+    # shared with `client` so tests can assert what the transport routed to it
+    return FakeStandingRegistry()
+
+
+@pytest.fixture
+def client(registry, standing_fake):
     # deferred import: test_scheduler imports make_demand from this module,
     # so importing it at module scope here would create a circular import
     from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
@@ -58,7 +64,7 @@ def client(registry):
         view=view,
         scheduler=scheduler,
         driver=FakeDriver(result=PLAN),
-        standing=FakeStandingRegistry(),
+        standing=standing_fake,
     )
     return TestClient(app)
 

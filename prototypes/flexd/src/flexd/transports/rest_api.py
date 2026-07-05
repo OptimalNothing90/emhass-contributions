@@ -52,7 +52,11 @@ def create_app(
                 now=utcnow(),
             )
             scheduler.notify_change()
-            return registry.get(demand_id) or demand
+            return {
+                "corrected": True,
+                "applies": "next cycle",
+                "remaining_hours": demand.energy_target_wh / demand.nominal_power_w,
+            }
         reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
