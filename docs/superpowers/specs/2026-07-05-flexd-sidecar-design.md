@@ -162,6 +162,10 @@ mqtt adapter.
 4. `aggregator`: demands → `number_of_deferrable_loads`, nominal powers, `def_total_hours`,
    start/end timesteps, `def_current_power` — deterministic slot assignment (sorted by `id`);
    the demand↔slot mapping table is stored alongside the plan.
+   **Horizon clamp:** a `deadline` beyond the prediction horizon is clamped to the horizon end
+   for the solve (the demand may legitimately be deferred out of this plan entirely); the
+   per-demand view reports `clamped: true` so a consumer can tell "scheduled later" from
+   "window closed". Deadlines re-enter naturally as the rolling horizon advances.
    **Deferrable ownership contract:** when flexd calls EMHASS, its runtimeparams fully specify
    the deferrable arrays — EMHASS's statically-configured deferrable loads are overridden for
    that run (runtimeparams mechanics, not a flexd choice). Users with existing static loads
@@ -294,6 +298,17 @@ prototypes/flexd/
 | **1 (MVP)** | All six modules; REST + Simple + bidirectional MQTT; compose bundle; Loxone + Node-RED guides; unit/contract/E2E tests. Demo-ready for the ally call. |
 | 2 | HA MQTT Discovery + blueprint; ioBroker guide verified; MCP server (thin wrapper over REST); Unraid template |
 | 3 | Full recurrence/seasonal/calendar rules (beyond the MVP daily standing-demand pattern); demand templates (`dishwasher-eco`); priority pass-through once the EMHASS priority MILP exists (WS3 sibling); per-source auth tokens |
+
+## Standards alignment note (doc-only, MVP)
+
+SOTA scan 2026-07-05 (`audits/2026-07-05-flexd-sota-check.md`): no comparable OSS ships a
+generic demand registry with lifecycle; a custom JSON schema is defensible today. The
+least-effort future alignment path is **S2/FRBC** (EN 50491-12-2): flexd's fields map near-1:1
+(energy target + deadline ≈ fill-level target profile; nominal/min power ≈ power_ranges;
+`flexibility` ≈ control-type choice). The demand schema therefore avoids semantics that would
+block an S2-RM adapter, and a Phase-3 S2 adapter is expected to be a wrapper, not a redesign.
+FlexMeasures' `INFLEXIBLE|SHIFTABLE|BREAKABLE` typology independently converges on our
+`flexibility` enum — evidence the abstraction is cut right.
 
 ## Out of scope (MVP)
 
