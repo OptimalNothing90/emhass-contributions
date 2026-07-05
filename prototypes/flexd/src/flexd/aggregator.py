@@ -96,14 +96,21 @@ def build_runtimeparams(
             capacity_h = (end_step - start_step) * timestep_min / 60
             wanted_h = d.energy_target_wh / d.nominal_power_w
             truncated = wanted_h > capacity_h
-            hours = round(min(wanted_h, capacity_h), 2)
+            if truncated:
+                hours = (
+                    math.floor(capacity_h * 100) / 100
+                )  # never round past window capacity
+            else:
+                hours = round(wanted_h, 2)
             if hours < 0.01:
                 hours = 0.01  # never round a real demand to zero (silent vanish)
         nominal.append(d.nominal_power_w)
         op_hours.append(hours)
         starts.append(start_step)
         ends.append(end_step)
-        currents.append(d.current_power_w)
+        # a deactivated load must be allowed to turn off — pinning it would conflict
+        # with hours=0 and make the model infeasible
+        currents.append(0 if unschedulable else d.current_power_w)
         mapping[d.id] = {
             "slot": slot,
             "clamped": clamped,

@@ -139,3 +139,29 @@ def test_micro_demand_never_rounds_to_zero():
     )
     payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["operating_hours_of_each_deferrable_load"] == [0.01]
+
+
+def test_unschedulable_demand_pin_zeroed():
+    d = make_demand(
+        current_power_w=1800,
+        deadline=NOW - timedelta(minutes=5),
+        expires_at=NOW + timedelta(hours=1),
+    )
+    payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert payload["def_current_power"] == [0]
+    assert mapping["dishwasher"]["unschedulable"] is True
+
+
+def test_truncated_hours_never_exceed_capacity_odd_timestep():
+    d = make_demand(
+        energy_target_wh=10000,
+        nominal_power_w=2000,
+        deadline=NOW + timedelta(minutes=10),
+        expires_at=NOW + timedelta(hours=1),
+    )
+    payload, _ = build_runtimeparams(
+        [d], now=NOW, extra={}, timestep_min=10, horizon_steps=48
+    )
+    assert payload["operating_hours_of_each_deferrable_load"] == [
+        0.16
+    ]  # floor(0.1667*100)/100
