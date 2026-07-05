@@ -142,6 +142,36 @@ async def test_expired_swept_and_reported(registry):
     assert seen == [("skipped", ["old"])]
 
 
+async def test_deleted_demand_funneled_into_on_cycle_end(registry):
+    registry.upsert(
+        make_demand(
+            id="withdrawn",
+            deadline=NOW + timedelta(hours=4),
+            expires_at=NOW + timedelta(hours=5),
+        )
+    )
+    registry.delete("withdrawn", source="loxone")
+    driver, view = FakeDriver(result=PLAN), FakeView()
+    seen = []
+
+    async def on_end(state, swept_ids):
+        seen.append((state, swept_ids))
+
+    s = Scheduler(
+        registry=registry,
+        driver=driver,
+        view=view,
+        standing=FakeStanding(),
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        on_cycle_end=on_end,
+    )
+    result = await s.run_once(now=NOW)
+    assert result == "skipped"  # the only demand was deleted before the cycle ran
+    assert seen == [("skipped", ["withdrawn"])]
+
+
 async def test_notify_change_debounces(registry):
     # real-clock demand: debounced run_once uses utcnow(), a NOW-pinned demand would be expired
     registry.upsert(make_demand())

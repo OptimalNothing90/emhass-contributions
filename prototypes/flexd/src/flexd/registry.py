@@ -26,6 +26,7 @@ class Registry:
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
         self._demands: dict[str, Demand] = {}
+        self._deleted_ids: list[str] = []
         self._lock = threading.Lock()  # REST threadpool vs event-loop scheduler: _save is read-modify-write on shared files
         self._load()
 
@@ -94,8 +95,16 @@ class Registry:
         with self._lock:
             removed = self._check_owner(demand_id, source)
             del self._demands[demand_id]
+            self._deleted_ids.append(demand_id)
             self._save()
             return removed
+
+    def drain_deleted(self) -> list[str]:
+        """Demand ids deleted since the last drain — the scheduler funnels these into
+        retained-topic cleanup so no delete path can ghost MQTT topics."""
+        with self._lock:
+            drained, self._deleted_ids = self._deleted_ids, []
+            return drained
 
     def refresh(self, demand_id: str, source: str) -> Demand:
         with self._lock:

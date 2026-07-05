@@ -16,7 +16,6 @@ def create_simple_router(
     registry,
     view,
     scheduler,
-    driver,
     standing=None,
     templates=None,
     default_ttl_s: int = 3600,

@@ -39,8 +39,8 @@ mqtt:
 Add one `sensor`/`binary_sensor` pair per demand id you care about — `<id>` is whatever you
 registered the demand under. `flexd/plan/state` carries a JSON payload
 (`{"state": "ok", "generated_at": "..."}`); the `value_template` above extracts just the state
-string. Note that this topic carries the raw cycle result, so besides `ok`/`stale`/`no-run`/
-`down` it can also read `skipped` or `rejected` — treat anything other than `ok` as not-ok.
+string. Note that this topic carries the raw cycle result: `ok|skipped|rejected|down` — treat
+anything other than `ok` as not-ok.
 `flexd/availability` is flexd's MQTT last-will topic — `offline` means flexd itself
 (not just EMHASS) is unreachable.
 
@@ -75,6 +75,11 @@ data:
 `energy_wh` wins over an `hours` alternative if you pass both — see the
 [Loxone guide](loxone.md#1-register-a-demand--virtual-output-http) for the full parameter list
 (identical Simple-API regardless of client).
+
+If `id` names a standing demand (configured under `standing_demands` in `flexd.yaml`), a
+`source=config` correction updates today's remaining target instead of registering a new demand
+— to zero out a standing demand's remaining for today use `done`/`DELETE`, not a 0-energy
+correction (REST rejects `energy_target_wh: 0`).
 
 ## 3. Automation: `on` → switch / EV mode
 
@@ -123,6 +128,9 @@ templates:
         not_before: "21:30"
         finish_by: "06:30"
 ```
+
+`interruptible: false` is stored but NOT yet enforced by the optimizer (MVP): plans may still
+split a run; enforcement is a Phase-2 item.
 
 Read as: load the dishwasher and select a program in the morning (06:00–12:00) and flexd targets
 "done by 15:00 the same day". Load it in the evening (20:00 through 06:00, the bracket wraps

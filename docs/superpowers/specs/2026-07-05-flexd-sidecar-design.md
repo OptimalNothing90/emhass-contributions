@@ -110,11 +110,12 @@ filesystem paths, single writer to the registry file.
   the guides say so explicitly.
 - **Refresh semantics.** Every demand stores `ttl_s`, derived at registration
   (`expires_at − received_at`, or the `flexd.yaml` default when the Simple-API defaulted it).
-  A `refresh` (REST `POST /demands/{id}/refresh`, Simple `/refresh`, MQTT re-`set` with identical
-  payload) sets `expires_at = now + ttl_s`. A REST `PUT` is NOT a refresh: it replaces the demand
-  with a fresh declaration and re-anchors `ttl_s` to the newly declared `expires_at`
-  (time-to-expiry from now). `created_at` therefore means "anchor of the current declaration",
-  not first registration.
+  A `refresh` (REST `POST /demands/{id}/refresh`, Simple `/refresh`, MQTT
+  `flexd/demands/{source}/{id}/refresh` with an empty payload) sets `expires_at = now + ttl_s` —
+  a pure keep-alive that never touches the target/window/deadline. A REST `PUT` (and, on MQTT, a
+  re-`set` with a fresh payload) is NOT a refresh: it replaces the demand with a fresh declaration
+  and re-anchors `ttl_s` to the newly declared `expires_at` (time-to-expiry from now). `created_at`
+  therefore means "anchor of the current declaration", not first registration.
 - **Redundant energy fields.** `energy_target_wh` is authoritative. The Simple-API `hours` param
   is a convenience: when both `energy_wh` and `hours` are given, `energy_wh` wins and `hours` is
   ignored; `hours` alone is converted via `power_w` (`energy = hours × power`). Mixed
@@ -144,8 +145,9 @@ filesystem paths, single writer to the registry file.
 
 | Direction | Topic | Payload |
 |---|---|---|
-| intake | `flexd/demands/{source}/{id}/set` | demand JSON; partial update = refresh (idempotent upsert) |
+| intake | `flexd/demands/{source}/{id}/set` | demand JSON; re-anchors like PUT (fresh declaration, idempotent upsert) |
 | intake | `flexd/demands/{source}/{id}/delete` | empty |
+| intake | `flexd/demands/{source}/{id}/refresh` | empty; keep-alive — bumps `expires_at` by `ttl_s`, nothing else changes |
 | publish | `flexd/plan/state` | `ok|stale|no-run` + `generated_at` (retained) |
 | publish | `flexd/plan/demands/{id}/setpoint` | number (retained) |
 | publish | `flexd/plan/demands/{id}/on` | `1|0` (retained) |
@@ -340,9 +342,10 @@ prototypes/flexd/
   incl. `no-run`/`stale`).
 - **Contract:** emhass_driver against recorded `/api/v1/plan` fixtures (ok, no-run, schema
   drift) — no live EMHASS needed.
-- **Integration:** compose-based E2E in CI against the real EMHASS image — demand in, plan out,
-  setpoint correct, expiry sweeps. (The test class that catches happy-path-only PRs.)
-- **MQTT:** roundtrip against Mosquitto in a CI container.
+- **Integration:** compose-based E2E smoke (manual + release gate; CI runs unit+contract only) —
+  demand in, cycle triggered, per-demand view and status readable. Solver-level assertions
+  (result `ok`, correct setpoint) require a configured EMHASS and belong in the release-gate
+  checklist, not this smoke test. MQTT broker roundtrip: follow-up, not in MVP CI.
 
 ### Phases
 

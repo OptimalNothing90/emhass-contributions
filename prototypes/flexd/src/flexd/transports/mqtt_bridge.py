@@ -34,7 +34,7 @@ class MqttBridge:
         self._view = view
         self._scheduler = scheduler
         self._standing = standing
-        self._templates = templates  # wired in Task 12b
+        self._templates = templates  # template intake
 
     # -- intake ---------------------------------------------------------------
     async def handle_message(self, topic: str, payload: str) -> None:
@@ -58,13 +58,15 @@ class MqttBridge:
                     retain=False,
                 )
             return
-        # {base}/demands/{source}/{id}/{set|delete}
+        # {base}/demands/{source}/{id}/{set|delete|refresh}
         if len(parts) != 5 or parts[0] != self._base or parts[1] != "demands":
             log.debug("ignoring non-intake topic %s", topic)
             return
         _, _, source, demand_id, action = parts
         try:
-            if action == "set":
+            if action == "refresh":
+                self._registry.refresh(demand_id, source=source)
+            elif action == "set":
                 data = json.loads(payload)
                 if not isinstance(data, dict):
                     raise ValueError("payload must be a JSON object")

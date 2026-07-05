@@ -25,8 +25,8 @@ mqtt.0.flexd.availability
 ```
 
 Wire these into a VIS view, a script, or a Blockly rule exactly like any other ioBroker state.
-`flexd.plan.state` carries the raw cycle result, so besides `ok`/`stale`/`no-run`/`down` it can
-also read `skipped` or `rejected` — treat anything other than `ok` as not-ok.
+`flexd.plan.state` carries the raw cycle result: `ok|skipped|rejected|down` — treat anything
+other than `ok` as not-ok.
 
 ## 2. Register a demand via REST — javascript adapter
 

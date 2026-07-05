@@ -150,6 +150,9 @@ _ENV_MAP = {
     "FLEXD_MQTT_PORT": ("mqtt", "port"),
     "FLEXD_MQTT_USERNAME": ("mqtt", "username"),
     "FLEXD_MQTT_PASSWORD": ("mqtt", "password"),
+    "FLEXD_MQTT_BASE_TOPIC": ("mqtt", "base_topic"),
+    "FLEXD_DEFAULT_TTL_S": ("default_ttl_s",),
+    "FLEXD_STALE_AFTER_CYCLES": ("stale_after_cycles",),
 }
 
 

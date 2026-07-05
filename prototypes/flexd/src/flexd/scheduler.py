@@ -64,9 +64,10 @@ class Scheduler:
         async with self._cycle_lock:
             now = now or utcnow()
             swept = self._registry.sweep(now=now)
+            deleted = self._registry.drain_deleted()
             if self._on_cycle_end is not None:
                 self._pending_swept.extend(
-                    d.id for d in swept
+                    [d.id for d in swept] + deleted
                 )  # nothing to deliver to otherwise
             # ORDER MATTERS: materialize accrues the OLD plan's on-hours into the standing
             # ledger, so it must run before this cycle's adopt() replaces the plan.

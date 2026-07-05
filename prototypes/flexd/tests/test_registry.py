@@ -88,6 +88,13 @@ def test_returned_objects_are_copies(registry):
     assert registry.get("r2").energy_target_wh == 1200
 
 
+def test_drain_deleted_tracks_delete_then_clears(registry):
+    registry.upsert(make_demand())
+    registry.delete("dishwasher", source="loxone")
+    assert registry.drain_deleted() == ["dishwasher"]
+    assert registry.drain_deleted() == []
+
+
 def test_concurrent_writers_no_corruption(tmp_path):
     import threading
 

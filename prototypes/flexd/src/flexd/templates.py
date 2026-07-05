@@ -95,6 +95,3 @@ class TemplateManager:
         if candidate <= local_now:
             candidate += timedelta(days=1)
         return candidate.astimezone(timezone.utc)
-
-    def has(self, template_id: str) -> bool:
-        return template_id in self._defs

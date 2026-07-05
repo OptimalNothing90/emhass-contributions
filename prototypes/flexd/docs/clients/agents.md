@@ -73,6 +73,11 @@ curl -X DELETE "http://<flexd-host>:8321/api/v1/demands/ev-garage?source=agent"
 `source` must match the value used at registration. A `409` means a different source owns this
 id — an agent should treat that as "not mine to touch" rather than retrying.
 
+If `id` names a standing demand (configured under `standing_demands` in `flexd.yaml`), a
+`source=config` `PUT` is a correction to today's remaining target, not a registration — to zero
+out a standing demand's remaining for today use `done`/`DELETE`, not a 0-energy correction (REST
+rejects `energy_target_wh: 0`).
+
 ## Example agent prompt
 
 ```

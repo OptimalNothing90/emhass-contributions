@@ -46,6 +46,18 @@ def test_env_override(tmp_path, monkeypatch):
     assert cfg.mqtt.host == "broker2"
 
 
+def test_env_override_mqtt_base_topic_and_ttl(tmp_path, monkeypatch):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    monkeypatch.setenv("FLEXD_MQTT_BASE_TOPIC", "custom-base")
+    monkeypatch.setenv("FLEXD_DEFAULT_TTL_S", "7200")
+    monkeypatch.setenv("FLEXD_STALE_AFTER_CYCLES", "5")
+    cfg = load_config(p)
+    assert cfg.mqtt.base_topic == "custom-base"
+    assert cfg.default_ttl_s == 7200
+    assert cfg.stale_after_cycles == 5
+
+
 def test_standing_daily_energy_precedence(tmp_path):
     yaml_text = YAML.replace(
         "daily_hours: 5", "daily_hours: 5\n    daily_energy_wh: 9000"

@@ -22,6 +22,15 @@ def create_app(
 
     @app.post("/api/v1/demands", status_code=201)
     def register(demand: Demand):
+        if (
+            standing is not None
+            and standing.is_standing(demand.id)
+            and demand.source == "config"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="use PUT (correction) or the materializer owns this id",
+            )
         reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
@@ -162,7 +171,6 @@ def create_app(
             registry=registry,
             view=view,
             scheduler=scheduler,
-            driver=driver,
             standing=standing,
             templates=templates,
             default_ttl_s=default_ttl_s,

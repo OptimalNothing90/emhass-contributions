@@ -41,6 +41,12 @@ def test_standing_id_squat_409(client):
     assert "standing" in r.json()["detail"]
 
 
+def test_standing_id_post_config_source_409(client):
+    r = client.post("/api/v1/demands", json=_payload(id="waterheater", source="config"))
+    assert r.status_code == 409
+    assert "PUT" in r.json()["detail"]
+
+
 def test_plan_no_run(client):
     r = client.get("/api/v1/plan")
     assert r.status_code == 200

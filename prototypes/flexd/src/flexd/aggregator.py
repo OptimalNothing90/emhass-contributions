@@ -42,8 +42,6 @@ FLEXD_LEGACY_ALIASES = {
     "def_end_timestep",
 }
 
-FLEXD_OWNED_KEYS = FLEXD_CANONICAL_KEYS | FLEXD_LEGACY_ALIASES
-
 
 def build_runtimeparams(
     demands: list[Demand],

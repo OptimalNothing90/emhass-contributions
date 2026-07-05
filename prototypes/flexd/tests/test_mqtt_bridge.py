@@ -171,6 +171,22 @@ async def test_delete_unknown_is_idempotent_no_error(bridge):
     assert errors == []
 
 
+async def test_intake_refresh_bumps_expiry(bridge):
+    b, pub, registry = bridge
+    await b.handle_message("flexd/demands/loxone/dishwasher/set", demand_json())
+    old = registry.get("dishwasher").expires_at
+    await b.handle_message("flexd/demands/loxone/dishwasher/refresh", "")
+    assert registry.get("dishwasher").expires_at > old
+
+
+async def test_intake_refresh_foreign_source_error_event(bridge):
+    b, pub, registry = bridge
+    await b.handle_message("flexd/demands/loxone/dishwasher/set", demand_json())
+    await b.handle_message("flexd/demands/homeassistant/dishwasher/refresh", "")
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert "flexd/demands/homeassistant/dishwasher/error" in errors
+
+
 async def test_topic_wins_over_payload_identity(bridge):
     b, pub, registry = bridge
     await b.handle_message(

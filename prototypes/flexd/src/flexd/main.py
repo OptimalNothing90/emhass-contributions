@@ -39,6 +39,13 @@ async def run() -> None:
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
 
     registry = Registry(cfg.data_dir / "demands.json")
+    standing_ids = {sd.id for sd in cfg.standing_demands}
+    for d in registry.list_active():
+        if d.id in standing_ids and d.source != "config":
+            raise SystemExit(
+                f"flexd: persisted demand {d.id!r} (source {d.source!r}) squats a standing id — "
+                "remove it from demands.json or rename the standing demand"
+            )
     view = PlanView(
         cfg.data_dir / "adopted_plan.json",
         stale_after=timedelta(minutes=cfg.timestep_min * cfg.stale_after_cycles),
@@ -136,6 +143,7 @@ async def run() -> None:
                     )
                     await client.subscribe(f"{cfg.mqtt.base_topic}/demands/+/+/set")
                     await client.subscribe(f"{cfg.mqtt.base_topic}/demands/+/+/delete")
+                    await client.subscribe(f"{cfg.mqtt.base_topic}/demands/+/+/refresh")
                     await client.subscribe(f"{cfg.mqtt.base_topic}/templates/+/+/start")
                     async for message in client.messages:
                         try:

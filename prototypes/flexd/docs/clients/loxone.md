@@ -102,6 +102,12 @@ missed cycles. Treat anything other than `ok` as "don't trust the setpoint right
 Loxone logic block so that `status != "ok"` overrides the setpoint/`on` inputs and falls back to
 the device's own native control logic (see the [fail-safe section](#fail-safe-contract) below).
 
+**`/simple/status` cannot show `down` while no demands are registered** — a cycle with an empty
+registry skips before it ever contacts EMHASS, so a permanently-empty registry reads `no-run`,
+not `down`. Don't rely on the watchdog alone to catch "EMHASS is broken and nobody registered
+anything yet"; register at least one demand (or check `/healthz` directly) if that distinction
+matters to you.
+
 ![TODO screenshot: watchdog logic block]
 
 ## 5. Trigger a template — one button, deadline computed for you
