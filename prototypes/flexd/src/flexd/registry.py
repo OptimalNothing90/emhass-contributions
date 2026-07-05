@@ -1,0 +1,107 @@
+"""Single-writer demand registry with atomic JSON persistence."""
+
+import json
+import logging
+import os
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from flexd.models import Demand, utcnow
+
+log = logging.getLogger(__name__)
+
+
+class OwnershipError(Exception):
+    """Claimed source does not own this demand id."""
+
+
+class Registry:
+    def __init__(self, path: Path):
+        self._path = Path(path)
+        self._bak = self._path.with_suffix(self._path.suffix + ".bak")
+        self._demands: dict[str, Demand] = {}
+        self._load()
+
+    # -- persistence -------------------------------------------------------
+    def _load(self) -> None:
+        for candidate in (self._path, self._bak):
+            if not candidate.exists():
+                continue
+            try:
+                raw = json.loads(candidate.read_text(encoding="utf-8"))
+                self._demands = {d["id"]: Demand(**d) for d in raw["demands"]}
+                return
+            except Exception:
+                log.warning("registry file %s unreadable, trying fallback", candidate)
+        log.warning("no readable registry file, starting empty")
+        self._demands = {}
+
+    def _save(self) -> None:
+        # order matters: write the new state to tmp FIRST; only after it exists on disk,
+        # rotate the current file to .bak and swap tmp in. A crash at any point leaves
+        # at least one readable file (tmp write fails -> path+bak untouched; crash between
+        # replaces -> bak holds the previous state and _load falls back to it).
+        payload = json.dumps(
+            {"demands": [d.model_dump(mode="json") for d in self._demands.values()]},
+            indent=2,
+        )
+        tmp = self._path.with_suffix(".tmp")
+        tmp.write_text(payload, encoding="utf-8")
+        if self._path.exists():
+            os.replace(self._path, self._bak)
+        os.replace(tmp, self._path)
+
+    # -- ownership guard ---------------------------------------------------
+    def _check_owner(self, demand_id: str, source: str) -> Demand:
+        existing = self._demands.get(demand_id)
+        if existing is None:
+            raise KeyError(demand_id)
+        if existing.source != source:
+            raise OwnershipError(
+                f"{demand_id} is owned by {existing.source!r}, not {source!r}"
+            )
+        return existing
+
+    # -- API ----------------------------------------------------------------
+    def upsert(self, demand: Demand) -> Demand:
+        existing = self._demands.get(demand.id)
+        if existing is not None and existing.source != demand.source:
+            raise OwnershipError(
+                f"{demand.id} is owned by {existing.source!r}, not {demand.source!r}"
+            )
+        demand.updated_at = utcnow()
+        self._demands[demand.id] = demand
+        self._save()
+        return demand
+
+    def get(self, demand_id: str) -> Demand | None:
+        return self._demands.get(demand_id)
+
+    def delete(self, demand_id: str, source: str) -> Demand:
+        removed = self._check_owner(demand_id, source)
+        del self._demands[demand_id]
+        self._save()
+        return removed
+
+    def refresh(self, demand_id: str, source: str) -> Demand:
+        d = self._check_owner(demand_id, source)
+        d.expires_at = utcnow() + timedelta(seconds=d.ttl_s or 0)
+        d.updated_at = utcnow()
+        self._save()
+        return d
+
+    def list_active(self, now: datetime | None = None) -> list[Demand]:
+        now = now or utcnow()
+        return sorted(
+            (d for d in self._demands.values() if d.expires_at > now),
+            key=lambda d: d.id,
+        )
+
+    def sweep(self, now: datetime | None = None) -> list[Demand]:
+        now = now or utcnow()
+        expired = [d for d in self._demands.values() if d.expires_at <= now]
+        for d in expired:
+            del self._demands[d.id]
+        if expired:
+            self._save()
+        return expired
