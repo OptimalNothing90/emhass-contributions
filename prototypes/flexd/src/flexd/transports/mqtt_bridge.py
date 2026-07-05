@@ -41,22 +41,37 @@ class MqttBridge:
         parts = topic.split("/")
         # {base}/demands/{source}/{id}/{set|delete}
         if len(parts) != 5 or parts[0] != self._base or parts[1] != "demands":
+            log.debug("ignoring non-intake topic %s", topic)
             return
         _, _, source, demand_id, action = parts
         try:
             if action == "set":
                 reject_standing_squat(self._standing, demand_id, source)
                 data = json.loads(payload)
+                if not isinstance(data, dict):
+                    raise ValueError("payload must be a JSON object")
                 data.update({"id": demand_id, "source": source})
                 self._registry.upsert(Demand(**data))
                 self._scheduler.notify_change()
             elif action == "delete":
                 if self._standing is not None and self._standing.is_standing(demand_id):
+                    if source != "config":
+                        raise OwnershipError(
+                            f"{demand_id} is a standing demand; only source 'config' may mark it done"
+                        )
                     self._standing.mark_done(demand_id, now=utcnow())
                 else:
-                    self._registry.delete(demand_id, source=source)
+                    try:
+                        self._registry.delete(demand_id, source=source)
+                    except KeyError:
+                        log.debug(
+                            "delete for unknown %s ignored (idempotent redelivery)",
+                            demand_id,
+                        )
                 await self._clear_demand_topics(demand_id)
                 self._scheduler.notify_change()
+            else:
+                log.debug("unknown action %r on %s", action, topic)
         except (ValueError, KeyError, OwnershipError, HTTPException) as exc:
             detail = getattr(exc, "detail", None) or str(exc)
             await self._client.publish(

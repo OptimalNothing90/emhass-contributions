@@ -19,8 +19,14 @@ class FakePublisher:
 
 
 class FakeStandingRegistryLocal:
+    def __init__(self):
+        self.done = []
+
     def is_standing(self, demand_id):
         return demand_id == "waterheater"
+
+    def mark_done(self, demand_id, now):
+        self.done.append(demand_id)
 
 
 @pytest.fixture
@@ -59,6 +65,14 @@ async def test_intake_set(bridge):
 async def test_intake_invalid_publishes_error(bridge):
     b, pub, registry = bridge
     await b.handle_message("flexd/demands/loxone/dishwasher/set", "{not json")
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert errors == ["flexd/demands/loxone/dishwasher/error"]
+    assert registry.get("dishwasher") is None
+
+
+async def test_intake_non_object_json_publishes_error(bridge):
+    b, pub, registry = bridge
+    await b.handle_message("flexd/demands/loxone/dishwasher/set", "[1,2,3]")
     errors = [t for t, _, _ in pub.published if t.endswith("/error")]
     assert errors == ["flexd/demands/loxone/dishwasher/error"]
     assert registry.get("dishwasher") is None
@@ -109,6 +123,36 @@ async def test_standing_squat_error_event(bridge):
     errors = [t for t, _, _ in pub.published if t.endswith("/error")]
     assert "flexd/demands/loxone/waterheater/error" in errors
     assert registry.get("waterheater") is None
+
+
+async def test_standing_delete_requires_config_source(bridge):
+    b, pub, registry = bridge
+    await b.handle_message("flexd/demands/loxone/waterheater/delete", "")
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert "flexd/demands/loxone/waterheater/error" in errors
+    assert b._standing.done == []
+
+
+async def test_standing_delete_config_source_marks_done(bridge):
+    b, pub, registry = bridge
+    await b.handle_message("flexd/demands/config/waterheater/delete", "")
+    assert b._standing.done == ["waterheater"]
+
+
+async def test_delete_unknown_is_idempotent_no_error(bridge):
+    b, pub, registry = bridge
+    await b.handle_message("flexd/demands/loxone/ghost/delete", "")
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert errors == []
+
+
+async def test_topic_wins_over_payload_identity(bridge):
+    b, pub, registry = bridge
+    await b.handle_message(
+        "flexd/demands/loxone/dishwasher/set", demand_json(id="other", source="evil")
+    )
+    assert registry.get("dishwasher").source == "loxone"
+    assert registry.get("other") is None
 
 
 async def test_clear_expired(bridge):
