@@ -29,3 +29,4 @@ contrib-flags.yaml         # only the example lives in repo; actual config lives
 .claude/settings.local.json
 .claude/projects/
 .tmp/
+.worktrees/
