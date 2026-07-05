@@ -80,3 +80,33 @@ def test_on_hours_elapsed_today(tmp_path):
     assert (
         v.on_hours_elapsed("dishwasher", since=T0, until=T0 + timedelta(hours=1)) == 0.5
     )
+
+
+def test_reload_into_stale_after_downtime(tmp_path):
+    v = make_view(tmp_path)
+    v.adopt(PLAN, MAPPING, now=T0)
+    v2 = make_view(tmp_path)  # restart after 3h downtime
+    assert v2.state(now=T0 + timedelta(hours=3)) == "stale"
+
+
+def test_demand_view_exposes_flags(tmp_path):
+    v = make_view(tmp_path)
+    mapping = {
+        "dishwasher": {
+            "slot": 0,
+            "clamped": False,
+            "truncated": True,
+            "unschedulable": False,
+        },
+    }
+    v.adopt(PLAN, mapping, now=T0)
+    dv = v.demand_view("dishwasher", now=T0)
+    assert dv.truncated is True
+    assert dv.unschedulable is False
+
+
+def test_corrupt_view_file_starts_no_run(tmp_path):
+    path = tmp_path / "adopted_plan.json"
+    path.write_text("{broken", encoding="utf-8")
+    v = PlanView(path, stale_after=timedelta(hours=2))
+    assert v.state(now=T0) == "no-run"

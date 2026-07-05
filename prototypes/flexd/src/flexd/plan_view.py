@@ -1,10 +1,13 @@
 """Consumable view over the adopted plan: per-demand setpoints, plan state, elapsed accounting."""
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -12,6 +15,8 @@ class DemandView:
     setpoint_w: float
     on: bool
     clamped: bool
+    truncated: bool = False
+    unschedulable: bool = False
 
 
 def _parse(ts: str) -> datetime:
@@ -36,6 +41,9 @@ class PlanView:
             self._mapping = raw["mapping"]
             self._adopted_at = _parse(raw["adopted_at"])
         except Exception:
+            log.warning(
+                "adopted-plan file %s unreadable; starting as no-run", self._path
+            )
             self._plan = None  # corrupt view is recoverable: next cycle re-adopts
 
     def adopt(self, plan: dict, mapping: dict, now: datetime) -> None:
@@ -90,17 +98,37 @@ class PlanView:
         return current
 
     def demand_view(self, demand_id: str, now: datetime) -> DemandView | None:
+        """View for one demand under the CURRENT adopted plan.
+
+        Returns None when the demand is not part of the adopted plan's mapping
+        (unknown id, or registered after the last solve). Callers must resolve
+        registry membership separately: registered-but-unmapped means
+        'pending next solve', not 'unknown'.
+        """
         if self._plan is None or demand_id not in self._mapping:
             return None
-        slot = self._mapping[demand_id]["slot"]
-        clamped = self._mapping[demand_id].get("clamped", False)
+        entry = self._mapping[demand_id]
+        slot = entry["slot"]
+        clamped = entry.get("clamped", False)
         rec = self._record_at(now)
         power = float(rec.get(f"P_deferrable{slot}", 0)) if rec else 0.0
-        return DemandView(setpoint_w=power, on=power > 0, clamped=clamped)
+        return DemandView(
+            setpoint_w=power,
+            on=power > 0,
+            clamped=clamped,
+            truncated=entry.get("truncated", False),
+            unschedulable=entry.get("unschedulable", False),
+        )
 
     def on_hours_elapsed(
         self, demand_id: str, since: datetime, until: datetime
     ) -> float:
+        """On-hours from the CURRENT adopted plan only, records fully inside [since, until).
+
+        Cross-adoption accumulation is the standing ledger's job (the scheduler
+        accrues before each adoption). Partial slots at re-solve boundaries are
+        dropped (undercount of at most one slot per re-solve) — accepted.
+        """
         if self._plan is None or demand_id not in self._mapping:
             return 0.0
         slot = self._mapping[demand_id]["slot"]
