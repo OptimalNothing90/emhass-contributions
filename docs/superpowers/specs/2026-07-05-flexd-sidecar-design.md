@@ -91,6 +91,26 @@ filesystem paths, single writer to the registry file.
 }
 ```
 
+### Identity, ownership, and id rules (MVP contract)
+
+- **`id` is globally unique** across all sources. The registry key is `id` alone; `source` is an
+  ownership attribute. A client-supplied `id` that already exists under a different `source` is
+  rejected (REST 409; MQTT error event). This keeps the Simple-API and plan topics (`{id}` only)
+  collision-free.
+- **Ownership is declarative in the MVP.** flexd runs on a trusted LAN; a caller's `source` claim
+  is not authenticated. Update/delete is refused when the claimed `source` differs from the
+  stored one — a guard against accidents, not against malice. Real per-source tokens are Phase 3;
+  the guides say so explicitly.
+- **Refresh semantics.** Every demand stores `ttl_s`, derived at registration
+  (`expires_at − received_at`, or the `flexd.yaml` default when the Simple-API defaulted it).
+  A `refresh` (REST `PUT` without body changes, Simple `/refresh`, MQTT re-`set` with same
+  payload) sets `expires_at = now + ttl_s`. A `PUT`/`set` carrying a new `expires_at` overrides
+  the TTL and re-derives `ttl_s`.
+- **Redundant energy fields.** `energy_target_wh` is authoritative. The Simple-API `hours` param
+  is a convenience: when both `energy_wh` and `hours` are given, `energy_wh` wins and `hours` is
+  ignored; `hours` alone is converted via `power_w` (`energy = hours × power`). Mixed
+  inconsistent values are not an error — the precedence rule is the contract.
+
 ### REST (`/api/v1`, full OpenAPI served at `/openapi.json` + `/docs`)
 
 - `POST /demands` · `PUT /demands/{id}` (update = refresh) · `DELETE /demands/{id}` · `GET /demands`
@@ -106,7 +126,8 @@ filesystem paths, single writer to the registry file.
 - `POST /simple/demands/register?source=loxone&id=spuelmaschine&energy_wh=1200&power_w=2000&hours=4&deadline_in_h=8`
   — query params only, generous defaults (e.g. `expires_at` defaults to deadline + 1 h)
 - `POST /simple/demands/{id}/done` (= withdraw/DELETE) · `POST /simple/demands/{id}/refresh` (= bump `expires_at`)
-- `GET /simple/status` → `ok|stale|no-run|down` (feeds a Loxone watchdog block)
+- `GET /simple/status` → `ok|stale|no-run|down` (feeds a Loxone watchdog block; `down` =
+  EMHASS unreachable — the one state Simple-API adds over `plan/state`)
 
 ### MQTT (bidirectional, base topic `flexd/`)
 
@@ -123,7 +144,9 @@ filesystem paths, single writer to the registry file.
 
 MQTT lifecycle concern (register-over-MQTT is fiddly) is defused by: `set` = idempotent
 upsert+refresh, retained result topics, and the mandatory `expires_at` — a dead publisher's
-demand simply ages out. Home Assistant MQTT Discovery config topics are Phase 2; the topic
+demand simply ages out. **Retained-topic cleanup:** when a demand is withdrawn or expires, flexd
+publishes empty retained payloads to its `setpoint`/`on` topics to clear them — no ghost
+setpoints after removal. Home Assistant MQTT Discovery config topics are Phase 2; the topic
 layout above is already cut to make that additive. ioBroker consumes the same topics via its
 mqtt adapter.
 
@@ -139,6 +162,16 @@ mqtt adapter.
 4. `aggregator`: demands → `number_of_deferrable_loads`, nominal powers, `def_total_hours`,
    start/end timesteps, `def_current_power` — deterministic slot assignment (sorted by `id`);
    the demand↔slot mapping table is stored alongside the plan.
+   **Deferrable ownership contract:** when flexd calls EMHASS, its runtimeparams fully specify
+   the deferrable arrays — EMHASS's statically-configured deferrable loads are overridden for
+   that run (runtimeparams mechanics, not a flexd choice). Users with existing static loads
+   migrate them into `flexd.yaml` as **standing demands** (auto-registered at startup,
+   auto-refreshed — a pool pump or water heater is one YAML block); the guides walk through
+   this. Rule of thumb in docs: *either* EMHASS owns its deferrables *or* flexd does — not both.
+   **Escape hatch:** `flexd.yaml: extra_runtime_params` — a JSON object merged into every optim
+   POST (e.g. `soc_init` source overrides, custom weights). flexd validates it is a dict, passes
+   it through untouched, and never overrides its own deferrable keys with it (flexd keys win on
+   conflict, conflict logged).
 5. `emhass_driver`: POST `naive-mpc-optim` (awaited) → GET `/api/v1/plan`.
 6. Response guards: `status == ok`? `emhass_schema_version` known? `generated_at` newer than
    the last accepted plan? Only then does `plan_view` adopt + publish.
@@ -171,7 +204,8 @@ blueprint) implements it up front.
 ```
 prototypes/flexd/
 ├─ docker-compose.yml      # 3 services: flexd, emhass, mosquitto (broker optional via profile)
-├─ flexd.yaml              # ONE config file: emhass_url, mqtt, timestep, defaults — every option commented
+├─ flexd.yaml              # ONE config file: emhass_url, mqtt, timestep, defaults, standing demands,
+│                          #   extra_runtime_params — every option commented
 ├─ Dockerfile              # python:3.12-slim, non-root, HEALTHCHECK → /healthz
 ├─ src/flexd/              # the six modules
 ├─ tests/
