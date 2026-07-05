@@ -1,44 +1,4 @@
-from datetime import datetime, timedelta, timezone
-
-import pytest
-from fastapi.testclient import TestClient
-
-from flexd.transports.rest_api import create_app
-from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
-
-NOW_REAL = datetime.now(timezone.utc)
-
-
-class FakeStandingRegistry:
-    def is_standing(self, demand_id):
-        return demand_id == "waterheater"
-
-
-@pytest.fixture
-def client(registry):
-    view = FakeView()
-    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
-    app = create_app(
-        registry=registry,
-        view=view,
-        scheduler=scheduler,
-        driver=FakeDriver(result=PLAN),
-        standing=FakeStandingRegistry(),
-    )
-    return TestClient(app)
-
-
-def _payload(**kw):
-    d = dict(
-        id="dishwasher",
-        source="loxone",
-        energy_target_wh=1200,
-        nominal_power_w=2000,
-        deadline=(NOW_REAL + timedelta(hours=8)).isoformat(),
-        expires_at=(NOW_REAL + timedelta(hours=9)).isoformat(),
-    )
-    d.update(kw)
-    return d
+from tests.conftest import _payload
 
 
 def test_crud_roundtrip(client):

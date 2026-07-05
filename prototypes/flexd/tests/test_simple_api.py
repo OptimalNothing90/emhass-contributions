@@ -1,0 +1,101 @@
+def test_simple_register_and_setpoint(client):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone",
+            id="spuelmaschine",
+            energy_wh=1200,
+            power_w=2000,
+            deadline_in_h=8,
+        ),
+    )
+    assert r.status_code == 201
+    assert r.text == "1"
+    # no plan adopted yet -> setpoint 0, plain text
+    r = client.get("/simple/demands/spuelmaschine/setpoint")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    assert r.text == "0"
+    assert client.get("/simple/demands/spuelmaschine/on").text == "0"
+
+
+def test_simple_hours_only(client):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(source="loxone", id="pool", power_w=750, hours=4, deadline_in_h=10),
+    )
+    assert r.status_code == 201
+
+
+def test_simple_energy_wins_over_hours(client, registry):
+    client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone",
+            id="pool",
+            power_w=750,
+            hours=4,
+            energy_wh=1500,
+            deadline_in_h=10,
+        ),
+    )
+    assert registry.get("pool").energy_target_wh == 1500
+
+
+def test_simple_done_and_refresh(client):
+    client.post(
+        "/simple/demands/register",
+        params=dict(source="loxone", id="pool", power_w=750, hours=4, deadline_in_h=10),
+    )
+    assert (
+        client.post("/simple/demands/pool/refresh", params={"source": "loxone"}).text
+        == "1"
+    )
+    assert (
+        client.post("/simple/demands/pool/done", params={"source": "loxone"}).text
+        == "1"
+    )
+    assert client.get("/simple/demands/pool/setpoint").status_code == 404
+
+
+def test_simple_status(client):
+    assert client.get("/simple/status").text in {"ok", "stale", "no-run", "down"}
+
+
+def test_simple_register_missing_power_400(client):
+    r = client.post(
+        "/simple/demands/register", params=dict(source="loxone", id="x", hours=4)
+    )
+    assert r.status_code == 400
+
+
+def test_simple_register_missing_energy_and_hours_400(client):
+    r = client.post(
+        "/simple/demands/register", params=dict(source="loxone", id="x", power_w=500)
+    )
+    assert r.status_code == 400
+
+
+def test_simple_squat_guard_409(client):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone", id="waterheater", power_w=3000, hours=2, deadline_in_h=4
+        ),
+    )
+    assert r.status_code == 409
+
+
+def test_simple_wrong_source_conflict(client):
+    client.post(
+        "/simple/demands/register",
+        params=dict(source="loxone", id="pool", power_w=750, hours=4, deadline_in_h=10),
+    )
+    assert (
+        client.post("/simple/demands/pool/done", params={"source": "ha"}).status_code
+        == 409
+    )
+    assert (
+        client.post("/simple/demands/pool/refresh", params={"source": "ha"}).status_code
+        == 409
+    )

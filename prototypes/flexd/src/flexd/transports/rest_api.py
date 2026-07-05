@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Query, Response
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError
+from flexd.transports.simple_api import create_simple_router
 
 
 def create_app(
@@ -117,5 +118,16 @@ def create_app(
     async def healthz():
         emhass_ok = await driver.healthy() if hasattr(driver, "healthy") else True
         return {"status": "ok", "emhass": "ok" if emhass_ok else "down"}
+
+    app.include_router(
+        create_simple_router(
+            registry=registry,
+            view=view,
+            scheduler=scheduler,
+            driver=driver,
+            standing=standing,
+            default_ttl_s=default_ttl_s,
+        )
+    )
 
     return app
