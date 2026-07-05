@@ -62,3 +62,33 @@ def test_bad_window_rejected(tmp_path):
     p.write_text(YAML.replace("06:00-22:00", "22:00-06:00"), encoding="utf-8")
     with pytest.raises(ValueError, match="window"):
         load_config(p)
+
+
+def test_bad_timezone_rejected(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML.replace("Europe/Berlin", "Not/A_Real_Zone"), encoding="utf-8")
+    with pytest.raises(ValueError, match="timezone"):
+        load_config(p)
+
+
+def test_missing_file_boot_error(tmp_path):
+    with pytest.raises(SystemExit, match="not found"):
+        load_config(tmp_path / "nope.yaml")
+
+
+def test_non_dict_root_boot_error(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text("- just\n- a\n- list\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="mapping"):
+        load_config(p)
+
+
+def test_duplicate_standing_ids_rejected(tmp_path):
+    dup = (
+        YAML
+        + '  - id: waterheater\n    nominal_power_w: 1000\n    daily_hours: 2\n    window: "08:00-20:00"\n'
+    )
+    p = tmp_path / "flexd.yaml"
+    p.write_text(dup, encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate"):
+        load_config(p)

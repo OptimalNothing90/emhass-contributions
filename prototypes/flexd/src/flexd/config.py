@@ -3,6 +3,7 @@
 import os
 import re
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -67,6 +68,15 @@ class FlexdConfig(BaseModel):
     extra_runtime_params: dict = {}
     standing_demands: list[StandingDefinition] = []
 
+    @field_validator("timezone")
+    @classmethod
+    def _valid_tz(cls, v: str) -> str:
+        try:
+            ZoneInfo(v)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"unknown IANA timezone {v!r}") from exc
+        return v
+
 
 _ENV_MAP = {
     "FLEXD_EMHASS_URL": ("emhass_url",),
@@ -83,7 +93,15 @@ _ENV_MAP = {
 
 
 def load_config(path: Path | str) -> FlexdConfig:
-    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise SystemExit(f"flexd: config file not found at {path}")
+    raw = yaml.safe_load(text) or {}
+    if not isinstance(raw, dict):
+        raise SystemExit(
+            f"flexd: config root must be a mapping, got {type(raw).__name__}"
+        )
     for env, keypath in _ENV_MAP.items():
         val = os.environ.get(env)
         if val is None:
@@ -93,6 +111,11 @@ def load_config(path: Path | str) -> FlexdConfig:
             node = node.setdefault(key, {})
         node[keypath[-1]] = val
     cfg = FlexdConfig(**raw)
+    seen_ids: set[str] = set()
+    for sd in cfg.standing_demands:
+        if sd.id in seen_ids:
+            raise ValueError(f"duplicate standing demand id {sd.id!r}")
+        seen_ids.add(sd.id)
     for sd in cfg.standing_demands:
         sd.effective_daily_hours  # raises at boot if neither hours nor energy given
     return cfg
