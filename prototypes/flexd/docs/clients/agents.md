@@ -58,7 +58,7 @@ Field meanings:
 | `clamped: true` | the deadline falls beyond flexd's prediction horizon; the demand may legitimately schedule later as the rolling horizon advances |
 | `truncated: true` | the requested energy was cut down to fit the available window so this one demand couldn't make the whole solve infeasible |
 | `unschedulable: true` | the deadline/window is expired or degenerate; the load was deactivated for this plan rather than left silently unconstrained |
-| `state` | overall plan health: `ok`, `stale`, `no-run`, or `down` — see the fail-safe contract below |
+| `state` | overall plan health: `ok`, `stale`, or `no-run` — see the fail-safe contract below. `down` (EMHASS unreachable) is NOT surfaced here — an agent that needs it must also check `GET /healthz` (field `emhass`) or `/simple/status` |
 
 A 404 here means the `id` was never registered (or has already expired and been swept) — not
 "no plan yet". Compare against `GET /api/v1/demands` to check whether the id still exists in the
@@ -96,9 +96,11 @@ detail to the user instead of retrying silently.
 ## Fail-safe contract
 
 - Actuate (or report as actionable) only when `state == "ok"` **and** `on == true`.
-- On `stale`, `down`, `no-run`, or a request timeout: report that flexd's recommendation is not
+- On `stale`, `no-run`, or a request timeout: report that flexd's recommendation is not
   currently trustworthy, and defer to the device's own native/manual control rather than acting
-  on a stale setpoint.
+  on a stale setpoint. The REST `state` field never reads `down` — to detect an unreachable
+  EMHASS, also check `GET /healthz` (field `emhass`) or `/simple/status`, and treat `down`
+  there the same way.
 - Never expose flexd, EMHASS, or the MQTT broker to the internet unauthenticated. Keep them on
   the LAN, or put a reverse proxy with authentication in front — an agent with unauthenticated
   internet access to flexd's REST API could register or withdraw arbitrary demands. flexd's

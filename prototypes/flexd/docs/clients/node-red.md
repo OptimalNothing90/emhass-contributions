@@ -52,10 +52,10 @@ In Node-RED: hamburger menu → Import → paste the JSON below → Import to a 
     "topic": "",
     "payload": "",
     "payloadType": "date",
-    "wires": [["flexd-poll-setpoint", "flexd-poll-status"]]
+    "wires": [["flexd-poll-on", "flexd-poll-status"]]
   },
   {
-    "id": "flexd-poll-setpoint",
+    "id": "flexd-poll-on",
     "type": "http request",
     "name": "GET /simple/demands/dishwasher/on",
     "method": "GET",

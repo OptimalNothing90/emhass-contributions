@@ -39,7 +39,9 @@ mqtt:
 Add one `sensor`/`binary_sensor` pair per demand id you care about — `<id>` is whatever you
 registered the demand under. `flexd/plan/state` carries a JSON payload
 (`{"state": "ok", "generated_at": "..."}`); the `value_template` above extracts just the state
-string. `flexd/availability` is flexd's MQTT last-will topic — `offline` means flexd itself
+string. Note that this topic carries the raw cycle result, so besides `ok`/`stale`/`no-run`/
+`down` it can also read `skipped` or `rejected` — treat anything other than `ok` as not-ok.
+`flexd/availability` is flexd's MQTT last-will topic — `offline` means flexd itself
 (not just EMHASS) is unreachable.
 
 ## 2. `rest_command` for register / done / refresh
