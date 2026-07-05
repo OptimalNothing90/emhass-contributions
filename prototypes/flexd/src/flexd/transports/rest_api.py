@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Query, Response
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError
+from flexd.transports import reject_standing_squat
 from flexd.transports.simple_api import create_simple_router
 
 
@@ -12,21 +13,9 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="flexd", version="0.1.0")
 
-    def _reject_standing_squat(demand: Demand) -> None:
-        # ownership guard only protects while an instance EXISTS; outside the window
-        # a dynamic client could otherwise squat the id and starve the standing demand
-        if (
-            standing is not None
-            and standing.is_standing(demand.id)
-            and demand.source != "config"
-        ):
-            raise HTTPException(
-                status_code=409, detail=f"{demand.id} is reserved for a standing demand"
-            )
-
     @app.post("/api/v1/demands", status_code=201)
     def register(demand: Demand):
-        _reject_standing_squat(demand)
+        reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
         except OwnershipError as exc:
@@ -44,7 +33,7 @@ def create_app(
         ttl becomes time-to-that-expiry from now. That is the declared contract."""
         if demand.id != demand_id:
             raise HTTPException(status_code=400, detail="id mismatch")
-        _reject_standing_squat(demand)
+        reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
         except OwnershipError as exc:

@@ -4,9 +4,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
+from pydantic import ValidationError
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError
+from flexd.transports import reject_standing_squat
 
 
 def create_simple_router(
@@ -18,10 +20,10 @@ def create_simple_router(
     def register(
         source: str = Query(...),
         id: str = Query(...),
-        power_w: float | None = Query(default=None),
-        energy_wh: float | None = Query(default=None),
-        hours: float | None = Query(default=None),
-        deadline_in_h: float = Query(default=8),
+        power_w: float | None = Query(default=None, gt=0),
+        energy_wh: float | None = Query(default=None, gt=0),
+        hours: float | None = Query(default=None, gt=0),
+        deadline_in_h: float = Query(default=8, gt=0),
         window_start_in_h: float | None = Query(default=None),
     ):
         if power_w is None:
@@ -32,10 +34,7 @@ def create_simple_router(
                     status_code=400, detail="energy_wh or hours required"
                 )
             energy_wh = hours * power_w
-        if standing is not None and standing.is_standing(id) and source != "config":
-            raise HTTPException(
-                status_code=409, detail=f"{id} is reserved for a standing demand"
-            )
+        reject_standing_squat(standing, id, source)
         now = utcnow()
         deadline = now + timedelta(hours=deadline_in_h)
         try:
@@ -46,12 +45,14 @@ def create_simple_router(
                     energy_target_wh=energy_wh,
                     nominal_power_w=power_w,
                     window_start=(now + timedelta(hours=window_start_in_h))
-                    if window_start_in_h
+                    if window_start_in_h is not None
                     else None,
                     deadline=deadline,
                     expires_at=deadline + timedelta(seconds=default_ttl_s),
                 )
             )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         except OwnershipError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
@@ -59,15 +60,17 @@ def create_simple_router(
 
     @router.get("/demands/{demand_id}/setpoint")
     def setpoint(demand_id: str):
-        if registry.get(demand_id) is None:
-            raise HTTPException(status_code=404, detail="unknown demand")
+        """Polling endpoints never 404: a Loxone Virtual Input reads '0' unambiguously
+        as OFF regardless of its error config. Unknown, expired and pending demands
+        are all 'off'. /simple/status is the health channel."""
         dv = view.demand_view(demand_id, now=utcnow())
-        return str(int(dv.setpoint_w)) if dv else "0"
+        return str(round(dv.setpoint_w)) if dv else "0"
 
     @router.get("/demands/{demand_id}/on")
     def on(demand_id: str):
-        if registry.get(demand_id) is None:
-            raise HTTPException(status_code=404, detail="unknown demand")
+        """Polling endpoints never 404: a Loxone Virtual Input reads '0' unambiguously
+        as OFF regardless of its error config. Unknown, expired and pending demands
+        are all 'off'. /simple/status is the health channel."""
         dv = view.demand_view(demand_id, now=utcnow())
         return "1" if (dv and dv.on) else "0"
 

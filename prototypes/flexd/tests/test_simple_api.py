@@ -55,7 +55,9 @@ def test_simple_done_and_refresh(client):
         client.post("/simple/demands/pool/done", params={"source": "loxone"}).text
         == "1"
     )
-    assert client.get("/simple/demands/pool/setpoint").status_code == 404
+    r = client.get("/simple/demands/pool/setpoint")
+    assert r.status_code == 200
+    assert r.text == "0"
 
 
 def test_simple_status(client):
@@ -99,3 +101,16 @@ def test_simple_wrong_source_conflict(client):
         client.post("/simple/demands/pool/refresh", params={"source": "ha"}).status_code
         == 409
     )
+
+
+def test_simple_negative_power_422(client):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(source="loxone", id="neg", power_w=-100, hours=2),
+    )
+    assert r.status_code == 422
+
+
+def test_simple_setpoint_never_404(client):
+    assert client.get("/simple/demands/ghost/setpoint").text == "0"
+    assert client.get("/simple/demands/ghost/on").text == "0"
