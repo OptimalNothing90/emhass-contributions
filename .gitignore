@@ -24,6 +24,7 @@ repomix-output.*
 data/
 docker/dev-data/
 contrib-flags.yaml         # only the example lives in repo; actual config lives in container volume
+prototypes/flexd/flexd.yaml # only flexd.yaml.example lives in repo; e2e smoke copies it locally
 
 # Claude Code per-user state (skills + shared settings ARE tracked)
 .claude/settings.local.json

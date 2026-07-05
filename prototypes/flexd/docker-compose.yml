@@ -1,0 +1,29 @@
+services:
+  flexd:
+    build: .
+    ports: ["8321:8321"]
+    volumes:
+      - ./flexd.yaml:/config/flexd.yaml:ro
+      - flexd-data:/data
+    environment:
+      FLEXD_EMHASS_URL: http://emhass:5000
+      FLEXD_MQTT_HOST: mosquitto
+    depends_on: [emhass]
+
+  emhass:
+    image: ghcr.io/davidusb-geek/emhass:latest
+    ports: ["5000:5000"]
+    volumes:
+      - emhass-data:/data
+    # bring-your-own EMHASS: start flexd alone and point FLEXD_EMHASS_URL at your instance
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    profiles: ["mqtt"]
+    ports: ["1883:1883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+volumes:
+  flexd-data:
+  emhass-data:
