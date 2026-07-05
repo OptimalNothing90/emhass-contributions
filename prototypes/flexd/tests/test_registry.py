@@ -70,3 +70,16 @@ def test_corrupt_file_and_bak_starts_empty(tmp_path):
     (tmp_path / "demands.json.bak").write_text("also corrupt", encoding="utf-8")
     r = Registry(path)
     assert r.list_active() == []
+
+
+def test_returned_objects_are_copies(registry):
+    d = make_demand()
+    registry.upsert(d)
+    got = registry.get("dishwasher")
+    got.energy_target_wh = 99999
+    assert registry.get("dishwasher").energy_target_wh == 1200
+    listed = registry.list_active()[0]
+    listed.energy_target_wh = 88888
+    assert registry.get("dishwasher").energy_target_wh == 1200
+    d.energy_target_wh = 77777  # caller's original object also decoupled
+    assert registry.get("dishwasher").energy_target_wh == 1200

@@ -16,6 +16,11 @@ class OwnershipError(Exception):
 
 
 class Registry:
+    """Single-writer demand registry with atomic JSON persistence.
+
+    Returned Demand objects are defensive copies; mutating them never changes registry state.
+    """
+
     def __init__(self, path: Path):
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
@@ -47,6 +52,8 @@ class Registry:
         )
         tmp = self._path.with_suffix(".tmp")
         tmp.write_text(payload, encoding="utf-8")
+        # no fsync before the renames: on power loss the bak fallback recovers the prior
+        # state; accepted for the LAN MVP.
         if self._path.exists():
             os.replace(self._path, self._bak)
         os.replace(tmp, self._path)
@@ -64,6 +71,7 @@ class Registry:
 
     # -- API ----------------------------------------------------------------
     def upsert(self, demand: Demand) -> Demand:
+        demand = demand.model_copy()
         existing = self._demands.get(demand.id)
         if existing is not None and existing.source != demand.source:
             raise OwnershipError(
@@ -75,7 +83,8 @@ class Registry:
         return demand
 
     def get(self, demand_id: str) -> Demand | None:
-        return self._demands.get(demand_id)
+        d = self._demands.get(demand_id)
+        return d.model_copy() if d is not None else None
 
     def delete(self, demand_id: str, source: str) -> Demand:
         removed = self._check_owner(demand_id, source)
@@ -88,12 +97,12 @@ class Registry:
         d.expires_at = utcnow() + timedelta(seconds=d.ttl_s or 0)
         d.updated_at = utcnow()
         self._save()
-        return d
+        return d.model_copy()
 
     def list_active(self, now: datetime | None = None) -> list[Demand]:
         now = now or utcnow()
         return sorted(
-            (d for d in self._demands.values() if d.expires_at > now),
+            (d.model_copy() for d in self._demands.values() if d.expires_at > now),
             key=lambda d: d.id,
         )
 
