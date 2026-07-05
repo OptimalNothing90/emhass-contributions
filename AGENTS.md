@@ -45,7 +45,7 @@ pre-commit install                  # if not already
 
 ## Submodule policy
 
-Pinned to **upstream release tags** (`v0.17.2`, etc.) — never to master HEAD or to a fork branch. Reasoning in [the design spec](https://github.com/OptimalNothing90/emhass-contributions/blob/main/board/design.md).
+Pinned to a **fixed upstream commit** — a release tag when one carries what we build against, otherwise a pinned upstream-`master` SHA (never a floating ref, never a fork branch). Current pin: `f11d8dea` (master past `v0.17.8`) because no tag yet contains `GET /api/v1/plan` / `plan_store` (PR #995), which `prototypes/flexd/` builds against. Re-pin to the next release tag that includes #995. When bumping the pin, update this section and the README `upstream/` bullet in the same commit.
 
 ## Production safety
 
