@@ -1,7 +1,11 @@
+import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from flexd.config import StandingDefinition
+from flexd.models import Demand
 from flexd.registry import Registry
 from flexd.standing import StandingManager
 
@@ -127,3 +131,85 @@ def test_ledger_survives_restart(tmp_path):
     )
     mgr2.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg2.get("waterheater") is None
+
+
+def test_target_fully_consumed_not_materialized(tmp_path):
+    reg, mgr = mk(tmp_path)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 5.0)
+    assert reg.get("waterheater") is None
+
+
+def test_squatted_id_degrades_one_demand_not_the_cycle(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    # a dynamic demand squats the standing id before materialize runs
+    reg.upsert(
+        Demand(
+            id="waterheater",
+            source="loxone",
+            energy_target_wh=1000,
+            nominal_power_w=2000,
+            deadline=NOON_UTC + timedelta(hours=4),
+            expires_at=NOON_UTC + timedelta(hours=4),
+        )
+    )
+    other = StandingDefinition(
+        id="bbb-heater", nominal_power_w=1000, daily_hours=2, window="06:00-22:00"
+    )
+    mgr = StandingManager(
+        [DEF, other],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg,
+    )
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)  # must not raise
+    assert reg.get("bbb-heater") is not None  # sibling still materialized
+    assert reg.get("waterheater").source == "loxone"  # squatter untouched
+
+
+def test_naive_last_accrual_tolerated(tmp_path):
+    # a hand-edited or legacy ledger may carry a naive last_accrual string
+    (tmp_path / "ledger.json").write_text(
+        json.dumps(
+            {
+                "waterheater:2026-07-05": {
+                    "done": False,
+                    "day_target_override_h": None,
+                    "elapsed_h": 1.0,
+                    "last_accrual": "2026-07-05T11:00:00",  # naive: treated as UTC
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    reg, mgr = mk(tmp_path)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)  # must not crash
+    assert reg.get("waterheater") is not None
+
+
+def test_past_day_ledger_keys_pruned(tmp_path):
+    (tmp_path / "ledger.json").write_text(
+        json.dumps(
+            {
+                "waterheater:2026-07-04": {
+                    "done": True,
+                    "day_target_override_h": None,
+                    "elapsed_h": 5.0,
+                    "last_accrual": None,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    reg, mgr = mk(tmp_path)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    saved = json.loads((tmp_path / "ledger.json").read_text(encoding="utf-8"))
+    assert "waterheater:2026-07-04" not in saved
+    assert "waterheater:2026-07-05" in saved
+
+
+def test_unknown_id_correct_raises(tmp_path):
+    reg, mgr = mk(tmp_path)
+    with pytest.raises(KeyError):
+        mgr.correct("not-a-standing-id", remaining_hours=1.0, now=NOON_UTC)
+    with pytest.raises(KeyError):
+        mgr.mark_done("not-a-standing-id", now=NOON_UTC)

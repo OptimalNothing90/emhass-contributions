@@ -4,6 +4,7 @@ Day-state (elapsed accrual, corrections, done) lives in a ledger keyed (id, loca
 """
 
 import json
+import logging
 import os
 from datetime import datetime, time, timezone
 from pathlib import Path
@@ -11,7 +12,9 @@ from zoneinfo import ZoneInfo
 
 from flexd.config import StandingDefinition
 from flexd.models import Demand
-from flexd.registry import Registry
+from flexd.registry import OwnershipError, Registry
+
+log = logging.getLogger(__name__)
 
 CONFIG_SOURCE = "config"
 
@@ -76,56 +79,74 @@ class StandingManager:
         MUST run before this cycle's plan is adopted: it accrues the OLD plan's
         on-hours into the ledger (rolling MPC plans start at 'now', so the
         current plan alone never carries the whole day).
+
+        After downtime across local midnight, yesterday's un-accrued tail is
+        deliberately dropped: yesterday's ledger entry and instance are both
+        dead; today accrues from today's window start.
         """
+        # day-keyed: past days are dead weight; prune so the file can't grow unbounded
+        today = now.astimezone(self._tz).date().isoformat()
+        self._ledger = {k: v for k, v in self._ledger.items() if k.endswith(today)}
         for defn in self._defs.values():
-            win_start, win_end = self._window_utc(defn, now)
-            entry = self._entry(defn.id, now)
-            # accrue old-plan on-hours since the last accrual, clamped to the window
-            accrual_start = win_start
-            if entry["last_accrual"] is not None:
-                accrual_start = max(
-                    datetime.fromisoformat(entry["last_accrual"]), win_start
+            try:
+                win_start, win_end = self._window_utc(defn, now)
+                entry = self._entry(defn.id, now)
+                # accrue old-plan on-hours since the last accrual, clamped to the window
+                accrual_start = win_start
+                if entry["last_accrual"] is not None:
+                    last = datetime.fromisoformat(entry["last_accrual"])
+                    if last.tzinfo is None:
+                        last = last.replace(tzinfo=timezone.utc)
+                    accrual_start = max(last, win_start)
+                accrual_end = min(now, win_end)
+                if accrual_end > accrual_start:
+                    entry["elapsed_h"] += elapsed_lookup(
+                        defn.id, accrual_start, accrual_end
+                    )
+                    entry["last_accrual"] = accrual_end.isoformat()
+                if entry["done"] or not (win_start <= now < win_end):
+                    continue
+                override = entry["day_target_override_h"]
+                # explicit None-check: correct(remaining=0.0) legitimately writes override 0.0
+                target_h = (
+                    override if override is not None else defn.effective_daily_hours
                 )
-            accrual_end = min(now, win_end)
-            if accrual_end > accrual_start:
-                entry["elapsed_h"] += elapsed_lookup(
-                    defn.id, accrual_start, accrual_end
+                remaining_h = target_h - entry["elapsed_h"]
+                if remaining_h <= 0:
+                    # a previously-materialized instance must not keep soliciting energy
+                    if self._registry.get(defn.id) is not None:
+                        self._registry.delete(defn.id, source=CONFIG_SOURCE)
+                    continue
+                self._registry.upsert(
+                    Demand(
+                        id=defn.id,
+                        source=CONFIG_SOURCE,
+                        type=defn.type,
+                        nominal_power_w=defn.nominal_power_w,
+                        energy_target_wh=remaining_h * defn.nominal_power_w,
+                        window_start=None,  # materialize only runs inside the window (guard above); pre-window seeding is future work
+                        deadline=win_end,
+                        expires_at=win_end,
+                        interruptible=defn.interruptible,
+                    )
                 )
-                entry["last_accrual"] = accrual_end.isoformat()
-            if entry["done"] or not (win_start <= now < win_end):
+            except OwnershipError as exc:
+                log.warning("standing %s skipped this cycle: %s", defn.id, exc)
                 continue
-            override = entry["day_target_override_h"]
-            # explicit None-check: correct(remaining=0.0) legitimately writes override 0.0
-            target_h = override if override is not None else defn.effective_daily_hours
-            remaining_h = target_h - entry["elapsed_h"]
-            if remaining_h <= 0:
-                # a previously-materialized instance must not keep soliciting energy
-                if self._registry.get(defn.id) is not None:
-                    self._registry.delete(defn.id, source=CONFIG_SOURCE)
-                continue
-            self._registry.upsert(
-                Demand(
-                    id=defn.id,
-                    source=CONFIG_SOURCE,
-                    type=defn.type,
-                    nominal_power_w=defn.nominal_power_w,
-                    energy_target_wh=remaining_h * defn.nominal_power_w,
-                    window_start=win_start if win_start > now else None,
-                    deadline=win_end,
-                    expires_at=win_end,
-                    interruptible=defn.interruptible,
-                )
-            )
         self._save_ledger()
 
     def correct(self, demand_id: str, *, remaining_hours: float, now: datetime) -> None:
         """Rebase today's target: override = remaining + elapsed_h (ledger), so the
         normal `target − elapsed` formula keeps working and survives restarts."""
+        if demand_id not in self._defs:
+            raise KeyError(demand_id)
         entry = self._entry(demand_id, now)
         entry["day_target_override_h"] = remaining_hours + entry["elapsed_h"]
         self._save_ledger()
 
     def mark_done(self, demand_id: str, now: datetime) -> None:
+        if demand_id not in self._defs:
+            raise KeyError(demand_id)
         entry = self._entry(demand_id, now)
         entry["done"] = True
         if self._registry.get(demand_id) is not None:
