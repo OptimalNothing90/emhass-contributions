@@ -58,13 +58,16 @@ class Scheduler:
         self._loop = loop
 
     async def run_once(self, now: datetime | None = None) -> str:
-        now = now or utcnow()
         # one cycle at a time: tick, debounce and POST /cycle would otherwise interleave
         # at the driver await and adopt a plan with the WRONG mapping (solve results are
         # read back from a shared endpoint)
         async with self._cycle_lock:
+            now = now or utcnow()
             swept = self._registry.sweep(now=now)
-            self._pending_swept.extend(d.id for d in swept)
+            if self._on_cycle_end is not None:
+                self._pending_swept.extend(
+                    d.id for d in swept
+                )  # nothing to deliver to otherwise
             # ORDER MATTERS: materialize accrues the OLD plan's on-hours into the standing
             # ledger, so it must run before this cycle's adopt() replaces the plan.
             self._standing.materialize(
