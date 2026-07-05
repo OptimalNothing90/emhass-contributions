@@ -96,12 +96,8 @@ def build_runtimeparams(
             capacity_h = (end_step - start_step) * timestep_min / 60
             wanted_h = d.energy_target_wh / d.nominal_power_w
             truncated = wanted_h > capacity_h
-            if truncated:
-                hours = (
-                    math.floor(capacity_h * 100) / 100
-                )  # never round past window capacity
-            else:
-                hours = round(wanted_h, 2)
+            # cap unconditionally: round(wanted) may exceed a non-2dp capacity even when not truncated
+            hours = min(round(wanted_h, 2), math.floor(capacity_h * 100) / 100)
             if hours < 0.01:
                 hours = 0.01  # never round a real demand to zero (silent vanish)
         nominal.append(d.nominal_power_w)
