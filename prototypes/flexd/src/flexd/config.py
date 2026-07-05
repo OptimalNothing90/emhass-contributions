@@ -1,5 +1,6 @@
 """flexd.yaml loading with FLEXD_* env overrides. Fail loud at boot, never at runtime."""
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -9,6 +10,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from flexd.models import ID_PATTERN
+
+log = logging.getLogger(__name__)
 
 _WINDOW_RE = re.compile(r"^(\d{2}:\d{2})-(\d{2}:\d{2})$")
 
@@ -106,6 +109,10 @@ class TemplateDefinition(BaseModel):
                     f"deadline_rules brackets overlap at {rule.if_started_between}"
                 )
             seen |= mins
+        if seen and len(seen) < 24 * 60:
+            log.info(
+                "template deadline_rules leave gaps; triggers there use default_finish_in_h"
+            )
         return rules
 
 
@@ -170,6 +177,17 @@ def load_config(path: Path | str) -> FlexdConfig:
         if sd.id in seen_ids:
             raise ValueError(f"duplicate standing demand id {sd.id!r}")
         seen_ids.add(sd.id)
+    template_ids: set[str] = set()
+    for tpl in cfg.templates:
+        if tpl.id in template_ids:
+            raise ValueError(f"duplicate template id {tpl.id!r}")
+        template_ids.add(tpl.id)
+    standing_ids = {sd.id for sd in cfg.standing_demands}
+    overlap = template_ids & standing_ids
+    if overlap:
+        raise ValueError(
+            f"template ids collide with standing demand ids: {sorted(overlap)}"
+        )
     for sd in cfg.standing_demands:
         sd.effective_daily_hours  # raises at boot if neither hours nor energy given
     return cfg

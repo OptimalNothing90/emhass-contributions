@@ -68,6 +68,7 @@ class TemplateManager:
             window_start=window_start,
             deadline=deadline,
             expires_at=deadline + timedelta(seconds=self._ttl),
+            ttl_s=self._ttl,  # refresh bumps by exactly default_ttl_s, not by time-to-deadline
         )
         return self._registry.upsert(demand)
 
@@ -86,6 +87,8 @@ class TemplateManager:
         return None
 
     def _next_occurrence(self, local_now: datetime, target: time) -> datetime:
+        # nonexistent local times (DST spring-forward) resolve via fold-0: shifted
+        # forward one hour — accepted for appliance deadlines
         candidate = local_now.replace(
             hour=target.hour, minute=target.minute, second=0, microsecond=0
         )

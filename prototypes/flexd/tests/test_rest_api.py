@@ -101,3 +101,14 @@ def test_template_start_rest(client_with_templates):
         ).status_code
         == 404
     )
+
+
+def test_template_retrigger_foreign_source_409(client_with_templates):
+    r = client_with_templates.post(
+        "/api/v1/templates/dishwasher/start", json={"source": "ha"}
+    )
+    assert r.status_code == 201
+    r = client_with_templates.post(
+        "/api/v1/templates/dishwasher/start", json={"source": "loxone"}
+    )
+    assert r.status_code == 409

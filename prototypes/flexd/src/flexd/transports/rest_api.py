@@ -116,6 +116,8 @@ def create_app(
             saved = templates.start(template_id, source=source, now=utcnow())
         except KeyError:
             raise HTTPException(status_code=404, detail="unknown template")
+        except OwnershipError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
         return saved
 

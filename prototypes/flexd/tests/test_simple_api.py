@@ -129,3 +129,18 @@ def test_template_start_simple(client_with_templates):
         ).status_code
         == 404
     )
+
+
+def test_simple_template_retrigger_foreign_source_409(client_with_templates):
+    assert (
+        client_with_templates.post(
+            "/simple/templates/dishwasher/start?source=loxone"
+        ).status_code
+        == 201
+    )
+    assert (
+        client_with_templates.post(
+            "/simple/templates/dishwasher/start?source=ha"
+        ).status_code
+        == 409
+    )

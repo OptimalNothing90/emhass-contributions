@@ -92,3 +92,26 @@ def test_duplicate_standing_ids_rejected(tmp_path):
     p.write_text(dup, encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate"):
         load_config(p)
+
+
+def test_duplicate_template_ids_rejected(tmp_path):
+    dup = YAML + (
+        "templates:\n"
+        "  - id: dishwasher\n    nominal_power_w: 2000\n    energy_wh: 1400\n"
+        "  - id: dishwasher\n    nominal_power_w: 1000\n    energy_wh: 700\n"
+    )
+    p = tmp_path / "flexd.yaml"
+    p.write_text(dup, encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate template"):
+        load_config(p)
+
+
+def test_template_id_collides_with_standing_rejected(tmp_path):
+    collide = YAML + (
+        "templates:\n"
+        "  - id: waterheater\n    nominal_power_w: 2000\n    energy_wh: 1400\n"
+    )
+    p = tmp_path / "flexd.yaml"
+    p.write_text(collide, encoding="utf-8")
+    with pytest.raises(ValueError, match="collide"):
+        load_config(p)
