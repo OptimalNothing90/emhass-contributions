@@ -9,7 +9,14 @@ from flexd.transports.simple_api import create_simple_router
 
 
 def create_app(
-    *, registry, view, scheduler, driver, standing=None, default_ttl_s: int = 3600
+    *,
+    registry,
+    view,
+    scheduler,
+    driver,
+    standing=None,
+    templates=None,
+    default_ttl_s: int = 3600,
 ) -> FastAPI:
     app = FastAPI(title="flexd", version="0.1.0")
 
@@ -98,6 +105,20 @@ def create_app(
             "pending": False,
         }
 
+    @app.post("/api/v1/templates/{template_id}/start", status_code=201)
+    def template_start(template_id: str, body: dict):
+        if templates is None:
+            raise HTTPException(status_code=404, detail="no templates configured")
+        source = body.get("source")
+        if not source:
+            raise HTTPException(status_code=422, detail="source required")
+        try:
+            saved = templates.start(template_id, source=source, now=utcnow())
+        except KeyError:
+            raise HTTPException(status_code=404, detail="unknown template")
+        scheduler.notify_change()
+        return saved
+
     @app.post("/api/v1/cycle")
     async def trigger_cycle():
         result = await scheduler.run_once()
@@ -115,6 +136,7 @@ def create_app(
             scheduler=scheduler,
             driver=driver,
             standing=standing,
+            templates=templates,
             default_ttl_s=default_ttl_s,
         )
     )

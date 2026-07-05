@@ -56,6 +56,59 @@ class StandingDefinition(BaseModel):
         )
 
 
+class DeadlineRule(BaseModel):
+    if_started_between: tuple[str, str]
+    not_before: str | None = None
+    finish_by: str
+
+    @field_validator("if_started_between", mode="before")
+    @classmethod
+    def _parse_bracket(cls, v):
+        # unlike standing windows, brackets MAY wrap midnight (start >= end is legal)
+        if isinstance(v, str):
+            m = _WINDOW_RE.match(v)
+            if not m:
+                raise ValueError(f"bracket must look like '06:00-12:00', got {v!r}")
+            return (m.group(1), m.group(2))
+        return v
+
+
+class TemplateDefinition(BaseModel):
+    id: str = Field(pattern=ID_PATTERN)
+    type: str = "generic"
+    nominal_power_w: float = Field(gt=0)
+    energy_wh: float = Field(gt=0)
+    interruptible: bool = True
+    default_finish_in_h: float = Field(default=8, gt=0)
+    deadline_rules: list[DeadlineRule] = []
+
+    @field_validator("deadline_rules")
+    @classmethod
+    def _no_overlap(cls, rules):
+        def to_min(hhmm: str) -> int:
+            h, m = map(int, hhmm.split(":"))
+            return h * 60 + m
+
+        def minutes(rule) -> set[int]:
+            a, b = (
+                to_min(rule.if_started_between[0]),
+                to_min(rule.if_started_between[1]),
+            )
+            if a < b:
+                return set(range(a, b))
+            return set(range(a, 24 * 60)) | set(range(0, b))  # wraps midnight
+
+        seen: set[int] = set()
+        for rule in rules:
+            mins = minutes(rule)
+            if seen & mins:
+                raise ValueError(
+                    f"deadline_rules brackets overlap at {rule.if_started_between}"
+                )
+            seen |= mins
+        return rules
+
+
 class FlexdConfig(BaseModel):
     emhass_url: str = "http://localhost:5000"
     timestep_min: int = 30
@@ -67,6 +120,7 @@ class FlexdConfig(BaseModel):
     mqtt: MqttConfig = MqttConfig()
     extra_runtime_params: dict = {}
     standing_demands: list[StandingDefinition] = []
+    templates: list[TemplateDefinition] = []
 
     @field_validator("timezone")
     @classmethod

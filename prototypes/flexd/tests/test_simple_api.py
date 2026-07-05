@@ -114,3 +114,18 @@ def test_simple_negative_power_422(client):
 def test_simple_setpoint_never_404(client):
     assert client.get("/simple/demands/ghost/setpoint").text == "0"
     assert client.get("/simple/demands/ghost/on").text == "0"
+
+
+def test_template_start_simple(client_with_templates):
+    assert (
+        client_with_templates.post(
+            "/simple/templates/dishwasher/start?source=loxone"
+        ).text
+        == "1"
+    )
+    assert (
+        client_with_templates.post(
+            "/simple/templates/ghost/start?source=loxone"
+        ).status_code
+        == 404
+    )

@@ -53,6 +53,28 @@ def client(registry):
     return TestClient(app)
 
 
+@pytest.fixture
+def client_with_templates(registry):
+    # deferred imports: avoid circular import (see `client` fixture above) and keep
+    # the template fixture definition (TPL) colocated with its own tests.
+    from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+    from tests.test_templates import TPL
+    from flexd.templates import TemplateManager
+
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    templates = TemplateManager([TPL], tz="UTC", registry=registry, default_ttl_s=3600)
+    app = create_app(
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        driver=FakeDriver(result=PLAN),
+        standing=FakeStandingRegistry(),
+        templates=templates,
+    )
+    return TestClient(app)
+
+
 def _payload(**kw):
     d = dict(
         id="dishwasher",

@@ -45,6 +45,27 @@ def bridge(registry):
     return b, pub, registry
 
 
+@pytest.fixture
+def bridge_with_templates(registry):
+    from tests.test_templates import TPL
+    from flexd.templates import TemplateManager
+
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    pub = FakePublisher()
+    templates = TemplateManager([TPL], tz="UTC", registry=registry, default_ttl_s=3600)
+    b = MqttBridge(
+        client=pub,
+        base_topic="flexd",
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        standing=FakeStandingRegistryLocal(),
+        templates=templates,
+    )
+    return b, pub, registry
+
+
 def demand_json(**kw):
     d = dict(
         energy_target_wh=1200,
@@ -168,3 +189,16 @@ async def test_foreign_topic_ignored(bridge):
     await b.handle_message("other/topic/entirely", "x")
     await b.handle_message("flexd/plan/state", "x")  # own publish topic, not intake
     assert pub.published == []
+
+
+async def test_template_start_via_mqtt(bridge_with_templates):
+    b, pub, registry = bridge_with_templates
+    await b.handle_message("flexd/templates/ha/dishwasher/start", "")
+    assert registry.get("dishwasher") is not None
+
+
+async def test_template_unknown_error_event(bridge_with_templates):
+    b, pub, registry = bridge_with_templates
+    await b.handle_message("flexd/templates/ha/ghost/start", "")
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert "flexd/templates/ha/ghost/error" in errors

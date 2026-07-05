@@ -39,6 +39,25 @@ class MqttBridge:
     # -- intake ---------------------------------------------------------------
     async def handle_message(self, topic: str, payload: str) -> None:
         parts = topic.split("/")
+        # {base}/templates/{source}/{id}/start
+        if len(parts) == 5 and parts[0] == self._base and parts[1] == "templates":
+            _, _, source, template_id, action = parts
+            if action != "start":
+                log.debug("unknown action %r on %s", action, topic)
+                return
+            try:
+                if self._templates is None:
+                    raise KeyError(template_id)
+                self._templates.start(template_id, source=source, now=utcnow())
+                self._scheduler.notify_change()
+            except (ValueError, KeyError, OwnershipError, HTTPException) as exc:
+                detail = getattr(exc, "detail", None) or str(exc)
+                await self._client.publish(
+                    f"{self._base}/templates/{source}/{template_id}/error",
+                    json.dumps({"error": detail}),
+                    retain=False,
+                )
+            return
         # {base}/demands/{source}/{id}/{set|delete}
         if len(parts) != 5 or parts[0] != self._base or parts[1] != "demands":
             log.debug("ignoring non-intake topic %s", topic)

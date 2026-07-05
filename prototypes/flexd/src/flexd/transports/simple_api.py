@@ -12,7 +12,14 @@ from flexd.transports import reject_standing_squat
 
 
 def create_simple_router(
-    *, registry, view, scheduler, driver, standing=None, default_ttl_s: int = 3600
+    *,
+    registry,
+    view,
+    scheduler,
+    driver,
+    standing=None,
+    templates=None,
+    default_ttl_s: int = 3600,
 ) -> APIRouter:
     router = APIRouter(prefix="/simple", default_response_class=PlainTextResponse)
 
@@ -92,6 +99,17 @@ def create_simple_router(
             raise HTTPException(status_code=404, detail="unknown demand")
         except OwnershipError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
+        scheduler.notify_change()
+        return "1"
+
+    @router.post("/templates/{template_id}/start", status_code=201)
+    def template_start(template_id: str, source: str = Query(...)):
+        if templates is None:
+            raise HTTPException(status_code=404, detail="no templates configured")
+        try:
+            templates.start(template_id, source=source, now=utcnow())
+        except KeyError:
+            raise HTTPException(status_code=404, detail="unknown template")
         scheduler.notify_change()
         return "1"
 

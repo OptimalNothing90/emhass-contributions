@@ -87,3 +87,17 @@ def test_refresh_bumps_expiry(client):
         client.post("/api/v1/demands/dishwasher/refresh?source=ha").status_code == 409
     )
     assert client.post("/api/v1/demands/ghost/refresh?source=loxone").status_code == 404
+
+
+def test_template_start_rest(client_with_templates):
+    r = client_with_templates.post(
+        "/api/v1/templates/dishwasher/start", json={"source": "ha"}
+    )
+    assert r.status_code == 201
+    assert r.json()["id"] == "dishwasher"
+    assert (
+        client_with_templates.post(
+            "/api/v1/templates/ghost/start", json={"source": "ha"}
+        ).status_code
+        == 404
+    )

@@ -28,3 +28,21 @@ standing_demands:
     nominal_power_w: 3000
     daily_hours: 5
     window: "06:00-22:00"
+# trigger templates: appliance recipes with start-time-dependent deadlines. First
+# bracket containing the local trigger time wins; brackets MAY wrap midnight;
+# overlapping brackets are fatal at config load; gaps fall back to
+# default_finish_in_h with a warning log. Re-triggering while an instance is
+# still active is a pure refresh — the deadline is computed once, at first trigger.
+# templates:
+#   - id: dishwasher
+#     type: generic
+#     nominal_power_w: 2000
+#     energy_wh: 1400
+#     interruptible: false
+#     default_finish_in_h: 8
+#     deadline_rules:
+#       - if_started_between: "06:00-12:00"
+#         finish_by: "15:00"
+#       - if_started_between: "20:00-06:00"
+#         not_before: "21:30"
+#         finish_by: "06:30"
