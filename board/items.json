@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-06-18T22:55:03+00:00"
+    "fetched_at": "2026-07-05T14:12:07+00:00"
   },
   "items": [
     {
@@ -1324,7 +1324,7 @@
       "title": "AC-6: GET /api/v1/plan structured plan output",
       "type": "draft",
       "body": "Synthesis-N1 — the one EMHASS-core ask from RFC 0001 (sidecar pivot, #931).\n\nAdd `GET /api/v1/plan`: serialize the latest `opt_res` (computed then discarded at\n`web_server.py`, synthesis F11) as JSON records + `emhass_schema_version`, columns per\n`docs/plan_output_schema.md` (#835). Read-only, additive, non-breaking. Mirrors\n`GET /api/v1/last-run` (#851).\n\nLets every consumer read the plan back machine-readably instead of scraping the HA\npublish or the CSV: the external registry sidecar (RFC 0001), and the EV-coupling glue\npeople already build (David's #824 Approach 1 \"State-Override Bridge\"; LesIT1 /\nscruysberghs / informatico-madrid production setups).\n\nServes EPIC-EVCC (enabler) + EPIC-LLM (machine-readable plan). PR-first.\n",
-      "Status": "In Progress",
+      "Status": "Done / Wont Do",
       "Category": "Infra",
       "Phase": "Phase 3",
       "Priority": "P1",
@@ -1332,6 +1332,22 @@
       "Scope": "Upstream",
       "item_id": "PVTI_lAHOAfZrVs4BV1jUzgwMP3Y",
       "draft_id": "DI_lAHOAfZrVs4BV1jUzgKpFk4"
+    },
+    {
+      "id": "PR-995",
+      "title": "feat(api): add GET /api/v1/plan structured plan output",
+      "type": "link",
+      "content_id": "PR_kwDOGC8VbM7oKRT1",
+      "Status": "Done / Wont Do",
+      "Category": "Infra",
+      "Phase": "Phase 3",
+      "Priority": "P1",
+      "Effort": "S",
+      "Scope": "Upstream",
+      "item_id": "PVTI_lAHOAfZrVs4BV1jUzgxyjDc",
+      "content_url": "https://github.com/davidusb-geek/emhass/pull/995",
+      "repository": "davidusb-geek/emhass",
+      "number": 995
     }
   ]
 }
