@@ -1,6 +1,9 @@
 """Fold active demands into one EMHASS runtimeparams payload.
 
 Key names verified against upstream/src/emhass/utils.py treat_runtimeparams.
+Emits canonical long-name runtime keys (associations.csv col 2); legacy
+aliases are blocked from extra_runtime_params so neither spelling can
+override flexd.
 """
 
 import logging
@@ -12,13 +15,20 @@ from flexd.models import Demand
 log = logging.getLogger(__name__)
 
 FLEXD_OWNED_KEYS = {
+    # canonical long names (what flexd emits)
     "number_of_deferrable_loads",
     "nominal_power_of_deferrable_loads",
-    "def_total_hours",
+    "operating_hours_of_each_deferrable_load",
     "start_timesteps_of_each_deferrable_load",
     "end_timesteps_of_each_deferrable_load",
     "def_current_power",
     "prediction_horizon",
+    # legacy aliases (associations.csv col 1) — blocked so extra can't smuggle either spelling
+    "num_def_loads",
+    "P_deferrable_nom",
+    "def_total_hours",
+    "def_start_timestep",
+    "def_end_timestep",
 }
 
 
@@ -66,7 +76,7 @@ def build_runtimeparams(
         {
             "number_of_deferrable_loads": len(ordered),
             "nominal_power_of_deferrable_loads": nominal,
-            "def_total_hours": hours,
+            "operating_hours_of_each_deferrable_load": hours,
             "start_timesteps_of_each_deferrable_load": starts,
             "end_timesteps_of_each_deferrable_load": ends,
             "def_current_power": currents,

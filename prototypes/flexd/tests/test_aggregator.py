@@ -16,7 +16,9 @@ def test_single_demand_payload():
     payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["number_of_deferrable_loads"] == 1
     assert payload["nominal_power_of_deferrable_loads"] == [2000]
-    assert payload["def_total_hours"] == [0.6]  # 1200 Wh / 2000 W
+    assert payload["operating_hours_of_each_deferrable_load"] == [
+        0.6
+    ]  # 1200 Wh / 2000 W
     assert payload["start_timesteps_of_each_deferrable_load"] == [0]
     assert payload["end_timesteps_of_each_deferrable_load"] == [8]  # 4h / 30min
     assert payload["def_current_power"] == [0]
@@ -64,10 +66,18 @@ def test_extra_params_merged_but_never_override():
         deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
     )
     payload, _ = build_runtimeparams(
-        [d], now=NOW, extra={"soc_init": 0.5, "def_total_hours": [99]}, **CFG
+        [d],
+        now=NOW,
+        extra={
+            "soc_init": 0.5,
+            "def_total_hours": [99],
+            "operating_hours_of_each_deferrable_load": [77],
+        },
+        **CFG,
     )
     assert payload["soc_init"] == 0.5
-    assert payload["def_total_hours"] == [0.6]  # flexd key wins
+    assert payload["operating_hours_of_each_deferrable_load"] == [0.6]  # flexd wins
+    assert "def_total_hours" not in payload  # legacy alias blocked entirely
 
 
 def test_current_power_passthrough():
