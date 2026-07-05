@@ -226,6 +226,41 @@ mqtt adapter.
 
    Standing definitions are removed/reseeded on config reload or restart. Weekly/seasonal/
    calendar rules remain Phase 3 — the MVP pattern is exactly "same window, every day".
+
+   **Trigger templates (MVP — pulled forward from Phase 3 on user need, 2026-07-05):** for
+   event-started appliances (dishwasher, washing machine) whose deadline depends on *when* they
+   were started. A `flexd.yaml` block per appliance:
+
+   ```yaml
+   templates:
+     - id: dishwasher            # same id rules; started instance registers under this id
+       nominal_power_w: 2000
+       energy_wh: 1400           # one program run
+       interruptible: false      # a cycle must not be paused mid-run
+       default_finish_in_h: 8    # fallback when no rule matches
+       deadline_rules:           # first matching rule wins; local time (config timezone)
+         - if_started_between: "06:00-12:00"
+           finish_by: "15:00"    # same local day
+         - if_started_between: "20:00-06:00"   # bracket may wrap midnight
+           not_before: "21:30"   # optional earliest start (window_start)
+           finish_by: "06:30"    # finish_by <= start time of day ⇒ next local day
+   ```
+
+   Trigger intake: `POST /simple/templates/{id}/start?source=…` (Simple),
+   `POST /api/v1/templates/{id}/start` (REST), `flexd/templates/{source}/{id}/start` (MQTT).
+   flexd resolves the matching rule against the trigger's local time, computes
+   `window_start` (from `not_before`, if in the future), `deadline` (`finish_by`, next-day when
+   it precedes the start time), `expires_at = deadline + default_ttl_s`, and registers an
+   **ordinary demand** owned by the triggering `source` (not `config` — the trigger owner may
+   `done`/withdraw it; a template is a recipe, not a standing demand). Boot validation:
+   brackets must not overlap; gaps are allowed and fall back to `default_finish_in_h` with a
+   boot-time warning. Re-trigger while an instance is active = refresh of the same demand
+   (idempotent upsert, same-source rule applies).
+
+   Reference consumer for the guides: BSH Home Connect appliances (Neff/Bosch/Siemens) — the
+   HA `home_connect` integration reports "program selected/remote start armed" (the register
+   trigger) and can start the program when the plan's `on` flips to 1. Requires remote start
+   enabled on the appliance; documented in the HA client guide.
    **Escape hatch:** `flexd.yaml: extra_runtime_params` — a JSON object merged into every optim
    POST (e.g. `soc_init` source overrides, custom weights). flexd validates it is a dict, passes
    it through untouched, and never overrides its own deferrable keys with it (flexd keys win on
@@ -304,7 +339,7 @@ prototypes/flexd/
 |---|---|
 | **1 (MVP)** | All six modules; REST + Simple + bidirectional MQTT; compose bundle; Loxone + Node-RED guides; unit/contract/E2E tests. Demo-ready for the ally call. |
 | 2 | HA MQTT Discovery + blueprint; ioBroker guide verified; MCP server (thin wrapper over REST); Unraid template |
-| 3 | Full recurrence/seasonal/calendar rules (beyond the MVP daily standing-demand pattern); demand templates (`dishwasher-eco`); priority pass-through once the EMHASS priority MILP exists (WS3 sibling); per-source auth tokens |
+| 3 | Full recurrence/seasonal/calendar rules (beyond the MVP daily standing-demand pattern); template variants beyond deadline rules (per-program energy profiles, multi-phase loads); priority pass-through once the EMHASS priority MILP exists (WS3 sibling); per-source auth tokens |
 
 ## Standards alignment note (doc-only, MVP)
 
