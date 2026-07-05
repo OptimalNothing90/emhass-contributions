@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "generated_at": "2026-07-05T12:00:05Z",
+  "emhass_schema_version": "1.0",
+  "plan": [
+    {"timestamp": "2026-07-05T12:00:00Z", "P_deferrable0": 2000, "P_deferrable1": 0},
+    {"timestamp": "2026-07-05T12:30:00Z", "P_deferrable0": 0, "P_deferrable1": 3000}
+  ]
+}
