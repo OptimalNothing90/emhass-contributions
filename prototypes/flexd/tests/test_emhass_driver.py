@@ -22,7 +22,7 @@ def driver():
 
 @respx.mock
 async def test_run_cycle_ok(driver):
-    respx.post(f"{BASE}/action/naive-mpc-optim").respond(201, text="ok")
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
     respx.get(f"{BASE}/api/v1/plan").respond(200, json=fixture("plan_ok.json"))
     plan = await driver.run_cycle({"prediction_horizon": 48})
     assert plan["status"] == "ok"
@@ -31,7 +31,7 @@ async def test_run_cycle_ok(driver):
 
 @respx.mock
 async def test_no_run_raises(driver):
-    respx.post(f"{BASE}/action/naive-mpc-optim").respond(201, text="ok")
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
     respx.get(f"{BASE}/api/v1/plan").respond(200, json=fixture("plan_no_run.json"))
     with pytest.raises(PlanRejected, match="no-run"):
         await driver.run_cycle({})
@@ -39,7 +39,7 @@ async def test_no_run_raises(driver):
 
 @respx.mock
 async def test_unknown_schema_rejected(driver):
-    respx.post(f"{BASE}/action/naive-mpc-optim").respond(201, text="ok")
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
     respx.get(f"{BASE}/api/v1/plan").respond(200, json=fixture("plan_bad_schema.json"))
     with pytest.raises(PlanRejected, match="schema"):
         await driver.run_cycle({})
@@ -47,10 +47,20 @@ async def test_unknown_schema_rejected(driver):
 
 @respx.mock
 async def test_stale_generated_at_rejected(driver):
-    respx.post(f"{BASE}/action/naive-mpc-optim").respond(201, text="ok")
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
     respx.get(f"{BASE}/api/v1/plan").respond(200, json=fixture("plan_ok.json"))
     with pytest.raises(PlanRejected, match="not newer"):
         await driver.run_cycle({}, last_generated_at="2026-07-05T12:00:05Z")
+
+
+@respx.mock
+async def test_ok_without_generated_at_rejected(driver):
+    bad = fixture("plan_ok.json")
+    bad["generated_at"] = None
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
+    respx.get(f"{BASE}/api/v1/plan").respond(200, json=bad)
+    with pytest.raises(PlanRejected, match="generated_at"):
+        await driver.run_cycle({})
 
 
 @respx.mock
