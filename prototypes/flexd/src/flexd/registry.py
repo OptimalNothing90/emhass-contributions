@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -25,6 +26,7 @@ class Registry:
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
         self._demands: dict[str, Demand] = {}
+        self._lock = threading.Lock()  # REST threadpool vs event-loop scheduler: _save is read-modify-write on shared files
         self._load()
 
     # -- persistence -------------------------------------------------------
@@ -71,46 +73,52 @@ class Registry:
 
     # -- API ----------------------------------------------------------------
     def upsert(self, demand: Demand) -> Demand:
-        demand = demand.model_copy()
-        existing = self._demands.get(demand.id)
-        if existing is not None and existing.source != demand.source:
-            raise OwnershipError(
-                f"{demand.id} is owned by {existing.source!r}, not {demand.source!r}"
-            )
-        demand.updated_at = utcnow()
-        self._demands[demand.id] = demand
-        self._save()
-        return demand.model_copy()
+        with self._lock:
+            demand = demand.model_copy()
+            existing = self._demands.get(demand.id)
+            if existing is not None and existing.source != demand.source:
+                raise OwnershipError(
+                    f"{demand.id} is owned by {existing.source!r}, not {demand.source!r}"
+                )
+            demand.updated_at = utcnow()
+            self._demands[demand.id] = demand
+            self._save()
+            return demand.model_copy()
 
     def get(self, demand_id: str) -> Demand | None:
-        d = self._demands.get(demand_id)
-        return d.model_copy() if d is not None else None
+        with self._lock:
+            d = self._demands.get(demand_id)
+            return d.model_copy() if d is not None else None
 
     def delete(self, demand_id: str, source: str) -> Demand:
-        removed = self._check_owner(demand_id, source)
-        del self._demands[demand_id]
-        self._save()
-        return removed
+        with self._lock:
+            removed = self._check_owner(demand_id, source)
+            del self._demands[demand_id]
+            self._save()
+            return removed
 
     def refresh(self, demand_id: str, source: str) -> Demand:
-        d = self._check_owner(demand_id, source)
-        d.expires_at = utcnow() + timedelta(seconds=d.ttl_s or 0)
-        d.updated_at = utcnow()
-        self._save()
-        return d.model_copy()
+        with self._lock:
+            d = self._check_owner(demand_id, source)
+            d.expires_at = utcnow() + timedelta(seconds=d.ttl_s or 0)
+            d.updated_at = utcnow()
+            self._save()
+            return d.model_copy()
 
     def list_active(self, now: datetime | None = None) -> list[Demand]:
-        now = now or utcnow()
-        return sorted(
-            (d.model_copy() for d in self._demands.values() if d.expires_at > now),
-            key=lambda d: d.id,
-        )
+        with self._lock:
+            now = now or utcnow()
+            return sorted(
+                (d.model_copy() for d in self._demands.values() if d.expires_at > now),
+                key=lambda d: d.id,
+            )
 
     def sweep(self, now: datetime | None = None) -> list[Demand]:
-        now = now or utcnow()
-        expired = [d for d in self._demands.values() if d.expires_at <= now]
-        for d in expired:
-            del self._demands[d.id]
-        if expired:
-            self._save()
-        return expired
+        with self._lock:
+            now = now or utcnow()
+            expired = [d for d in self._demands.values() if d.expires_at <= now]
+            for d in expired:
+                del self._demands[d.id]
+            if expired:
+                self._save()
+            return expired

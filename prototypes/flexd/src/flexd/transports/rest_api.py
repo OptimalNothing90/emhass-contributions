@@ -51,6 +51,18 @@ def create_app(
         scheduler.notify_change()
         return saved
 
+    @app.post("/api/v1/demands/{demand_id}/refresh")
+    def refresh(demand_id: str, source: str = Query(...)):
+        """Bump expires_at by the stored ttl_s (spec refresh semantics). PUT, by
+        contrast, re-anchors: it replaces the demand with a fresh declaration."""
+        try:
+            saved = registry.refresh(demand_id, source=source)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="unknown demand")
+        except OwnershipError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return saved
+
     @app.delete("/api/v1/demands/{demand_id}", status_code=204)
     def withdraw(demand_id: str, source: str = Query(...)):
         try:

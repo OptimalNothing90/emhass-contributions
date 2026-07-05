@@ -86,3 +86,30 @@ def test_returned_objects_are_copies(registry):
     ret = registry.upsert(make_demand(id="r2"))
     ret.energy_target_wh = 66666
     assert registry.get("r2").energy_target_wh == 1200
+
+
+def test_concurrent_writers_no_corruption(tmp_path):
+    import threading
+
+    reg = Registry(tmp_path / "demands.json")
+    errors = []
+
+    def writer(prefix):
+        try:
+            for n in range(30):
+                reg.upsert(make_demand(id=f"{prefix}-{n}"))
+                reg.sweep()
+                reg.list_active()
+        except Exception as exc:  # noqa: BLE001 — any exception is the failure signal
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=writer, args=(p,)) for p in ("aaa", "bbb", "ccc")
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    reloaded = Registry(tmp_path / "demands.json")
+    assert len(reloaded.list_active()) == 90  # every write survived

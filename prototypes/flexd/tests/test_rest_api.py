@@ -115,3 +115,15 @@ def test_manual_cycle(client):
 
 def test_openapi_served(client):
     assert client.get("/openapi.json").status_code == 200
+
+
+def test_refresh_bumps_expiry(client):
+    client.post("/api/v1/demands", json=_payload())
+    before = client.get("/api/v1/demands").json()[0]["expires_at"]
+    r = client.post("/api/v1/demands/dishwasher/refresh?source=loxone")
+    assert r.status_code == 200
+    assert r.json()["expires_at"] > before
+    assert (
+        client.post("/api/v1/demands/dishwasher/refresh?source=ha").status_code == 409
+    )
+    assert client.post("/api/v1/demands/ghost/refresh?source=loxone").status_code == 404

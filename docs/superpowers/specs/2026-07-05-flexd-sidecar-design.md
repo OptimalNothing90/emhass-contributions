@@ -110,9 +110,11 @@ filesystem paths, single writer to the registry file.
   the guides say so explicitly.
 - **Refresh semantics.** Every demand stores `ttl_s`, derived at registration
   (`expires_at − received_at`, or the `flexd.yaml` default when the Simple-API defaulted it).
-  A `refresh` (REST `PUT` without body changes, Simple `/refresh`, MQTT re-`set` with same
-  payload) sets `expires_at = now + ttl_s`. A `PUT`/`set` carrying a new `expires_at` overrides
-  the TTL and re-derives `ttl_s`.
+  A `refresh` (REST `POST /demands/{id}/refresh`, Simple `/refresh`, MQTT re-`set` with identical
+  payload) sets `expires_at = now + ttl_s`. A REST `PUT` is NOT a refresh: it replaces the demand
+  with a fresh declaration and re-anchors `ttl_s` to the newly declared `expires_at`
+  (time-to-expiry from now). `created_at` therefore means "anchor of the current declaration",
+  not first registration.
 - **Redundant energy fields.** `energy_target_wh` is authoritative. The Simple-API `hours` param
   is a convenience: when both `energy_wh` and `hours` are given, `energy_wh` wins and `hours` is
   ignored; `hours` alone is converted via `power_w` (`energy = hours × power`). Mixed
@@ -120,9 +122,11 @@ filesystem paths, single writer to the registry file.
 
 ### REST (`/api/v1`, full OpenAPI served at `/openapi.json` + `/docs`)
 
-- `POST /demands` · `PUT /demands/{id}` (update = refresh) · `DELETE /demands/{id}` · `GET /demands`
+- `POST /demands` · `PUT /demands/{id}` (update = refresh) · `POST /demands/{id}/refresh` ·
+  `DELETE /demands/{id}` · `GET /demands`
 - `GET /plan` — raw EMHASS plan passed through (EMHASS schema + `flexd_meta` block)
-- `GET /plan/demands/{id}` — per-demand view: `{setpoint_w, on, window, satisfied_wh, status}`
+- `GET /plan/demands/{id}` — per-demand view: `{setpoint_w, on, clamped, truncated,
+  unschedulable, state, pending}` (`satisfied_wh`/`window` postponed to Phase 2)
 - `GET /healthz` — own health + cascaded EMHASS health
 - `POST /cycle` — manual re-solve trigger
 
