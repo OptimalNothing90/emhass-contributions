@@ -13,7 +13,7 @@ EMHASS contribution workspace: audits, design RFCs, board source-of-truth, and t
 - **`docker/`** — Dockerfile and Docker Compose files that build/run the production image.
 - **`skills/`** — public Claude Code skill plugins (anonymized variants of personal tooling). Initial home for the AG-B1 board item.
 - **`docs/`** — staging area for documentation that may eventually land upstream (e.g. AI-coder contributor onboarding).
-- **`upstream/`** — git submodule pinned to a specific upstream release tag (currently `v0.17.2`). The canonical EMHASS source we build against.
+- **`upstream/`** — git submodule pinned to a fixed upstream commit: a release tag when one carries what we build against, otherwise a pinned `master` SHA (currently `f11d8dea`, master past `v0.17.8` — no tag yet contains `GET /api/v1/plan` / `plan_store` from PR #995, which the `prototypes/flexd/` sidecar builds against). Re-pin to the next release tag that includes #995.
 
 ## How this relates to other repos
 
@@ -23,7 +23,7 @@ EMHASS contribution workspace: audits, design RFCs, board source-of-truth, and t
 | `OptimalNothing90/emhass` | Personal fork — branches for upstream PRs | https://github.com/OptimalNothing90/emhass |
 | `OptimalNothing90/emhass-contributions` | This repo — audits, RFCs, prototypes, Docker build | (you are here) |
 
-PRs to upstream go through the personal fork, not from this repo. The submodule here is pinned to upstream tags — never to a fork branch — to keep production builds tied to merged code only.
+PRs to upstream go through the personal fork, not from this repo. The submodule here is pinned to fixed upstream commits (release tags preferred, pinned upstream-`master` SHAs when needed features aren't tagged yet) — never to a fork branch — to keep production builds tied to merged code only.
 
 ## Local development
 
