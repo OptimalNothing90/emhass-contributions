@@ -165,9 +165,29 @@ mqtt adapter.
    **Deferrable ownership contract:** when flexd calls EMHASS, its runtimeparams fully specify
    the deferrable arrays — EMHASS's statically-configured deferrable loads are overridden for
    that run (runtimeparams mechanics, not a flexd choice). Users with existing static loads
-   migrate them into `flexd.yaml` as **standing demands** (auto-registered at startup,
-   auto-refreshed — a pool pump or water heater is one YAML block); the guides walk through
+   migrate them into `flexd.yaml` as **standing demands** (below); the guides walk through
    this. Rule of thumb in docs: *either* EMHASS owns its deferrables *or* flexd does — not both.
+
+   **Standing demands (MVP shape — deliberately minimal daily pattern, not full recurrence):**
+   a `flexd.yaml` block per recurring load:
+
+   ```yaml
+   standing_demands:
+     - id: waterheater          # same id rules as dynamic demands
+       type: generic
+       nominal_power_w: 3000
+       daily_hours: 5           # or daily_energy_wh; same precedence rule as the Simple-API
+       window: "06:00-22:00"    # local time (flexd.yaml timezone), converted to UTC per day
+   ```
+
+   Materialization each cycle: if *now* is inside today's window, the demand is active with
+   `deadline = today's window end` and remaining hours = `daily_hours` minus the on-hours
+   already **elapsed** today according to previously adopted plans (plan-based accounting;
+   documented assumption: consumers follow the plan — a consumer can correct it any time by
+   updating the same `id` via REST/MQTT, since a standing demand is an ordinary registry entry
+   seeded from config). Standing demands carry `source: config`, are exempt from the expiry
+   sweep, and are removed/reseeded on config reload or restart. Weekly/seasonal/calendar rules
+   remain Phase 3 — the MVP pattern is exactly "same window, every day".
    **Escape hatch:** `flexd.yaml: extra_runtime_params` — a JSON object merged into every optim
    POST (e.g. `soc_init` source overrides, custom weights). flexd validates it is a dict, passes
    it through untouched, and never overrides its own deferrable keys with it (flexd keys win on
@@ -231,8 +251,9 @@ prototypes/flexd/
 ### Testing
 
 - **Unit:** registry (lifecycle, atomic write, corruption recovery), aggregator
-  (demand→runtimeparams, deterministic slot mapping), plan_view (plan→setpoints incl.
-  `no-run`/`stale`).
+  (demand→runtimeparams, deterministic slot mapping, standing-demand daily materialization
+  incl. plan-based elapsed-hours accounting and DST-day windows), plan_view (plan→setpoints
+  incl. `no-run`/`stale`).
 - **Contract:** emhass_driver against recorded `/api/v1/plan` fixtures (ok, no-run, schema
   drift) — no live EMHASS needed.
 - **Integration:** compose-based E2E in CI against the real EMHASS image — demand in, plan out,
@@ -245,7 +266,7 @@ prototypes/flexd/
 |---|---|
 | **1 (MVP)** | All six modules; REST + Simple + bidirectional MQTT; compose bundle; Loxone + Node-RED guides; unit/contract/E2E tests. Demo-ready for the ally call. |
 | 2 | HA MQTT Discovery + blueprint; ioBroker guide verified; MCP server (thin wrapper over REST); Unraid template |
-| 3 | Recurrence/seasonal rules; demand templates (`dishwasher-eco`); priority pass-through once the EMHASS priority MILP exists (WS3 sibling); per-source auth tokens |
+| 3 | Full recurrence/seasonal/calendar rules (beyond the MVP daily standing-demand pattern); demand templates (`dishwasher-eco`); priority pass-through once the EMHASS priority MILP exists (WS3 sibling); per-source auth tokens |
 
 ## Out of scope (MVP)
 
