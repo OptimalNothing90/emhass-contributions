@@ -172,7 +172,10 @@ mqtt adapter.
    **Horizon clamp:** a `deadline` beyond the prediction horizon is clamped to the horizon end
    for the solve (the demand may legitimately be deferred out of this plan entirely); the
    per-demand view reports `clamped: true` so a consumer can tell "scheduled later" from
-   "window closed". Deadlines re-enter naturally as the rolling horizon advances.
+   "window closed". Deadlines re-enter naturally as the rolling horizon advances. The
+   per-demand view also reports `truncated` (energy cut to window capacity so one demand
+   can't make the whole solve infeasible) and `unschedulable` (deadline expired/degenerate
+   window → load deactivated for this plan, not silently unconstrained).
    **Deferrable ownership contract:** when flexd calls EMHASS, its runtimeparams fully specify
    the deferrable arrays — EMHASS's statically-configured deferrable loads are overridden for
    that run (runtimeparams mechanics, not a flexd choice). Users with existing static loads

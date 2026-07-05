@@ -23,7 +23,14 @@ def test_single_demand_payload():
     assert payload["end_timesteps_of_each_deferrable_load"] == [8]  # 4h / 30min
     assert payload["def_current_power"] == [0]
     assert payload["prediction_horizon"] == 48
-    assert mapping == {"dishwasher": {"slot": 0, "clamped": False}}
+    assert mapping == {
+        "dishwasher": {
+            "slot": 0,
+            "clamped": False,
+            "truncated": False,
+            "unschedulable": False,
+        }
+    }
 
 
 def test_slots_sorted_by_id():
@@ -88,3 +95,47 @@ def test_current_power_passthrough():
     )
     payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["def_current_power"] == [1500]
+
+
+def test_expired_deadline_unschedulable():
+    d = make_demand(
+        deadline=NOW - timedelta(minutes=5), expires_at=NOW + timedelta(hours=1)
+    )
+    payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert payload["operating_hours_of_each_deferrable_load"] == [0.0]
+    assert mapping["dishwasher"]["unschedulable"] is True
+
+
+def test_end_step_floors_not_ceils():
+    d = make_demand(
+        deadline=NOW + timedelta(minutes=105), expires_at=NOW + timedelta(hours=3)
+    )
+    payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert payload["end_timesteps_of_each_deferrable_load"] == [
+        3
+    ]  # floor(3.5), never past deadline
+
+
+def test_unreachable_energy_truncated_to_window():
+    d = make_demand(
+        energy_target_wh=10000,
+        nominal_power_w=2000,
+        deadline=NOW + timedelta(hours=1),
+        expires_at=NOW + timedelta(hours=2),
+    )
+    payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert payload["operating_hours_of_each_deferrable_load"] == [
+        1.0
+    ]  # capacity, not 5.0
+    assert mapping["dishwasher"]["truncated"] is True
+
+
+def test_micro_demand_never_rounds_to_zero():
+    d = make_demand(
+        energy_target_wh=10,
+        nominal_power_w=3000,
+        deadline=NOW + timedelta(hours=4),
+        expires_at=NOW + timedelta(hours=5),
+    )
+    payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert payload["operating_hours_of_each_deferrable_load"] == [0.01]
