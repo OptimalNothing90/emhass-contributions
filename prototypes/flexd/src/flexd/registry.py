@@ -80,7 +80,7 @@ class Registry:
         demand.updated_at = utcnow()
         self._demands[demand.id] = demand
         self._save()
-        return demand
+        return demand.model_copy()
 
     def get(self, demand_id: str) -> Demand | None:
         d = self._demands.get(demand_id)

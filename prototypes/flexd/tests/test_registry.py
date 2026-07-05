@@ -83,3 +83,6 @@ def test_returned_objects_are_copies(registry):
     assert registry.get("dishwasher").energy_target_wh == 1200
     d.energy_target_wh = 77777  # caller's original object also decoupled
     assert registry.get("dishwasher").energy_target_wh == 1200
+    ret = registry.upsert(make_demand(id="r2"))
+    ret.energy_target_wh = 66666
+    assert registry.get("r2").energy_target_wh == 1200
