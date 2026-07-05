@@ -180,14 +180,28 @@ mqtt adapter.
        window: "06:00-22:00"    # local time (flexd.yaml timezone), converted to UTC per day
    ```
 
-   Materialization each cycle: if *now* is inside today's window, the demand is active with
-   `deadline = today's window end` and remaining hours = `daily_hours` minus the on-hours
-   already **elapsed** today according to previously adopted plans (plan-based accounting;
-   documented assumption: consumers follow the plan — a consumer can correct it any time by
-   updating the same `id` via REST/MQTT, since a standing demand is an ordinary registry entry
-   seeded from config). Standing demands carry `source: config`, are exempt from the expiry
-   sweep, and are removed/reseeded on config reload or restart. Weekly/seasonal/calendar rules
-   remain Phase 3 — the MVP pattern is exactly "same window, every day".
+   Materialization each cycle — standing *definitions* live in config, never in the registry;
+   the materializer **upserts an ordinary registry demand** from each definition, so the
+   registry contract holds unmodified:
+
+   - If *now* is inside today's window: upsert demand `id` with `source: config`, concrete
+     `window_start`/`deadline` = today's window, and **`expires_at` = today's window end** —
+     the mandatory-`expires_at` rule and the normal expiry sweep apply as-is (no exemption;
+     outside the window the instance is simply expired/absent, which is correct: it is
+     inactive). Next day, the materializer seeds a fresh instance.
+   - Remaining hours = `daily_hours` minus the on-hours already **elapsed** today, read from a
+     small per-day ledger (`standing_ledger.json`: per standing id, cumulative on-hours from
+     previously *adopted* plans, reset at local midnight; documented assumption: consumers
+     follow the plan).
+   - Corrections (e.g. the boiler already ran manually) use the same declarative trust as
+     everything else in the MVP: send an update claiming `source: config` — structural fields
+     still come from YAML on the next reseed, so a correction is a same-day override, not a
+     config change.
+   - Startup validation: a standing id colliding with an existing dynamic demand of another
+     source is a fatal config error (loud, at boot — not a runtime surprise).
+
+   Standing definitions are removed/reseeded on config reload or restart. Weekly/seasonal/
+   calendar rules remain Phase 3 — the MVP pattern is exactly "same window, every day".
    **Escape hatch:** `flexd.yaml: extra_runtime_params` — a JSON object merged into every optim
    POST (e.g. `soc_init` source overrides, custom weights). flexd validates it is a dict, passes
    it through untouched, and never overrides its own deferrable keys with it (flexd keys win on
