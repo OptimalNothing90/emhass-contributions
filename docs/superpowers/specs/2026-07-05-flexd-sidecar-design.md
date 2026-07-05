@@ -31,6 +31,9 @@ agent-usable OpenAPI.
 | Agent capability | Clean OpenAPI in MVP; dedicated MCP server is Phase 2 (thin wrapper) |
 | Packaging | docker-compose bundle: flexd + EMHASS + Mosquitto (broker optional via profile) |
 | Stack | Python 3.12, FastAPI + pydantic, aiomqtt; JSON persistence, no DB, no pickle |
+| License | MIT (matches EMHASS and evcc-optimizer) |
+| `interruptible` field | in the MVP schema (optional bool, default true) — schema stability before clients exist |
+| Ally-call demo scope | Loxone + Node-RED live; HA path on paper (guides + already-running MQTT topics) |
 | Location | `prototypes/flexd/` in emhass-contributions, pre-placement; moves to community org repo after ally call |
 
 ## 1. Architecture
@@ -87,6 +90,10 @@ filesystem paths, single writer to the registry file.
   "deadline": "ISO8601",
   "expires_at": "ISO8601",           // MANDATORY — stale demands age out
   "priority": 1,                     // stored; NOT passed to the MILP in MVP (EMHASS has no priority yet)
+  "interruptible": true,             // optional, default true; false = must run contiguously
+                                     //   once started (dishwasher). Mapped to EMHASS's
+                                     //   per-load continuity constraints where expressible;
+                                     //   the residual gap is documented per client guide.
   "current_power_w": 0               // optional live value → def_current_power pin
 }
 ```
