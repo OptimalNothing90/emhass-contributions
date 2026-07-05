@@ -198,10 +198,12 @@ mqtt adapter.
      *day-state* lives only in the ledger. External writes to a materialized instance set
      day-state markers instead of fighting the next upsert:
      - a correction (update claiming `source: config`, e.g. "boiler already ran, only 2 h
-       left") writes `corrected_remaining` into today's ledger entry; from then until
-       midnight the materializer uses the corrected value (minus subsequently elapsed
-       on-hours) instead of `daily_hours − elapsed`, and only keeps extending
-       `deadline`/`expires_at` within the window.
+       left") is stored as a **rebased day target**: the ledger entry gets
+       `day_target_override = corrected_remaining + elapsed_at_correction`, written once at
+       correction time. From then on the materializer computes remaining with the *same*
+       formula as always (`target − elapsed`), just with the override as target — no
+       correction-time baseline to reconstruct, so the value stays computable across
+       restarts from the persisted ledger alone. A later correction simply rebases again.
      - a delete/`done` on a standing instance writes `done_today` into the ledger; the
        materializer skips this id until midnight (otherwise the next cycle would just
        re-upsert it).
