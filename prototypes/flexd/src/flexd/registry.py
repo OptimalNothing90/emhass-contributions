@@ -32,15 +32,40 @@ class Registry:
 
     # -- persistence -------------------------------------------------------
     def _load(self) -> None:
+        """Load demands. The file must be JSON with a "demands" list; anything else falls
+        back to .bak (structural damage). Inside a valid list, an invalid entry is logged
+        and skipped so one bad record cannot empty the registry on restart (review 2, 5)."""
         for candidate in (self._path, self._bak):
             if not candidate.exists():
                 continue
             try:
                 raw = json.loads(candidate.read_text(encoding="utf-8"))
-                self._demands = {d["id"]: Demand(**d) for d in raw["demands"]}
-                return
+                entries = raw["demands"]
+                if not isinstance(raw, dict) or not isinstance(entries, list):
+                    raise TypeError(
+                        "registry file must be an object with a 'demands' list"
+                    )
             except Exception:
-                log.warning("registry file %s unreadable, trying fallback", candidate)
+                log.warning(
+                    "registry file %s unreadable or malformed, trying fallback",
+                    candidate,
+                )
+                continue
+            loaded: dict[str, Demand] = {}
+            for entry in entries:
+                try:
+                    d = Demand.model_validate(entry, context={"persisted": True})
+                except Exception as exc:
+                    log.error(
+                        "registry entry %r in %s is invalid and was skipped: %s",
+                        entry.get("id") if isinstance(entry, dict) else entry,
+                        candidate,
+                        exc,
+                    )
+                    continue
+                loaded[d.id] = d
+            self._demands = loaded
+            return
         log.warning("no readable registry file, starting empty")
         self._demands = {}
 

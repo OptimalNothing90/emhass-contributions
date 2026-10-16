@@ -110,3 +110,24 @@ def test_realistic_maxima_accepted():
         **_base(nominal_power_w=22_000, energy_target_wh=100_000)
     )  # 22 kW EV, 100 kWh
     assert d.nominal_power_w == 22_000
+
+
+# -- Codex review 2026-10-16 finding 2: derived ttl must round-trip through reload --
+def test_far_expiry_round_trips_through_dump_and_load():
+    # derived ttl_s may exceed MAX_TTL_S; the persisted form must validate again
+    now = datetime.now(timezone.utc)
+    d = Demand(
+        **_base(
+            deadline=now + timedelta(days=800), expires_at=now + timedelta(days=801)
+        )
+    )
+    again = Demand.model_validate(
+        d.model_dump(mode="json"), context={"persisted": True}
+    )
+    assert again.ttl_s == d.ttl_s
+    assert again.expires_at == d.expires_at
+
+
+def test_explicit_ttl_above_ceiling_rejected():
+    with pytest.raises(ValidationError):
+        Demand(**_base(ttl_s=400 * 24 * 3600))

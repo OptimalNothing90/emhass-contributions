@@ -8,7 +8,7 @@ the registry for the write discipline.
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 ID_PATTERN = r"^[a-z0-9][a-z0-9-]{0,63}$"
 
@@ -41,8 +41,8 @@ class Demand(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     ttl_s: float | None = Field(
-        default=None, ge=0, le=MAX_TTL_S, allow_inf_nan=False
-    )  # derived below; persisted for refresh semantics
+        default=None, ge=0, allow_inf_nan=False
+    )  # derived below; persisted for refresh semantics. Ceiling applies to explicit values only (see _finalize)
 
     @field_validator(
         "window_start", "deadline", "expires_at", "created_at", "updated_at"
@@ -56,12 +56,18 @@ class Demand(BaseModel):
         return v.astimezone(timezone.utc)
 
     @model_validator(mode="after")
-    def _finalize(self) -> "Demand":
+    def _finalize(self, info: ValidationInfo) -> "Demand":
         if self.window_start is not None and self.window_start >= self.deadline:
             raise ValueError("window_start must be before deadline")
         if self.p_min_w > self.nominal_power_w:
             raise ValueError("p_min_w must not exceed nominal_power_w")
+        persisted = bool(info.context and info.context.get("persisted"))
         if self.ttl_s is None:
-            # expires_at in the past -> ttl_s 0: demand is born expired and swept next cycle (intended)
+            # expires_at in the past -> ttl_s 0: born expired, swept next cycle (intended).
+            # Derived ttl is not capped: it must round-trip through the registry file.
             self.ttl_s = max(0.0, (self.expires_at - self.created_at).total_seconds())
+        elif not persisted and self.ttl_s > MAX_TTL_S:
+            # Only client input is capped. A registry reload passes context={"persisted": True}
+            # and may carry any ttl_s, including one lifted by refresh() (review finding 2).
+            raise ValueError(f"ttl_s must not exceed {MAX_TTL_S:.0f} s (one year)")
         return self

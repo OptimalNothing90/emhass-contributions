@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -157,3 +158,69 @@ def test_refresh_stamps_updated_at_with_pinned_now(registry):
     registry.upsert(make_demand())
     d = registry.refresh("dishwasher", source="loxone", now=now)
     assert d.updated_at == now
+
+
+# -- Codex review 2026-10-16 finding 2: one bad entry must not empty the registry --
+def test_load_skips_one_bad_entry_keeps_the_rest(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand(id="good-a"))
+    reg.upsert(make_demand(id="good-b"))
+    raw = json.loads((tmp_path / "demands.json").read_text(encoding="utf-8"))
+    raw["demands"].append(
+        {"id": "broken", "source": "loxone"}
+    )  # missing required fields
+    (tmp_path / "demands.json").write_text(json.dumps(raw), encoding="utf-8")
+    reloaded = Registry(tmp_path / "demands.json")
+    assert sorted(d.id for d in reloaded.list_active()) == ["good-a", "good-b"]
+
+
+def test_load_falls_back_to_bak_only_when_file_is_not_json(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand(id="first"))
+    reg.upsert(make_demand(id="second"))  # rotates the one-demand state into .bak
+    (tmp_path / "demands.json").write_text("{not json", encoding="utf-8")
+    reloaded = Registry(tmp_path / "demands.json")
+    assert [d.id for d in reloaded.list_active()] == ["first"]
+
+
+def test_refreshed_far_expiry_demand_reloads(tmp_path):
+    # refresh lifts expires_at but keeps created_at and ttl_s: the persisted ttl no longer
+    # equals expires_at - created_at and must still reload (review finding 2)
+    now = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(
+        make_demand(
+            created_at=now,  # pinned: ttl derives from created_at, not the wall clock
+            deadline=now + timedelta(days=800),
+            expires_at=now + timedelta(days=801),
+        )
+    )
+    reg.refresh("dishwasher", source="loxone", now=now + timedelta(seconds=2))
+    reloaded = Registry(tmp_path / "demands.json")
+    assert reloaded.get("dishwasher") is not None
+    assert reloaded.get("dishwasher").ttl_s == pytest.approx(801 * 24 * 3600, rel=1e-3)
+
+
+def test_explicit_ttl_with_matching_timestamps_still_rejected():
+    now = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
+    with pytest.raises(Exception):
+        make_demand(
+            created_at=now,
+            deadline=now + timedelta(days=399),
+            expires_at=now + timedelta(days=400),
+            ttl_s=400 * 24 * 3600,
+        )
+
+
+def test_load_malformed_container_falls_back_to_bak(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand(id="first"))
+    reg.upsert(make_demand(id="second"))  # one-demand state now in .bak
+    (tmp_path / "demands.json").write_text('{"demands": null}', encoding="utf-8")
+    assert [d.id for d in Registry(tmp_path / "demands.json").list_active()] == [
+        "first"
+    ]
+    (tmp_path / "demands.json").write_text('{"demands": {"a": 1}}', encoding="utf-8")
+    assert [d.id for d in Registry(tmp_path / "demands.json").list_active()] == [
+        "first"
+    ]
