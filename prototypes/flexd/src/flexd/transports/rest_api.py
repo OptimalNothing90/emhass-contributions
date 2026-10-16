@@ -1,9 +1,6 @@
 """JSON REST transport. Thin: validation + registry/view calls, no business logic."""
 
-import math
-
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -13,15 +10,20 @@ from flexd.transports import reject_standing_squat
 from flexd.transports.simple_api import create_simple_router
 
 
-def _json_safe(value):
-    """Replace non-finite floats with their repr so the error body serializes."""
-    if isinstance(value, float) and not math.isfinite(value):
-        return repr(value)
-    if isinstance(value, dict):
-        return {k: _json_safe(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_json_safe(v) for v in value]
-    return value
+def _lean_errors(errors: list[dict]) -> list[dict]:
+    """Keep loc/msg/type only. FastAPI's stock body echoes `input` and `ctx`; the
+    input may be non-finite (not JSON serialisable, #1 HIGH 3) or carry request
+    content that has no business in an error response or in downstream logs."""
+    lean = []
+    for err in errors:
+        lean.append(
+            {
+                "loc": list(err.get("loc", ())),
+                "msg": str(err.get("msg", "")),
+                "type": str(err.get("type", "")),
+            }
+        )
+    return lean
 
 
 def create_app(
@@ -38,12 +40,8 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def _validation_422(request: Request, exc: RequestValidationError):
-        # FastAPI's stock handler echoes the offending input; a non-finite float
-        # (the Infinity token json.loads accepts, #1 HIGH 3) is not JSON compliant and
-        # would turn the 422 into a 500 inside the response serializer.
         return JSONResponse(
-            status_code=422,
-            content={"detail": _json_safe(jsonable_encoder(exc.errors()))},
+            status_code=422, content={"detail": _lean_errors(exc.errors())}
         )
 
     @app.post("/api/v1/demands", status_code=201)

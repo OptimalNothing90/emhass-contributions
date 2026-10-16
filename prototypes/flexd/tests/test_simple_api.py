@@ -206,3 +206,32 @@ def test_simple_infinity_deadline_422_not_500(client):
         ),
     )
     assert r.status_code == 422
+
+
+# -- Codex review 2026-10-16 finding 6: finite-but-absurd horizons overflowed timedelta --
+def test_simple_huge_finite_deadline_422_not_500(client):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone",
+            id="huge",
+            power_w=2000,
+            energy_wh=1000,
+            deadline_in_h="1e308",
+        ),
+    )
+    assert r.status_code == 422
+
+
+def test_simple_huge_window_start_422_not_500(client):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone",
+            id="huge",
+            power_w=2000,
+            energy_wh=1000,
+            window_start_in_h="1e300",
+        ),
+    )
+    assert r.status_code == 422

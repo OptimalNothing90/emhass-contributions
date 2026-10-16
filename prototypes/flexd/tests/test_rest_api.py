@@ -156,3 +156,21 @@ def test_infinity_body_422_and_not_persisted(client, registry):
     assert r.json()["detail"][0]["loc"] == ["body", "nominal_power_w"]
     assert "finite" in r.json()["detail"][0]["msg"]
     assert registry.get("dishwasher") is None
+
+
+# -- Codex review 2026-10-16 finding 6: the 422 body must not echo request input --
+def test_422_body_does_not_echo_input(client):
+    body = (
+        '{"id":"dishwasher","source":"loxone","energy_target_wh":1200,'
+        '"nominal_power_w":Infinity,"note":"do-not-echo-me",'
+        '"deadline":"2099-01-01T00:00:00Z","expires_at":"2099-01-01T01:00:00Z"}'
+    )
+    r = client.post(
+        "/api/v1/demands", content=body, headers={"content-type": "application/json"}
+    )
+    assert r.status_code == 422
+    text = r.text
+    assert "do-not-echo-me" not in text
+    detail = r.json()["detail"]
+    assert all(set(err) <= {"loc", "msg", "type"} for err in detail)
+    assert ["body", "nominal_power_w"] in [err["loc"] for err in detail]

@@ -6,9 +6,11 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import ValidationError
 
-from flexd.models import Demand, utcnow
+from flexd.models import MAX_ENERGY_WH, MAX_POWER_W, Demand, utcnow
 from flexd.registry import OwnershipError
 from flexd.transports import reject_standing_squat
+
+MAX_HORIZON_H = 366 * 24.0  # one year; timedelta() must never see an unbounded float
 
 
 def create_simple_router(
@@ -27,12 +29,24 @@ def create_simple_router(
         source: str = Query(...),
         id: str = Query(...),
         # allow_inf_nan=False: query-string coercion admits "Infinity" (#1 HIGH 3);
-        # timedelta(hours=inf) would otherwise be a 500 before Demand ever sees it
-        power_w: float | None = Query(default=None, gt=0, allow_inf_nan=False),
-        energy_wh: float | None = Query(default=None, gt=0, allow_inf_nan=False),
-        hours: float | None = Query(default=None, gt=0, allow_inf_nan=False),
-        deadline_in_h: float = Query(default=8, gt=0, allow_inf_nan=False),
-        window_start_in_h: float | None = Query(default=None, allow_inf_nan=False),
+        # timedelta(hours=inf) would otherwise be a 500 before Demand ever sees it.
+        # Upper bounds: a finite 1e308 overflows timedelta() just the same (Codex
+        # review finding 6); power and energy reuse the model ceilings.
+        power_w: float | None = Query(
+            default=None, gt=0, le=MAX_POWER_W, allow_inf_nan=False
+        ),
+        energy_wh: float | None = Query(
+            default=None, gt=0, le=MAX_ENERGY_WH, allow_inf_nan=False
+        ),
+        hours: float | None = Query(
+            default=None, gt=0, le=MAX_HORIZON_H, allow_inf_nan=False
+        ),
+        deadline_in_h: float = Query(
+            default=8, gt=0, le=MAX_HORIZON_H, allow_inf_nan=False
+        ),
+        window_start_in_h: float | None = Query(
+            default=None, ge=0, le=MAX_HORIZON_H, allow_inf_nan=False
+        ),
     ):
         if power_w is None:
             raise HTTPException(status_code=400, detail="power_w required")
