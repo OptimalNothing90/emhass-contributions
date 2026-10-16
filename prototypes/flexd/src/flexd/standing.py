@@ -73,40 +73,58 @@ class StandingManager:
         return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
     # -- API ------------------------------------------------------------------
+    def _accrue_one(
+        self, defn: StandingDefinition, now: datetime, elapsed_lookup
+    ) -> tuple[dict, datetime, datetime]:
+        """Credit old-plan on-hours since the last accrual, clamped to the window."""
+        win_start, win_end = self._window_utc(defn, now)
+        entry = self._entry(defn.id, now)
+        accrual_start = win_start
+        if entry["last_accrual"] is not None:
+            last = datetime.fromisoformat(entry["last_accrual"])
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            accrual_start = max(last, win_start)
+        accrual_end = min(now, win_end)
+        if accrual_end > accrual_start:
+            entry["elapsed_h"] += elapsed_lookup(defn.id, accrual_start, accrual_end)
+            entry["last_accrual"] = accrual_end.isoformat()
+        return entry, win_start, win_end
+
+    def _prune_ledger(self, now: datetime) -> None:
+        # day-keyed: past days are dead weight; prune so the file can't grow unbounded
+        today = now.astimezone(self._tz).date().isoformat()
+        self._ledger = {k: v for k, v in self._ledger.items() if k.endswith(today)}
+
+    def accrue(self, now: datetime, elapsed_lookup) -> None:
+        """Credit the CURRENT adopted plan's on-hours up to `now` into the ledger.
+        Called by the scheduler right before a new plan is adopted, with the real
+        adoption instant, so the old plan is accounted until it actually stops being
+        served (Codex review 2026-10-16 finding 4). Never touches the registry."""
+        self._prune_ledger(now)
+        for defn in self._defs.values():
+            self._accrue_one(defn, now, elapsed_lookup)
+        self._save_ledger()
+
     def materialize(self, now: datetime, elapsed_lookup) -> None:
         """elapsed_lookup(id, since_utc, until_utc) -> nominal-equivalent on-hours in the
         CURRENT adopted plan over [since, until). Bounds are live instants (never
         grid-aligned); the lookup credits partial slots so consecutive cycles
         partition the day exactly.
 
-        MUST run before this cycle's plan is adopted: it accrues the OLD plan's
-        on-hours into the ledger (rolling MPC plans start at 'now', so the
-        current plan alone never carries the whole day).
+        Accrues up to `now`, then (re)registers each standing definition inside its
+        window with the remaining energy. Runs at cycle start, before this cycle's
+        plan is adopted; the demands it writes feed this cycle's payload. Plan
+        energy is an estimate of delivery until a consumption feedback exists.
 
         After downtime across local midnight, yesterday's un-accrued tail is
         deliberately dropped: yesterday's ledger entry and instance are both
         dead; today accrues from today's window start.
         """
-        # day-keyed: past days are dead weight; prune so the file can't grow unbounded
-        today = now.astimezone(self._tz).date().isoformat()
-        self._ledger = {k: v for k, v in self._ledger.items() if k.endswith(today)}
+        self._prune_ledger(now)
         for defn in self._defs.values():
             try:
-                win_start, win_end = self._window_utc(defn, now)
-                entry = self._entry(defn.id, now)
-                # accrue old-plan on-hours since the last accrual, clamped to the window
-                accrual_start = win_start
-                if entry["last_accrual"] is not None:
-                    last = datetime.fromisoformat(entry["last_accrual"])
-                    if last.tzinfo is None:
-                        last = last.replace(tzinfo=timezone.utc)
-                    accrual_start = max(last, win_start)
-                accrual_end = min(now, win_end)
-                if accrual_end > accrual_start:
-                    entry["elapsed_h"] += elapsed_lookup(
-                        defn.id, accrual_start, accrual_end
-                    )
-                    entry["last_accrual"] = accrual_end.isoformat()
+                entry, win_start, win_end = self._accrue_one(defn, now, elapsed_lookup)
                 if entry["done"] or not (win_start <= now < win_end):
                     continue
                 override = entry["day_target_override_h"]

@@ -24,9 +24,15 @@ def _parse(ts: str) -> datetime:
 
 
 class PlanView:
-    def __init__(self, path: Path, stale_after: timedelta):
+    def __init__(
+        self,
+        path: Path,
+        stale_after: timedelta,
+        timestep: timedelta = timedelta(minutes=30),
+    ):
         self._path = Path(path)
         self._stale_after = stale_after
+        self._timestep = timestep
         self._plan: dict | None = None
         self._mapping: dict = {}
         self._adopted_at: datetime | None = None
@@ -82,7 +88,9 @@ class PlanView:
         records = self._records()
         if len(records) >= 2:
             return _parse(records[1]["timestamp"]) - _parse(records[0]["timestamp"])
-        return timedelta(minutes=30)
+        return (
+            self._timestep
+        )  # single-record plans: trust the configured grid, not a 30-min guess
 
     def _record_at(self, now: datetime) -> dict | None:
         current = None

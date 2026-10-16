@@ -44,6 +44,9 @@ class FakeStandingRegistry:
     def correct(self, demand_id, *, remaining_hours, now):
         self.corrections.append((demand_id, remaining_hours))
 
+    def accrue(self, now, elapsed_lookup):
+        pass
+
 
 @pytest.fixture
 def standing_fake():

@@ -45,6 +45,9 @@ class FakeStanding:
     def materialize(self, now, elapsed_lookup):
         pass
 
+    def accrue(self, now, elapsed_lookup):
+        pass
+
 
 PLAN = {
     "status": "ok",
@@ -316,3 +319,71 @@ async def test_notify_off_invokes_callback(registry):
     s.notify_off("dishwasher")
     await asyncio.sleep(0)
     assert seen == ["dishwasher"]
+
+
+# -- Codex review 2026-10-16 finding 4: old plan credited until the real switch --
+class RecordingStanding:
+    def __init__(self):
+        self.accrued = []
+        self.materialized = []
+
+    def accrue(self, now, elapsed_lookup):
+        self.accrued.append(now)
+
+    def materialize(self, now, elapsed_lookup):
+        self.materialized.append(now)
+
+
+class RecordingView(FakeView):
+    def adopt(self, plan, mapping, now):
+        self.adopted.append((plan, mapping, now))
+
+
+async def test_old_plan_accrued_to_adoption_instant_and_adopted_there(registry):
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
+        )
+    )
+    view, standing = RecordingView(), RecordingStanding()
+    ticks = iter([NOW + timedelta(minutes=2, seconds=11)])  # the solver took 2:11
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(result=PLAN),
+        view=view,
+        standing=standing,
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        clock=lambda: next(ticks),
+    )
+    assert await s.run_once(now=NOW) == "ok"
+    assert standing.materialized == [NOW]  # demands built from cycle start
+    assert standing.accrued == [
+        NOW + timedelta(minutes=2, seconds=11)
+    ]  # old plan credited until the switch
+    assert view.adopted[0][2] == NOW + timedelta(
+        minutes=2, seconds=11
+    )  # new plan effective from the switch
+
+
+async def test_no_accrue_or_adopt_when_plan_rejected(registry):
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
+        )
+    )
+    view, standing = RecordingView(), RecordingStanding()
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(error=PlanRejected("stale")),
+        view=view,
+        standing=standing,
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        clock=lambda: NOW + timedelta(minutes=1),
+    )
+    assert await s.run_once(now=NOW) == "rejected"
+    assert standing.accrued == []
+    assert view.adopted == []

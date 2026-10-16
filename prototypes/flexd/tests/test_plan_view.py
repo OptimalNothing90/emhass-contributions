@@ -173,3 +173,22 @@ def test_on_hours_elapsed_legacy_mapping_without_nominal(tmp_path):
     assert (
         v.on_hours_elapsed("dishwasher", since=T0, until=T0 + timedelta(hours=1)) == 0.5
     )
+
+
+# -- Codex review 2026-10-16 finding 4: single-record plans use the configured step --
+def test_single_record_uses_configured_timestep(tmp_path):
+    v = PlanView(
+        tmp_path / "adopted.json",
+        stale_after=timedelta(hours=2),
+        timestep=timedelta(minutes=15),
+    )
+    plan = json.loads(json.dumps(PLAN))
+    plan["plan"] = plan["plan"][:1]  # one record, 2000 W
+    v.adopt(plan, MAPPING, now=T0)
+    assert v.on_hours_elapsed(
+        "dishwasher", since=T0, until=T0 + timedelta(hours=1)
+    ) == pytest.approx(0.25)
+    assert v.demand_view("dishwasher", now=T0 + timedelta(minutes=20)) is not None
+    assert (
+        v.demand_view("dishwasher", now=T0 + timedelta(minutes=20)).setpoint_w == 0
+    )  # past the single 15-min record

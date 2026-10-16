@@ -49,6 +49,7 @@ async def run() -> None:
     view = PlanView(
         cfg.data_dir / "adopted_plan.json",
         stale_after=timedelta(minutes=cfg.timestep_min * cfg.stale_after_cycles),
+        timestep=timedelta(minutes=cfg.timestep_min),
     )
     driver = EmhassDriver(cfg.emhass_url, known_schema_versions=KNOWN_SCHEMA_VERSIONS)
     standing = StandingManager(

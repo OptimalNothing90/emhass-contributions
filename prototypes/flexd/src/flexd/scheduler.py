@@ -33,6 +33,7 @@ class Scheduler:
         crumb_path: Path | None = None,
         on_cycle_end=None,
         on_demand_off=None,
+        clock=None,
     ):
         self._registry = registry
         self._driver = driver
@@ -48,6 +49,9 @@ class Scheduler:
         self._on_demand_off = (
             on_demand_off  # async callback(demand_id) -> publish OFF now
         )
+        # injectable wall clock: the plan adoption instant is read here
+        self._clock = clock or utcnow
+        self._clock_injected = clock is not None
         self.debounce_s = 10.0
         self._debounce_task: asyncio.Task | None = None
         self._debounce_sleeping = False
@@ -66,7 +70,8 @@ class Scheduler:
         # at the driver await and adopt a plan with the WRONG mapping (solve results are
         # read back from a shared endpoint)
         async with self._cycle_lock:
-            now = now or utcnow()
+            pinned = now is not None
+            now = now or self._clock()
             swept = self._registry.sweep(now=now)
             deleted = self._registry.drain_deleted()
             if self._on_cycle_end is not None:
@@ -74,7 +79,7 @@ class Scheduler:
                     [d.id for d in swept] + deleted
                 )  # nothing to deliver to otherwise
             # ORDER MATTERS: materialize accrues the OLD plan's on-hours into the standing
-            # ledger, so it must run before this cycle's adopt() replaces the plan.
+            # ledger up to cycle start; the tail until the real switch is accrued below.
             self._standing.materialize(
                 now=now, elapsed_lookup=self._view.on_hours_elapsed
             )
@@ -93,7 +98,20 @@ class Scheduler:
                     plan = await self._driver.run_cycle(
                         payload, last_generated_at=self._view.generated_at
                     )
-                    self._view.adopt(plan, mapping, now=now)
+                    # The old plan was served until this instant; credit it up to here,
+                    # then make the new plan effective from here (Codex review finding 4).
+                    # The cycle's `now` stays the payload anchor; the switch instant is the
+                    # real clock when running live (or when a test injects one); a pinned
+                    # `now` without an injected clock stays pinned so deterministic tests
+                    # never see wall-clock dates (plan review finding 6).
+                    if self._clock_injected or not pinned:
+                        switch_at = max(now, self._clock())
+                    else:
+                        switch_at = now
+                    self._standing.accrue(
+                        now=switch_at, elapsed_lookup=self._view.on_hours_elapsed
+                    )
+                    self._view.adopt(plan, mapping, now=switch_at)
                     result = "ok"
                 except PlanRejected as exc:
                     log.error("plan rejected: %s", exc)

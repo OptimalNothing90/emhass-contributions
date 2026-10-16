@@ -245,3 +245,79 @@ def test_live_cycle_instants_accrue_against_real_plan(tmp_path):
     assert reg.get("waterheater").energy_target_wh == pytest.approx(
         expected_remaining_h * 3000
     )
+
+
+# -- Codex review 2026-10-16 finding 4: accrue the old plan up to the real switch --
+def test_accrue_only_updates_ledger_without_materializing(tmp_path):
+    reg, mgr = mk(tmp_path)
+    mgr.accrue(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 1.5)
+    assert reg.get("waterheater") is None  # accrue never touches the registry
+    mgr.materialize(
+        now=NOON_UTC + timedelta(minutes=1), elapsed_lookup=lambda i, s, u: 0.0
+    )
+    assert reg.get("waterheater").energy_target_wh == pytest.approx((5 - 1.5) * 3000)
+
+
+async def test_energy_accounting_across_a_real_plan_switch(tmp_path):
+    from flexd.scheduler import Scheduler
+
+    reg, mgr = mk(tmp_path)
+    view = PlanView(
+        tmp_path / "adopted.json",
+        stale_after=timedelta(hours=2),
+        timestep=timedelta(minutes=30),
+    )
+
+    def plan(power, generated_at, first):
+        return {
+            "status": "ok",
+            "generated_at": generated_at,
+            "emhass_schema_version": "1.0",
+            "plan": [
+                {
+                    "timestamp": (first + timedelta(minutes=30 * i)).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                    "P_deferrable0": power,
+                }
+                for i in range(3)
+            ],
+        }
+
+    plans = [
+        plan(3000, "2026-07-05T12:00:05Z", NOON_UTC),
+        plan(1500, "2026-07-05T12:30:05Z", NOON_UTC + timedelta(minutes=30)),
+        plan(1500, "2026-07-05T13:00:05Z", NOON_UTC + timedelta(hours=1)),
+    ]
+
+    class TwoPlans:
+        async def run_cycle(self, payload, last_generated_at=None):
+            return plans.pop(0)
+
+    ticks = iter(
+        [
+            NOON_UTC + timedelta(minutes=2),
+            NOON_UTC + timedelta(minutes=31, seconds=30),
+            NOON_UTC + timedelta(minutes=61),
+        ]
+    )
+    s = Scheduler(
+        registry=reg,
+        driver=TwoPlans(),
+        view=view,
+        standing=mgr,
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        clock=lambda: next(ticks),
+    )
+
+    await s.run_once(now=NOON_UTC)  # adopt A at 12:02
+    # A credited 12:02-12:30 and 12:30-12:31:30; adopt B at 12:31:30
+    await s.run_once(now=NOON_UTC + timedelta(minutes=30))
+    # B credited 12:31:30-13:00 at 1500/3000 before this solve
+    await s.run_once(now=NOON_UTC + timedelta(hours=1))
+    expected_elapsed_h = 28 / 60 + 1.5 / 60 + 28.5 / 60 * 0.5
+    assert reg.get("waterheater").energy_target_wh == pytest.approx(
+        (5 - expected_elapsed_h) * 3000, abs=1.0
+    )
