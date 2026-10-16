@@ -92,8 +92,41 @@ def test_retrigger_is_pure_refresh_deadline_stable(tmp_path):
     mgr.start("dishwasher", source="loxone", now=t0 + timedelta(minutes=10))
     d = reg.get("dishwasher")
     assert d.deadline == first_deadline  # deadline computed once, never moved
-    assert d.expires_at > first_expiry  # only expiry bumped (refresh)
+    # expiry stays deadline+ttl: now+ttl is earlier and must not win (#1 HIGH 2).
+    # The old assertion (expires_at > first_expiry) compared real-now+1h against
+    # this 2026-07-05 fixture and passed vacuously.
+    assert d.expires_at == first_expiry
+    assert d.expires_at > d.deadline
     assert len(reg.list_active(now=t0)) == 1
+
+
+def test_retrigger_long_before_deadline_keeps_run_alive(tmp_path):
+    # LesIT1's repro: dishwasher-by-06:30 double-pressed at 20:27 and 20:28 Berlin
+    reg, mgr = mk(tmp_path)
+    t0 = datetime(2026, 7, 5, 18, 27, tzinfo=timezone.utc)  # 20:27 Berlin, evening rule
+    mgr.start("dishwasher", source="loxone", now=t0)
+    deadline = reg.get("dishwasher").deadline
+    mgr.start("dishwasher", source="loxone", now=t0 + timedelta(minutes=1))
+    d = reg.get("dishwasher")
+    assert d.deadline == deadline
+    assert d.expires_at == deadline + timedelta(hours=1)
+    # still active at the deadline: the sweep must not have a reason to drop it before then
+    assert reg.list_active(now=deadline - timedelta(minutes=1))
+
+
+def test_trigger_in_post_deadline_grace_starts_new_run(tmp_path):
+    reg, mgr = mk(tmp_path)
+    t0 = datetime(
+        2026, 7, 5, 6, 0, tzinfo=timezone.utc
+    )  # 08:00 Berlin -> deadline 15:00 Berlin
+    mgr.start("dishwasher", source="loxone", now=t0)
+    old_deadline = reg.get("dishwasher").deadline
+    # 10 min after the deadline, inside the 1 h grace (expires_at > now): a real new run
+    t1 = old_deadline + timedelta(minutes=10)  # 15:10 Berlin, no bracket -> default 8 h
+    mgr.start("dishwasher", source="loxone", now=t1)
+    d = reg.get("dishwasher")
+    assert d.deadline == t1 + timedelta(hours=8)
+    assert d.deadline > old_deadline
 
 
 def test_unknown_template_raises(tmp_path):

@@ -106,11 +106,18 @@ class Registry:
             drained, self._deleted_ids = self._deleted_ids, []
             return drained
 
-    def refresh(self, demand_id: str, source: str) -> Demand:
+    def refresh(
+        self, demand_id: str, source: str, now: datetime | None = None
+    ) -> Demand:
+        """Keep a demand alive. Never shortens it: a template demand expires at
+        deadline+ttl, and a flapping re-trigger (or a client's periodic keepalive)
+        must not pull expiry back to now+ttl and ahead of the deadline (#1 HIGH 2).
+        `now` is injectable so expiry math is testable under pinned time."""
         with self._lock:
+            now = now or utcnow()
             d = self._check_owner(demand_id, source)
-            d.expires_at = utcnow() + timedelta(seconds=d.ttl_s or 0)
-            d.updated_at = utcnow()
+            d.expires_at = max(d.expires_at, now + timedelta(seconds=d.ttl_s or 0))
+            d.updated_at = now
             self._save()
             return d.model_copy()
 

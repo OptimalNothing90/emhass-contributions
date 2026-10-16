@@ -120,3 +120,40 @@ def test_concurrent_writers_no_corruption(tmp_path):
     assert errors == []
     reloaded = Registry(tmp_path / "demands.json")
     assert len(reloaded.list_active()) == 90  # every write survived
+
+
+# -- #1 HIGH 2: refresh recomputed expires_at from the wall clock and could shorten --
+def test_refresh_never_moves_expiry_earlier(registry):
+    now = datetime(2026, 7, 5, 20, 0, tzinfo=timezone.utc)
+    deadline = now + timedelta(hours=10)
+    registry.upsert(
+        make_demand(
+            deadline=deadline, expires_at=deadline + timedelta(hours=1), ttl_s=3600
+        )
+    )
+    before = registry.get("dishwasher").expires_at
+    after = registry.refresh(
+        "dishwasher", source="loxone", now=now + timedelta(minutes=1)
+    ).expires_at
+    assert after == before  # deadline+1h is later than now+1h: keep it
+    assert after > deadline
+
+
+def test_refresh_extends_when_ttl_window_is_later(registry):
+    now = datetime(2026, 7, 5, 20, 0, tzinfo=timezone.utc)
+    registry.upsert(
+        make_demand(
+            deadline=now + timedelta(hours=8),
+            expires_at=now + timedelta(minutes=30),
+            ttl_s=3600,
+        )
+    )
+    after = registry.refresh("dishwasher", source="loxone", now=now).expires_at
+    assert after == now + timedelta(hours=1)
+
+
+def test_refresh_stamps_updated_at_with_pinned_now(registry):
+    now = datetime(2026, 7, 5, 20, 0, tzinfo=timezone.utc)
+    registry.upsert(make_demand())
+    d = registry.refresh("dishwasher", source="loxone", now=now)
+    assert d.updated_at == now

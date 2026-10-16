@@ -32,11 +32,13 @@ class TemplateManager:
     def start(self, template_id: str, *, source: str, now: datetime) -> Demand:
         defn = self._defs[template_id]  # KeyError -> transport maps to 404
 
-        # Re-trigger while active = pure refresh (spec): deadlines are computed exactly
-        # once at first trigger; a flapping event must not move them across a rule boundary.
+        # Re-trigger while the run is still pending = pure refresh (spec): deadlines are
+        # computed exactly once at first trigger; a flapping event must not move them
+        # across a rule boundary. Keyed on deadline, not expires_at: a trigger inside the
+        # post-deadline grace window is a genuine new appliance run and gets a new deadline.
         existing = self._registry.get(template_id)
-        if existing is not None and existing.expires_at > now:
-            return self._registry.refresh(template_id, source=source)
+        if existing is not None and existing.deadline > now:
+            return self._registry.refresh(template_id, source=source, now=now)
 
         local = now.astimezone(self._tz)
         rule = self._match_rule(defn, local.time())
