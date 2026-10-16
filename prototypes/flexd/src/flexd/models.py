@@ -12,6 +12,13 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 ID_PATTERN = r"^[a-z0-9][a-z0-9-]{0,63}$"
 
+# Sanity ceilings, not physics: anything above is a client bug (or an Infinity token
+# that json.loads accepted). One bad register would otherwise poison the whole solve
+# until expires_at.
+MAX_POWER_W = 1_000_000.0  # 1 MW
+MAX_ENERGY_WH = 1_000_000_000.0  # 1 GWh
+MAX_TTL_S = 366 * 24 * 3600.0  # one year
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -22,19 +29,19 @@ class Demand(BaseModel):
     source: str = Field(pattern=ID_PATTERN)
     type: Literal["ev", "thermal", "generic"] = "generic"
     flexibility: Literal["shiftable", "committed", "hybrid"] = "shiftable"
-    energy_target_wh: float = Field(gt=0)
-    nominal_power_w: float = Field(gt=0)
-    p_min_w: float = Field(default=0, ge=0)
+    energy_target_wh: float = Field(gt=0, le=MAX_ENERGY_WH, allow_inf_nan=False)
+    nominal_power_w: float = Field(gt=0, le=MAX_POWER_W, allow_inf_nan=False)
+    p_min_w: float = Field(default=0, ge=0, le=MAX_POWER_W, allow_inf_nan=False)
     window_start: datetime | None = None
     deadline: datetime
     expires_at: datetime
     priority: int = Field(default=1, ge=0)
     interruptible: bool = True
-    current_power_w: float = Field(default=0, ge=0)
+    current_power_w: float = Field(default=0, ge=0, le=MAX_POWER_W, allow_inf_nan=False)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     ttl_s: float | None = Field(
-        default=None, ge=0
+        default=None, ge=0, le=MAX_TTL_S, allow_inf_nan=False
     )  # derived below; persisted for refresh semantics
 
     @field_validator(

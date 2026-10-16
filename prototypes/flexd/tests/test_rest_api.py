@@ -138,3 +138,21 @@ def test_standing_put_config_is_correction(client, standing_fake):
     assert r.status_code == 200
     assert r.json()["corrected"] is True
     assert standing_fake.corrections == [("waterheater", 1.0)]
+
+
+def test_infinity_body_422_and_not_persisted(client, registry):
+    # #1 HIGH 3: raw string body — json= would serialize inf as Infinity too, but be explicit
+    body = (
+        '{"id":"dishwasher","source":"loxone","energy_target_wh":1200,'
+        '"nominal_power_w":Infinity,'
+        '"deadline":"2099-01-01T00:00:00Z","expires_at":"2099-01-01T01:00:00Z"}'
+    )
+    r = client.post(
+        "/api/v1/demands", content=body, headers={"content-type": "application/json"}
+    )
+    assert r.status_code == 422
+    # stock FastAPI handler echoes input=inf and 500s in the serializer; the body
+    # must still name the field and the reason
+    assert r.json()["detail"][0]["loc"] == ["body", "nominal_power_w"]
+    assert "finite" in r.json()["detail"][0]["msg"]
+    assert registry.get("dishwasher") is None

@@ -1,11 +1,27 @@
 """JSON REST transport. Thin: validation + registry/view calls, no business logic."""
 
-from fastapi import FastAPI, HTTPException, Query, Response
+import math
+
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError
 from flexd.transports import reject_standing_squat
 from flexd.transports.simple_api import create_simple_router
+
+
+def _json_safe(value):
+    """Replace non-finite floats with their repr so the error body serializes."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return repr(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 def create_app(
@@ -19,6 +35,16 @@ def create_app(
     default_ttl_s: int = 3600,
 ) -> FastAPI:
     app = FastAPI(title="flexd", version="0.1.0")
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_422(request: Request, exc: RequestValidationError):
+        # FastAPI's stock handler echoes the offending input; a non-finite float
+        # (the Infinity token json.loads accepts, #1 HIGH 3) is not JSON compliant and
+        # would turn the 422 into a 500 inside the response serializer.
+        return JSONResponse(
+            status_code=422,
+            content={"detail": _json_safe(jsonable_encoder(exc.errors()))},
+        )
 
     @app.post("/api/v1/demands", status_code=201)
     def register(demand: Demand):

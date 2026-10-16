@@ -26,11 +26,13 @@ def create_simple_router(
     def register(
         source: str = Query(...),
         id: str = Query(...),
-        power_w: float | None = Query(default=None, gt=0),
-        energy_wh: float | None = Query(default=None, gt=0),
-        hours: float | None = Query(default=None, gt=0),
-        deadline_in_h: float = Query(default=8, gt=0),
-        window_start_in_h: float | None = Query(default=None),
+        # allow_inf_nan=False: query-string coercion admits "Infinity" (#1 HIGH 3);
+        # timedelta(hours=inf) would otherwise be a 500 before Demand ever sees it
+        power_w: float | None = Query(default=None, gt=0, allow_inf_nan=False),
+        energy_wh: float | None = Query(default=None, gt=0, allow_inf_nan=False),
+        hours: float | None = Query(default=None, gt=0, allow_inf_nan=False),
+        deadline_in_h: float = Query(default=8, gt=0, allow_inf_nan=False),
+        window_start_in_h: float | None = Query(default=None, allow_inf_nan=False),
     ):
         if power_w is None:
             raise HTTPException(status_code=400, detail="power_w required")

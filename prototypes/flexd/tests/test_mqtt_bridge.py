@@ -243,3 +243,17 @@ async def test_standing_set_config_zero_power_error_event(bridge):
     errors = [t for t, _, _ in pub.published if t.endswith("/error")]
     assert "flexd/demands/config/waterheater/error" in errors
     assert b._standing.corrections == []
+
+
+async def test_set_with_infinity_publishes_error_and_registers_nothing(bridge):
+    # #1 HIGH 3: json.loads accepts the Infinity token; the model must reject it
+    b, pub, registry = bridge
+    payload = (
+        '{"energy_target_wh":1200,"nominal_power_w":Infinity,'
+        f'"deadline":"{(NOW_REAL + timedelta(hours=8)).isoformat()}",'
+        f'"expires_at":"{(NOW_REAL + timedelta(hours=9)).isoformat()}"}}'
+    )
+    await b.handle_message("flexd/demands/loxone/inf/set", payload)
+    assert registry.get("inf") is None
+    topics = [t for t, _, _ in pub.published]
+    assert "flexd/demands/loxone/inf/error" in topics

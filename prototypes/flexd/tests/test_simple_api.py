@@ -181,3 +181,28 @@ def test_simple_status_down(registry):
     )
     down_client = TestClient(app)
     assert down_client.get("/simple/status").text == "down"
+
+
+def test_simple_infinity_power_422(client, registry):
+    # #1 HIGH 3: query-string float coercion admits Infinity too
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(source="loxone", id="inf", power_w="Infinity", energy_wh=1000),
+    )
+    assert r.status_code == 422
+    assert registry.get("inf") is None
+
+
+def test_simple_infinity_deadline_422_not_500(client):
+    # timedelta(hours=inf) raises OverflowError inside the handler without the guard
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone",
+            id="inf",
+            power_w=2000,
+            energy_wh=1000,
+            deadline_in_h="Infinity",
+        ),
+    )
+    assert r.status_code == 422
