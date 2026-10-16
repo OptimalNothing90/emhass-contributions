@@ -194,3 +194,19 @@ def test_trigger_on_expired_but_pending_run_starts_new_run(tmp_path):
         assert d.deadline == datetime(
             2026, 7, 5, 13, 0, tzinfo=timezone.utc
         )  # 15:00 Berlin from the morning rule
+
+
+def test_template_modulating_flag_reaches_demand(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    tpl = TemplateDefinition(
+        id="heater",
+        nominal_power_w=3000,
+        energy_wh=1500,
+        modulating=True,
+        default_finish_in_h=4,
+    )
+    mgr = TemplateManager([tpl], tz="UTC", registry=reg, default_ttl_s=3600)
+    mgr.start(
+        "heater", source="loxone", now=datetime(2026, 7, 5, 6, 0, tzinfo=timezone.utc)
+    )
+    assert reg.get("heater").modulating is True

@@ -72,6 +72,7 @@ class TemplateManager:
             energy_target_wh=defn.energy_wh,
             nominal_power_w=defn.nominal_power_w,
             interruptible=defn.interruptible,
+            modulating=defn.modulating,
             window_start=window_start,
             deadline=deadline,
             expires_at=deadline + timedelta(seconds=self._ttl),

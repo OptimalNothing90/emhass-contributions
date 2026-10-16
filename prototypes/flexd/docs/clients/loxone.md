@@ -27,8 +27,10 @@ Parameters:
 | `energy_wh` | total energy this run needs, in Wh |
 | `hours` | alternative to `energy_wh`: how many hours at `power_w`. **If both `energy_wh` and `hours` are given, `energy_wh` wins** — `hours` is silently ignored, not an error |
 | `deadline_in_h` | hours from now by which the energy must be delivered (default 8 if omitted) |
+| `modulating` | `1` only for devices that can run at any power up to `power_w` (modulating heat pump, variable-speed pump): flexd then plans fractional hours. Omit for everything else: the device runs at `power_w` or not at all, and flexd rounds the energy UP to whole timesteps (a 1400 Wh / 2000 W dishwasher on a 30-minute grid becomes two slots) |
 
-Example: a dishwasher needing 1.4 kWh at up to 2000 W, done within 8 hours:
+Example: a dishwasher needing 1.4 kWh at 2000 W, done within 8 hours (not modulating, so
+`modulating` is omitted; a modulating device would add `&modulating=1`):
 
 ```
 POST /simple/demands/register?source=loxone&id=dishwasher&power_w=2000&energy_wh=1400&deadline_in_h=8

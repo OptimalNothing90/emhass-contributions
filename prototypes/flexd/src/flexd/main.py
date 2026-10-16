@@ -97,6 +97,7 @@ async def run() -> None:
         horizon_steps=cfg.horizon_steps,
         extra_runtime_params=cfg.extra_runtime_params,
         crumb_path=cfg.data_dir / "last_cycle.json",
+        ts_round=cfg.ts_round,
         # without a broker there is nothing to deliver to — avoid a perpetual redelivery queue
         on_cycle_end=on_cycle_end if cfg.mqtt.enabled else None,
         on_demand_off=_publish_off if cfg.mqtt.enabled else None,

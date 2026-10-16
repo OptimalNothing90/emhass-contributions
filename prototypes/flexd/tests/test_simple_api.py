@@ -316,3 +316,27 @@ def test_simple_standing_done_triggers_notify_off(registry, monkeypatch):
     monkeypatch.setattr(scheduler, "notify_off", lambda i: calls.append(i))
     assert c.post("/simple/demands/waterheater/done?source=config").status_code == 200
     assert calls == ["waterheater"]
+
+
+def test_simple_register_modulating_query(client, registry):
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone",
+            id="heater",
+            power_w=3000,
+            energy_wh=1500,
+            deadline_in_h=4,
+            modulating="1",
+        ),
+    )
+    assert r.status_code == 201
+    assert registry.get("heater").modulating is True
+    r = client.post(
+        "/simple/demands/register",
+        params=dict(
+            source="loxone", id="pump", power_w=750, energy_wh=1500, deadline_in_h=4
+        ),
+    )
+    assert r.status_code == 201
+    assert registry.get("pump").modulating is False

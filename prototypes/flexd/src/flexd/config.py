@@ -4,6 +4,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -33,6 +34,7 @@ class StandingDefinition(BaseModel):
     daily_energy_wh: float | None = Field(default=None, gt=0)
     window: tuple[str, str]
     interruptible: bool = True
+    modulating: bool = False  # see Demand.modulating
 
     @field_validator("window", mode="before")
     @classmethod
@@ -82,6 +84,7 @@ class TemplateDefinition(BaseModel):
     nominal_power_w: float = Field(gt=0)
     energy_wh: float = Field(gt=0)
     interruptible: bool = True
+    modulating: bool = False  # see Demand.modulating
     default_finish_in_h: float = Field(default=8, gt=0)
     deadline_rules: list[DeadlineRule] = []
 
@@ -124,6 +127,8 @@ class FlexdConfig(BaseModel):
     data_dir: Path = Path("/data")
     stale_after_cycles: int = 2
     default_ttl_s: int = 3600
+    # must equal EMHASS method_ts_round: flexd anchors its timestep grid on the same rule
+    ts_round: Literal["nearest", "first", "last"] = "nearest"
     mqtt: MqttConfig = MqttConfig()
     extra_runtime_params: dict = {}
     standing_demands: list[StandingDefinition] = []

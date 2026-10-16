@@ -47,6 +47,7 @@ def create_simple_router(
         window_start_in_h: float | None = Query(
             default=None, ge=0, le=MAX_HORIZON_H, allow_inf_nan=False
         ),
+        modulating: bool = Query(default=False),
     ):
         if power_w is None:
             raise HTTPException(status_code=400, detail="power_w required")
@@ -71,6 +72,7 @@ def create_simple_router(
                     else None,
                     deadline=deadline,
                     expires_at=deadline + timedelta(seconds=default_ttl_s),
+                    modulating=modulating,
                 )
             )
         except ValidationError as exc:

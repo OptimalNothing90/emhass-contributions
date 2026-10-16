@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from flexd.config import load_config
 
@@ -126,4 +127,15 @@ def test_template_id_collides_with_standing_rejected(tmp_path):
     p = tmp_path / "flexd.yaml"
     p.write_text(collide, encoding="utf-8")
     with pytest.raises(ValueError, match="collide"):
+        load_config(p)
+
+
+def test_ts_round_default_and_validation(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    assert load_config(p).ts_round == "nearest"
+    p.write_text(YAML + "ts_round: last\n", encoding="utf-8")
+    assert load_config(p).ts_round == "last"
+    p.write_text(YAML + "ts_round: round\n", encoding="utf-8")
+    with pytest.raises(ValidationError):
         load_config(p)

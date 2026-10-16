@@ -34,6 +34,7 @@ class Scheduler:
         on_cycle_end=None,
         on_demand_off=None,
         clock=None,
+        ts_round: str = "nearest",
     ):
         self._registry = registry
         self._driver = driver
@@ -52,6 +53,7 @@ class Scheduler:
         # injectable wall clock: the plan adoption instant is read here
         self._clock = clock or utcnow
         self._clock_injected = clock is not None
+        self._ts_round = ts_round  # grid anchor rule, must equal EMHASS method_ts_round
         self.debounce_s = 10.0
         self._debounce_task: asyncio.Task | None = None
         self._debounce_sleeping = False
@@ -93,6 +95,7 @@ class Scheduler:
                     extra=self._extra,
                     timestep_min=self._timestep_min,
                     horizon_steps=self._horizon,
+                    ts_round=self._ts_round,
                 )
                 try:
                     plan = await self._driver.run_cycle(

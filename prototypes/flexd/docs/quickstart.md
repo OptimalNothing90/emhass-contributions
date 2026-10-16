@@ -31,6 +31,9 @@ Open `flexd.yaml` and work through it top to bottom:
   and trigger-template deadline rules in local time; everything else in flexd is UTC internally.
 - `data_dir` — leave as `/data` inside the container; it's where `demands.json`,
   `standing_ledger.json`, `adopted_plan.json` and `last_cycle.json` live (see step 7).
+- `ts_round` — must match `method_ts_round` in the EMHASS config (default `nearest` in both).
+  flexd anchors its timestep grid on the same rounding rule EMHASS applies to the first
+  optimization step, so start and end slots line up with the plan EMHASS returns.
 - `stale_after_cycles` / `default_ttl_s` — safe to leave at their defaults for a first run.
 - `mqtt:` block — only needed if you plan to use MQTT (Home Assistant, ioBroker). Set
   `enabled: true` and point `host`/`port` at your broker, or leave the bundled Mosquitto profile
@@ -90,6 +93,16 @@ Using the Simple-API (the same call the Loxone guide uses), register a 2000 W lo
 ```bash
 curl -X POST "http://localhost:8321/simple/demands/register?source=e2e&id=e2e-load&power_w=2000&energy_wh=1000&deadline_in_h=4"
 ```
+
+Register parameters worth knowing beyond `power_w`, `energy_wh` and `deadline_in_h`:
+
+- `modulating` (default `false`): set to `true` only for devices that can run at any power
+  between zero and `power_w` (a modulating heat pump, a variable-speed pump). flexd then
+  asks EMHASS for a continuous slot and fractional hours. For everything else (the default)
+  the device runs at `power_w` or not at all: flexd asks for a semi-continuous slot and
+  rounds the remaining energy UP to whole timesteps, so a 1200 Wh / 2000 W dishwasher on a
+  30-minute grid is planned as two slots (1000 Wh would be unreachable). Expect
+  over-delivery of less than one timestep per run.
 
 flexd runs its solve cycle on a timer, but for a quick check you can trigger one immediately:
 

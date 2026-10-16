@@ -149,6 +149,7 @@ class StandingManager:
                         deadline=win_end,
                         expires_at=win_end,
                         interruptible=defn.interruptible,
+                        modulating=defn.modulating,
                     )
                 )
             except OwnershipError as exc:

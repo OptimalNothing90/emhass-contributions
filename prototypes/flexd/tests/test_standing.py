@@ -321,3 +321,19 @@ async def test_energy_accounting_across_a_real_plan_switch(tmp_path):
     assert reg.get("waterheater").energy_target_wh == pytest.approx(
         (5 - expected_elapsed_h) * 3000, abs=1.0
     )
+
+
+def test_standing_modulating_flag_reaches_demand(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    defn = StandingDefinition(
+        id="pump",
+        nominal_power_w=750,
+        daily_hours=4,
+        window="06:00-22:00",
+        modulating=True,
+    )
+    mgr = StandingManager(
+        [defn], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg
+    )
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    assert reg.get("pump").modulating is True

@@ -387,3 +387,30 @@ async def test_no_accrue_or_adopt_when_plan_rejected(registry):
     assert await s.run_once(now=NOW) == "rejected"
     assert standing.accrued == []
     assert view.adopted == []
+
+
+# -- plan review finding 3: the scheduler anchors the grid with the configured ts_round --
+async def test_scheduler_passes_ts_round_to_aggregation(registry):
+    # now 12:01, deadline 13:01: anchor 12:00 (nearest) -> end step 2; anchor 12:30 (last) -> 1
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=1, minutes=1),
+            expires_at=NOW + timedelta(hours=2),
+        )
+    )
+    ends = {}
+    for ts_round in ("nearest", "last"):
+        driver = FakeDriver(result=PLAN)
+        s = Scheduler(
+            registry=registry,
+            driver=driver,
+            view=FakeView(),
+            standing=FakeStanding(),
+            timestep_min=30,
+            horizon_steps=48,
+            extra_runtime_params={},
+            ts_round=ts_round,
+        )
+        await s.run_once(now=NOW + timedelta(minutes=1))
+        ends[ts_round] = driver.calls[0]["end_timesteps_of_each_deferrable_load"][0]
+    assert ends == {"nearest": 2, "last": 1}

@@ -131,3 +131,14 @@ def test_far_expiry_round_trips_through_dump_and_load():
 def test_explicit_ttl_above_ceiling_rejected():
     with pytest.raises(ValidationError):
         Demand(**_base(ttl_s=400 * 24 * 3600))
+
+
+# -- Codex review 2026-10-16 finding 1: modulating flag --
+def test_modulating_defaults_false_and_round_trips():
+    d = Demand(**_base())
+    assert d.modulating is False
+    assert Demand(**_base(modulating=True)).modulating is True
+    assert (
+        Demand(**Demand(**_base(modulating=True)).model_dump(mode="json")).modulating
+        is True
+    )

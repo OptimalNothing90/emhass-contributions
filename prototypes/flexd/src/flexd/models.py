@@ -37,6 +37,11 @@ class Demand(BaseModel):
     expires_at: datetime
     priority: int = Field(default=1, ge=0)
     interruptible: bool = True
+    # False (default): the device runs at nominal power or not at all -> semi-continuous
+    # slot in EMHASS, remaining energy rounded UP to whole timesteps. True: the device
+    # modulates -> continuous power, fractional hours are fine (Codex review finding 1,
+    # #1 Medium 5).
+    modulating: bool = False
     current_power_w: float = Field(default=0, ge=0, le=MAX_POWER_W, allow_inf_nan=False)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
