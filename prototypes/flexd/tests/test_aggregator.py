@@ -29,6 +29,7 @@ def test_single_demand_payload():
             "clamped": False,
             "truncated": False,
             "unschedulable": False,
+            "nominal_power_w": 2000,
         }
     }
 
@@ -165,3 +166,10 @@ def test_truncated_hours_never_exceed_capacity_odd_timestep():
     assert payload["operating_hours_of_each_deferrable_load"] == [
         0.16
     ]  # floor(0.1667*100)/100
+
+
+def test_mapping_carries_nominal_power():
+    # #1 HIGH 1 / Medium 6: read-back accrual scales P_deferrable by nominal power
+    d = make_demand(nominal_power_w=2000)
+    _, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert mapping["dishwasher"]["nominal_power_w"] == 2000

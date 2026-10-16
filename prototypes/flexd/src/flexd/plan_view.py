@@ -123,20 +123,33 @@ class PlanView:
     def on_hours_elapsed(
         self, demand_id: str, since: datetime, until: datetime
     ) -> float:
-        """On-hours from the CURRENT adopted plan only, records fully inside [since, until).
+        """Nominal-equivalent on-hours from the CURRENT adopted plan over [since, until).
+
+        Each plan record covers [timestamp, timestamp+step). The credited time is the
+        overlap of that interval with [since, until), scaled by P/nominal (capped at 1).
+        Bounds are live wall-clock instants that never sit on the grid, so partial
+        slots must count (#1 HIGH 1); the ratio keeps the accounting right under
+        continuous deferrables too (#1 Medium 6). Adjacent calls partition exactly.
 
         Cross-adoption accumulation is the standing ledger's job (the scheduler
-        accrues before each adoption). Partial slots at re-solve boundaries are
-        dropped (undercount of at most one slot per re-solve) — accepted.
+        accrues before each adoption).
         """
         if self._plan is None or demand_id not in self._mapping:
             return 0.0
-        slot = self._mapping[demand_id]["slot"]
-        step_h = self._step().total_seconds() / 3600
-        total = 0.0
+        entry = self._mapping[demand_id]
+        slot = entry["slot"]
+        # adopted files written before nominal_power_w was mapped: full-slot credit
+        nominal = float(entry.get("nominal_power_w") or 0.0)
+        step = self._step()
+        total_h = 0.0
         for rec in self._records():
             ts = _parse(rec["timestamp"])
-            if since <= ts and ts + timedelta(hours=step_h) <= until:
-                if float(rec.get(f"P_deferrable{slot}", 0)) > 0:
-                    total += step_h
-        return total
+            lo, hi = max(ts, since), min(ts + step, until)
+            if hi <= lo:
+                continue
+            power = float(rec.get(f"P_deferrable{slot}", 0))
+            if power <= 0:
+                continue
+            ratio = min(power / nominal, 1.0) if nominal > 0 else 1.0
+            total_h += (hi - lo).total_seconds() / 3600 * ratio
+        return total_h

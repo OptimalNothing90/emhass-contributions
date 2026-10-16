@@ -53,7 +53,7 @@ def build_runtimeparams(
 ) -> tuple[dict, dict]:
     """Returns (payload, mapping).
 
-    mapping: demand id -> {slot, clamped, truncated, unschedulable}.
+    mapping: demand id -> {slot, clamped, truncated, unschedulable, nominal_power_w}.
     """
     ordered = sorted(demands, key=lambda d: d.id)
     payload: dict = {}
@@ -110,6 +110,8 @@ def build_runtimeparams(
             "clamped": clamped,
             "truncated": truncated,
             "unschedulable": unschedulable,
+            # read-back accrual scales P_deferrable by this (nominal-equivalent hours)
+            "nominal_power_w": d.nominal_power_w,
         }
 
     payload.update(

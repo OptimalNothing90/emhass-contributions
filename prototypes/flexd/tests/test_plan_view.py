@@ -2,6 +2,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from flexd.plan_view import PlanView
 
 FIX = Path(__file__).parent / "fixtures"
@@ -13,8 +15,15 @@ MAPPING = {
         "clamped": False,
         "truncated": False,
         "unschedulable": False,
+        "nominal_power_w": 2000,
     },
-    "pool": {"slot": 1, "clamped": True, "truncated": False, "unschedulable": False},
+    "pool": {
+        "slot": 1,
+        "clamped": True,
+        "truncated": False,
+        "unschedulable": False,
+        "nominal_power_w": 3000,
+    },
 }
 
 
@@ -110,3 +119,57 @@ def test_corrupt_view_file_starts_no_run(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     v = PlanView(path, stale_after=timedelta(hours=2))
     assert v.state(now=T0) == "no-run"
+
+
+# -- #1 HIGH 1: live cycle bounds never sit on the grid; partial slots must count --
+def test_on_hours_elapsed_off_grid_live_instants(tmp_path):
+    # 12:00:07 -> 12:30:12 must still credit the 12:00-12:30 slot; the old
+    # fully-inside rule returned 0.0 on every live cycle
+    v = make_view(tmp_path)
+    v.adopt(PLAN, MAPPING, now=T0)
+    got = v.on_hours_elapsed(
+        "dishwasher",
+        since=T0 + timedelta(seconds=7),
+        until=T0 + timedelta(minutes=30, seconds=12),
+    )
+    assert got == pytest.approx(
+        (30 * 60 - 7) / 3600
+    )  # 12:00:07 .. 12:30:00 on, then off
+
+
+def test_on_hours_elapsed_partition_invariant(tmp_path):
+    # adjacent off-grid intervals covering [12:00, 13:00) sum to the aligned answer
+    v = make_view(tmp_path)
+    v.adopt(PLAN, MAPPING, now=T0)
+    cuts = [
+        T0,
+        T0 + timedelta(seconds=7),
+        T0 + timedelta(minutes=30, seconds=12),
+        T0 + timedelta(hours=1),
+    ]
+    total = sum(
+        v.on_hours_elapsed("dishwasher", since=a, until=b)
+        for a, b in zip(cuts, cuts[1:])
+    )
+    assert total == pytest.approx(0.5)
+
+
+def test_on_hours_elapsed_scales_by_power_ratio(tmp_path):
+    # Medium 6: a 1000 W slot on a 2000 W nominal load is 0.25 nominal-hours, not 0.5
+    v = make_view(tmp_path)
+    plan = json.loads(json.dumps(PLAN))
+    plan["plan"][0]["P_deferrable0"] = 1000
+    v.adopt(plan, MAPPING, now=T0)
+    assert v.on_hours_elapsed(
+        "dishwasher", since=T0, until=T0 + timedelta(hours=1)
+    ) == pytest.approx(0.25)
+
+
+def test_on_hours_elapsed_legacy_mapping_without_nominal(tmp_path):
+    # adopted_plan.json written before this fix has no nominal_power_w: full-slot credit
+    v = make_view(tmp_path)
+    legacy = {"dishwasher": {"slot": 0, "clamped": False}}
+    v.adopt(PLAN, legacy, now=T0)
+    assert (
+        v.on_hours_elapsed("dishwasher", since=T0, until=T0 + timedelta(hours=1)) == 0.5
+    )

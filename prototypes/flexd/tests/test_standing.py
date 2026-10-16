@@ -6,6 +6,7 @@ import pytest
 
 from flexd.config import StandingDefinition
 from flexd.models import Demand
+from flexd.plan_view import PlanView
 from flexd.registry import Registry
 from flexd.standing import StandingManager
 
@@ -213,3 +214,34 @@ def test_unknown_id_correct_raises(tmp_path):
         mgr.correct("not-a-standing-id", remaining_hours=1.0, now=NOON_UTC)
     with pytest.raises(KeyError):
         mgr.mark_done("not-a-standing-id", now=NOON_UTC)
+
+
+def test_live_cycle_instants_accrue_against_real_plan(tmp_path):
+    # end-to-end for #1 HIGH 1: the scheduler's since/until are wall-clock instants a
+    # few seconds past the grid; with the real PlanView the ledger must still shrink
+    # (on main this left energy_target_wh at the full 15000 Wh every cycle).
+    reg, mgr = mk(tmp_path)
+    view = PlanView(tmp_path / "adopted.json", stale_after=timedelta(hours=2))
+    plan = {
+        "status": "Optimal",
+        "generated_at": "2026-07-05T12:00:05Z",
+        "emhass_schema_version": 1,
+        "plan": [
+            {"timestamp": "2026-07-05T12:00:00Z", "P_deferrable0": 3000},
+            {"timestamp": "2026-07-05T12:30:00Z", "P_deferrable0": 3000},
+            {"timestamp": "2026-07-05T13:00:00Z", "P_deferrable0": 0},
+        ],
+    }
+    mapping = {"waterheater": {"slot": 0, "clamped": False, "nominal_power_w": 3000}}
+    view.adopt(plan, mapping, now=NOON_UTC)
+
+    c1 = NOON_UTC + timedelta(seconds=7)  # 12:00:07
+    c2 = NOON_UTC + timedelta(minutes=30, seconds=12)  # 12:30:12
+    mgr.materialize(now=c1, elapsed_lookup=view.on_hours_elapsed)
+    mgr.materialize(now=c2, elapsed_lookup=view.on_hours_elapsed)
+
+    on_seconds = (c2 - NOON_UTC).total_seconds()  # heater on from 12:00:00 to 12:30:12
+    expected_remaining_h = 5 - on_seconds / 3600
+    assert reg.get("waterheater").energy_target_wh == pytest.approx(
+        expected_remaining_h * 3000
+    )

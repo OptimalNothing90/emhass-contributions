@@ -74,7 +74,10 @@ class StandingManager:
 
     # -- API ------------------------------------------------------------------
     def materialize(self, now: datetime, elapsed_lookup) -> None:
-        """elapsed_lookup(id, since_utc, until_utc) -> on-hours in the CURRENT adopted plan.
+        """elapsed_lookup(id, since_utc, until_utc) -> nominal-equivalent on-hours in the
+        CURRENT adopted plan over [since, until). Bounds are live instants (never
+        grid-aligned); the lookup credits partial slots so consecutive cycles
+        partition the day exactly.
 
         MUST run before this cycle's plan is adopted: it accrues the OLD plan's
         on-hours into the ledger (rolling MPC plans start at 'now', so the
