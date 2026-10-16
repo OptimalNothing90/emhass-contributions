@@ -13,7 +13,7 @@ EMHASS contribution workspace: audits, design RFCs, board source-of-truth, and t
 - **`docker/`** — Dockerfile and Docker Compose files that build/run the production image.
 - **`skills/`** — public Claude Code skill plugins (anonymized variants of personal tooling). Initial home for the AG-B1 board item.
 - **`docs/`** — staging area for documentation that may eventually land upstream (e.g. AI-coder contributor onboarding).
-- **`upstream/`** — git submodule pinned to a fixed upstream commit: a release tag when one carries what we build against, otherwise a pinned `master` SHA (currently `f11d8dea`, master past `v0.17.8` — no tag yet contains `GET /api/v1/plan` / `plan_store` from PR #995, which the `prototypes/flexd/` sidecar builds against). Re-pin to the next release tag that includes #995.
+- **`upstream/`** — git submodule pinned to a fixed upstream commit: a release tag when one carries what we build against, otherwise a pinned `master` SHA (currently the release tag `v0.18.6`, which contains `GET /api/v1/plan` / `plan_store` from PR #995, which the `prototypes/flexd/` sidecar builds against).
 
 ## How this relates to other repos
 
