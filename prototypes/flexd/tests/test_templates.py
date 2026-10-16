@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from flexd.config import TemplateDefinition
+from flexd.models import Demand
 from flexd.registry import Registry
 from flexd.templates import TemplateManager
 
@@ -150,3 +151,46 @@ def test_overlapping_brackets_fatal():
                 {"if_started_between": "11:00-14:00", "finish_by": "16:00"},
             ],
         )
+
+
+# -- Codex review 2026-10-16 finding 5: re-trigger needs deadline > now AND expires_at > now --
+def test_trigger_after_expiry_but_before_sweep_starts_new_run(tmp_path):
+    reg, mgr = mk(tmp_path)
+    t0 = datetime(
+        2026, 7, 5, 6, 0, tzinfo=timezone.utc
+    )  # deadline 15:00 Berlin, expiry 16:00 Berlin
+    mgr.start("dishwasher", source="loxone", now=t0)
+    first = reg.get("dishwasher")
+    t1 = first.expires_at + timedelta(minutes=5)  # expired, not yet swept
+    mgr.start("dishwasher", source="loxone", now=t1)
+    d = reg.get("dishwasher")
+    assert d.deadline > t1
+    assert d.expires_at > t1
+
+
+def test_trigger_on_expired_but_pending_run_starts_new_run(tmp_path):
+    # expires_at <= now < deadline: the old refresh-by-deadline branch would have refreshed
+    # an expired entry; now it must be a new run (review of Task 2)
+    reg, mgr = mk(tmp_path)
+    t0 = datetime(2026, 7, 5, 6, 0, tzinfo=timezone.utc)
+    for t1 in (
+        t0 + timedelta(minutes=30),
+        t0 + timedelta(minutes=31),
+    ):  # exact boundary and after
+        reg.upsert(
+            Demand(
+                id="dishwasher",
+                source="loxone",
+                energy_target_wh=1400,
+                nominal_power_w=2000,
+                deadline=t0 + timedelta(hours=9),
+                expires_at=t0 + timedelta(minutes=30),
+                ttl_s=1800,
+            )
+        )
+        mgr.start("dishwasher", source="loxone", now=t1)
+        d = reg.get("dishwasher")
+        assert d.expires_at > t1
+        assert d.deadline == datetime(
+            2026, 7, 5, 13, 0, tzinfo=timezone.utc
+        )  # 15:00 Berlin from the morning rule

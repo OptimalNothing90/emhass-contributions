@@ -16,6 +16,11 @@ class OwnershipError(Exception):
     """Claimed source does not own this demand id."""
 
 
+class DemandExpired(KeyError):
+    """Refresh on a demand whose expires_at has passed: it is gone as far as the API is
+    concerned, even if the sweep has not removed it yet. Register again instead."""
+
+
 class Registry:
     """Single-writer demand registry with atomic JSON persistence.
 
@@ -134,13 +139,16 @@ class Registry:
     def refresh(
         self, demand_id: str, source: str, now: datetime | None = None
     ) -> Demand:
-        """Keep a demand alive. Never shortens it: a template demand expires at
-        deadline+ttl, and a flapping re-trigger (or a client's periodic keepalive)
-        must not pull expiry back to now+ttl and ahead of the deadline (#1 HIGH 2).
+        """Keep a demand alive. Never shortens it (a template demand expires at
+        deadline+ttl, and a flapping re-trigger must not pull expiry back to now+ttl
+        and ahead of the deadline, #1 HIGH 2), never revives it: expiry is a business
+        state, not a side effect of sweep timing (Codex review finding 5).
         `now` is injectable so expiry math is testable under pinned time."""
         with self._lock:
             now = now or utcnow()
             d = self._check_owner(demand_id, source)
+            if d.expires_at <= now:
+                raise DemandExpired(demand_id)
             d.expires_at = max(d.expires_at, now + timedelta(seconds=d.ttl_s or 0))
             d.updated_at = now
             self._save()

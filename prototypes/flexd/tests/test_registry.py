@@ -224,3 +224,18 @@ def test_load_malformed_container_falls_back_to_bak(tmp_path):
     assert [d.id for d in Registry(tmp_path / "demands.json").list_active()] == [
         "first"
     ]
+
+
+# -- Codex review 2026-10-16 finding 5: refresh must not revive an expired demand --
+def test_refresh_of_expired_demand_is_rejected(registry):
+    now = datetime(2026, 7, 5, 20, 0, tzinfo=timezone.utc)
+    registry.upsert(
+        make_demand(
+            deadline=now - timedelta(hours=1),
+            expires_at=now - timedelta(minutes=5),
+            ttl_s=3600,
+        )
+    )
+    with pytest.raises(KeyError):
+        registry.refresh("dishwasher", source="loxone", now=now)
+    assert registry.list_active(now=now) == []  # still expired, nothing revived

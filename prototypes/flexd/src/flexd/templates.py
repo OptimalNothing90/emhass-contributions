@@ -34,10 +34,15 @@ class TemplateManager:
 
         # Re-trigger while the run is still pending = pure refresh (spec): deadlines are
         # computed exactly once at first trigger; a flapping event must not move them
-        # across a rule boundary. Keyed on deadline, not expires_at: a trigger inside the
-        # post-deadline grace window is a genuine new appliance run and gets a new deadline.
+        # across a rule boundary. Pending means BOTH before the deadline (a trigger inside
+        # the post-deadline grace window is a genuine new appliance run) AND unexpired
+        # (refresh rejects expired demands; an expired-but-unswept run is a new run too).
         existing = self._registry.get(template_id)
-        if existing is not None and existing.deadline > now:
+        if (
+            existing is not None
+            and existing.deadline > now
+            and existing.expires_at > now
+        ):
             return self._registry.refresh(template_id, source=source, now=now)
 
         local = now.astimezone(self._tz)
