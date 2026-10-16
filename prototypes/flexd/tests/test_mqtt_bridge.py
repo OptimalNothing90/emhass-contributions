@@ -257,3 +257,39 @@ async def test_set_with_infinity_publishes_error_and_registers_nothing(bridge):
     assert registry.get("inf") is None
     topics = [t for t, _, _ in pub.published]
     assert "flexd/demands/loxone/inf/error" in topics
+
+
+# -- Codex review 2026-10-16 finding 3 / plan review finding 1: explicit retained OFF --
+async def test_delete_publishes_off_before_clearing(bridge):
+    b, pub, registry = bridge
+    registry.upsert(make_demand())
+    pub.published.clear()
+    await b.handle_message("flexd/demands/loxone/dishwasher/delete", "")
+    on_msgs = [
+        p for t, p, _ in pub.published if t == "flexd/plan/demands/dishwasher/on"
+    ]
+    sp_msgs = [
+        p for t, p, _ in pub.published if t == "flexd/plan/demands/dishwasher/setpoint"
+    ]
+    assert (
+        on_msgs[:1] == ["0"] and "" in on_msgs
+    )  # OFF first, then the empty-payload clear
+    assert sp_msgs[:1] == ["0"] and "" in sp_msgs
+
+
+async def test_publish_plan_sends_off_for_mapped_but_expired_demand(bridge):
+    b, pub, registry = bridge
+    now = datetime.now(timezone.utc)
+    registry.upsert(
+        make_demand(
+            deadline=now - timedelta(hours=2), expires_at=now - timedelta(hours=1)
+        )
+    )
+    b._view.adopt(
+        PLAN,
+        {"dishwasher": {"slot": 0, "clamped": False, "nominal_power_w": 2000}},
+        now=now,
+    )
+    await b.publish_plan(state="ok")
+    assert ("flexd/plan/demands/dishwasher/on", "0", True) in pub.published
+    assert ("flexd/plan/demands/dishwasher/setpoint", "0", True) in pub.published

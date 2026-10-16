@@ -37,6 +37,9 @@ class FakeView:
     def demand_view(self, demand_id, now):
         return None
 
+    def mapped_ids(self):
+        return set(self.adopted[-1][1]) if self.adopted else set()
+
 
 class FakeStanding:
     def materialize(self, now, elapsed_lookup):
@@ -291,3 +294,25 @@ async def test_crumb_written_on_skipped(registry, tmp_path):
     data = _json.loads(crumb.read_text(encoding="utf-8"))
     assert data["result"] == "skipped"
     assert data["payload_sha256"] is None
+
+
+# -- Codex review 2026-10-16 finding 3 / plan review finding 1: immediate OFF trigger --
+async def test_notify_off_invokes_callback(registry):
+    seen = []
+
+    async def off(demand_id):
+        seen.append(demand_id)
+
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(result=PLAN),
+        view=FakeView(),
+        standing=FakeStanding(),
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        on_demand_off=off,
+    )
+    s.notify_off("dishwasher")
+    await asyncio.sleep(0)
+    assert seen == ["dishwasher"]

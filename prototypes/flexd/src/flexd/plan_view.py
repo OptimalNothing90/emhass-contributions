@@ -68,6 +68,9 @@ class PlanView:
     def raw_plan(self) -> dict | None:
         return self._plan
 
+    def mapped_ids(self) -> set[str]:
+        return set(self._mapping)
+
     @property
     def generated_at(self) -> str | None:
         return self._plan.get("generated_at") if self._plan else None

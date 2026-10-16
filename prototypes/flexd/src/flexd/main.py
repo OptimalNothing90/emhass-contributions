@@ -79,6 +79,14 @@ async def run() -> None:
         await bridge.clear_expired(swept_ids)  # spec: no ghost retained setpoints
         await bridge.publish_plan(state=state)
 
+    async def _publish_off(demand_id: str) -> None:
+        bridge = bridge_holder["bridge"]
+        if bridge is None:
+            raise RuntimeError(
+                "mqtt bridge unavailable; cycle-end cleanup will cover it"
+            )
+        await bridge.publish_off(demand_id)
+
     scheduler = Scheduler(
         registry=registry,
         driver=driver,
@@ -90,6 +98,7 @@ async def run() -> None:
         crumb_path=cfg.data_dir / "last_cycle.json",
         # without a broker there is nothing to deliver to — avoid a perpetual redelivery queue
         on_cycle_end=on_cycle_end if cfg.mqtt.enabled else None,
+        on_demand_off=_publish_off if cfg.mqtt.enabled else None,
     )
     scheduler.bind_loop(
         asyncio.get_running_loop()

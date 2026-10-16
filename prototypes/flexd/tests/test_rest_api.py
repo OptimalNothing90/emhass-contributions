@@ -174,3 +174,49 @@ def test_422_body_does_not_echo_input(client):
     detail = r.json()["detail"]
     assert all(set(err) <= {"loc", "msg", "type"} for err in detail)
     assert ["body", "nominal_power_w"] in [err["loc"] for err in detail]
+
+
+# -- Codex review 2026-10-16 finding 3: plan read-back gated by the registry --
+from datetime import datetime, timedelta, timezone
+
+from tests.conftest import make_demand
+from tests.test_simple_api import _app_with_on_view, _client_with_on_view
+
+
+def test_plan_demand_expired_is_off_not_on(registry):
+    c = _client_with_on_view(registry)
+    now = datetime.now(timezone.utc)
+    registry.upsert(
+        make_demand(
+            deadline=now - timedelta(hours=2), expires_at=now - timedelta(hours=1)
+        )
+    )
+    r = c.get("/api/v1/plan/demands/dishwasher")
+    assert r.status_code == 200
+    assert r.json()["on"] is False
+    assert r.json()["setpoint_w"] == 0
+    assert r.json()["expired"] is True
+
+
+def test_plan_demand_withdrawn_is_404(registry):
+    c = _client_with_on_view(registry)
+    registry.upsert(make_demand())
+    assert c.delete("/api/v1/demands/dishwasher?source=loxone").status_code == 204
+    assert c.get("/api/v1/plan/demands/dishwasher").status_code == 404
+
+
+def test_rest_withdraw_triggers_notify_off(registry, monkeypatch):
+    c, scheduler = _app_with_on_view(registry)
+    calls = []
+    monkeypatch.setattr(scheduler, "notify_off", lambda i: calls.append(i))
+    registry.upsert(make_demand())
+    assert c.delete("/api/v1/demands/dishwasher?source=loxone").status_code == 204
+    assert calls == ["dishwasher"]
+
+
+def test_rest_standing_withdraw_triggers_notify_off(registry, monkeypatch):
+    c, scheduler = _app_with_on_view(registry)
+    calls = []
+    monkeypatch.setattr(scheduler, "notify_off", lambda i: calls.append(i))
+    assert c.delete("/api/v1/demands/waterheater?source=config").status_code == 204
+    assert calls == ["waterheater"]

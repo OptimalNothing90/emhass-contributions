@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from flexd.models import MAX_ENERGY_WH, MAX_POWER_W, Demand, utcnow
 from flexd.registry import OwnershipError
-from flexd.transports import reject_standing_squat
+from flexd.transports import live_demand_view, reject_standing_squat
 
 MAX_HORIZON_H = 366 * 24.0  # one year; timedelta() must never see an unbounded float
 
@@ -83,17 +83,15 @@ def create_simple_router(
     @router.get("/demands/{demand_id}/setpoint")
     def setpoint(demand_id: str):
         """Polling endpoints never 404: a Loxone Virtual Input reads '0' unambiguously
-        as OFF regardless of its error config. Unknown, expired and pending demands
-        are all 'off'. /simple/status is the health channel."""
-        dv = view.demand_view(demand_id, now=utcnow())
+        as OFF regardless of its error config. Unknown, withdrawn, expired and pending
+        demands are all 'off', gated by the registry, not by the last plan.
+        /simple/status is the health channel."""
+        dv, _ = live_demand_view(registry, view, demand_id, now=utcnow())
         return str(round(dv.setpoint_w)) if dv else "0"
 
     @router.get("/demands/{demand_id}/on")
     def on(demand_id: str):
-        """Polling endpoints never 404: a Loxone Virtual Input reads '0' unambiguously
-        as OFF regardless of its error config. Unknown, expired and pending demands
-        are all 'off'. /simple/status is the health channel."""
-        dv = view.demand_view(demand_id, now=utcnow())
+        dv, _ = live_demand_view(registry, view, demand_id, now=utcnow())
         return "1" if (dv and dv.on) else "0"
 
     @router.post("/demands/{demand_id}/refresh")
@@ -115,6 +113,7 @@ def create_simple_router(
                     detail=f"{demand_id} is a standing demand; only source 'config' may mark it done",
                 )
             standing.mark_done(demand_id, now=utcnow())
+            scheduler.notify_off(demand_id)  # MQTT consumers stop now, not next cycle
             scheduler.notify_change()
             return "1"
         try:
@@ -123,6 +122,7 @@ def create_simple_router(
             raise HTTPException(status_code=404, detail="unknown demand")
         except OwnershipError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
+        scheduler.notify_off(demand_id)
         scheduler.notify_change()
         return "1"
 

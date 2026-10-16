@@ -235,3 +235,84 @@ def test_simple_huge_window_start_422_not_500(client):
         ),
     )
     assert r.status_code == 422
+
+
+# -- Codex review 2026-10-16 finding 3: reads are gated by the registry, not the last plan --
+from datetime import datetime, timedelta, timezone
+
+from fastapi.testclient import TestClient
+
+from flexd.plan_view import DemandView
+from flexd.transports.rest_api import create_app
+from tests.conftest import FakeStandingRegistry, make_demand
+from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+
+
+class OnView(FakeView):
+    """Adopted plan says 2000 W for every known id; the registry must be the gate."""
+
+    def demand_view(self, demand_id, now):
+        return DemandView(setpoint_w=2000.0, on=True, clamped=False)
+
+
+def _app_with_on_view(registry):
+    view = OnView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    app = create_app(
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        driver=FakeDriver(result=PLAN),
+        standing=FakeStandingRegistry(),
+    )
+    return TestClient(app), scheduler
+
+
+def _client_with_on_view(registry):
+    return _app_with_on_view(registry)[0]
+
+
+def test_withdrawn_demand_reads_off_before_next_solve(registry):
+    c = _client_with_on_view(registry)
+    registry.upsert(make_demand(id="dishwasher"))
+    assert c.get("/simple/demands/dishwasher/setpoint").text == "2000"
+    assert c.get("/simple/demands/dishwasher/on").text == "1"
+    assert c.post("/simple/demands/dishwasher/done?source=loxone").status_code == 200
+    assert c.get("/simple/demands/dishwasher/setpoint").text == "0"
+    assert c.get("/simple/demands/dishwasher/on").text == "0"
+
+
+def test_expired_demand_reads_off_before_sweep(registry):
+    c = _client_with_on_view(registry)
+    now = datetime.now(timezone.utc)
+    registry.upsert(
+        make_demand(
+            id="dishwasher",
+            deadline=now - timedelta(hours=2),
+            expires_at=now - timedelta(hours=1),
+        )
+    )
+    assert c.get("/simple/demands/dishwasher/on").text == "0"
+    assert c.get("/simple/demands/dishwasher/setpoint").text == "0"
+
+
+def test_unknown_demand_reads_off(registry):
+    c = _client_with_on_view(registry)
+    assert c.get("/simple/demands/ghost/on").text == "0"
+
+
+def test_simple_done_triggers_notify_off(registry, monkeypatch):
+    c, scheduler = _app_with_on_view(registry)
+    calls = []
+    monkeypatch.setattr(scheduler, "notify_off", lambda i: calls.append(i))
+    registry.upsert(make_demand(id="dishwasher"))
+    assert c.post("/simple/demands/dishwasher/done?source=loxone").status_code == 200
+    assert calls == ["dishwasher"]
+
+
+def test_simple_standing_done_triggers_notify_off(registry, monkeypatch):
+    c, scheduler = _app_with_on_view(registry)
+    calls = []
+    monkeypatch.setattr(scheduler, "notify_off", lambda i: calls.append(i))
+    assert c.post("/simple/demands/waterheater/done?source=config").status_code == 200
+    assert calls == ["waterheater"]

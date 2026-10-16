@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError
-from flexd.transports import reject_standing_squat
+from flexd.transports import live_demand_view, reject_standing_squat
 from flexd.transports.simple_api import create_simple_router
 
 
@@ -119,6 +119,7 @@ def create_app(
                     detail=f"{demand_id} is a standing demand; only source 'config' may mark it done",
                 )
             standing.mark_done(demand_id, now=utcnow())
+            scheduler.notify_off(demand_id)  # MQTT consumers stop now, not next cycle
             scheduler.notify_change()
             return Response(status_code=204)
         try:
@@ -127,6 +128,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="unknown demand")
         except OwnershipError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
+        scheduler.notify_off(demand_id)
         scheduler.notify_change()
         return Response(status_code=204)
 
@@ -137,14 +139,14 @@ def create_app(
 
     @app.get("/api/v1/plan/demands/{demand_id}")
     def plan_demand(demand_id: str):
-        # None-contract (plan_view docstring): registered-but-unmapped means
-        # "pending next solve", NOT unknown — only a demand absent from the
-        # registry is a 404.
-        dv = view.demand_view(demand_id, now=utcnow())
-        state = view.state(now=utcnow())
-        if dv is None:
-            if registry.get(demand_id) is None:
-                raise HTTPException(status_code=404, detail="unknown demand")
+        # Gated by the registry (live_demand_view): absent is 404, expired is OFF with
+        # expired=true, registered-but-unmapped is "pending next solve".
+        now = utcnow()
+        dv, status = live_demand_view(registry, view, demand_id, now=now)
+        state = view.state(now=now)
+        if status == "unknown":
+            raise HTTPException(status_code=404, detail="unknown demand")
+        if dv is None:  # pending next solve
             return {
                 "setpoint_w": 0,
                 "on": False,
@@ -153,6 +155,7 @@ def create_app(
                 "unschedulable": False,
                 "state": state,
                 "pending": True,
+                "expired": False,
             }
         return {
             "setpoint_w": dv.setpoint_w,
@@ -162,6 +165,7 @@ def create_app(
             "unschedulable": dv.unschedulable,
             "state": state,
             "pending": False,
+            "expired": status == "expired",
         }
 
     @app.post("/api/v1/templates/{template_id}/start", status_code=201)

@@ -112,6 +112,7 @@ class MqttBridge:
                             "delete for unknown %s ignored (idempotent redelivery)",
                             demand_id,
                         )
+                await self.publish_off(demand_id)  # explicit OFF before the clear
                 await self._clear_demand_topics(demand_id)
                 self._scheduler.notify_change()
             else:
@@ -144,11 +145,27 @@ class MqttBridge:
             await self._client.publish(
                 f"{self._base}/plan/demands/{demand.id}/on", on, retain=True
             )
+        # ids the adopted plan still maps but the registry no longer holds as active
+        # (expired during the solve, or withdrawn before this cycle's cleanup): OFF now
+        active_ids = {d.id for d in self._registry.list_active(now=now)}
+        for stale_id in self._view.mapped_ids() - active_ids:
+            await self.publish_off(stale_id)
         raw = self._view.raw_plan
         if raw is not None:
             await self._client.publish(
                 f"{self._base}/plan/full", json.dumps(raw), retain=True
             )
+
+    async def publish_off(self, demand_id: str) -> None:
+        """Explicit OFF (retained '0'): a consumer that keeps its last value must stop now.
+        Clearing a retained topic (empty payload) is not an OFF command for every
+        consumer (plan review finding 1)."""
+        await self._client.publish(
+            f"{self._base}/plan/demands/{demand_id}/setpoint", "0", retain=True
+        )
+        await self._client.publish(
+            f"{self._base}/plan/demands/{demand_id}/on", "0", retain=True
+        )
 
     async def _clear_demand_topics(self, demand_id: str) -> None:
         for leaf in ("setpoint", "on"):

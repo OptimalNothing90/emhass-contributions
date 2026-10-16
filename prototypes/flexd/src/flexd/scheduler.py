@@ -32,6 +32,7 @@ class Scheduler:
         extra_runtime_params: dict,
         crumb_path: Path | None = None,
         on_cycle_end=None,
+        on_demand_off=None,
     ):
         self._registry = registry
         self._driver = driver
@@ -43,6 +44,9 @@ class Scheduler:
         self._crumb_path = crumb_path
         self._on_cycle_end = (
             on_cycle_end  # async callback(state, swept_ids) for mqtt publish
+        )
+        self._on_demand_off = (
+            on_demand_off  # async callback(demand_id) -> publish OFF now
         )
         self.debounce_s = 10.0
         self._debounce_task: asyncio.Task | None = None
@@ -154,6 +158,36 @@ class Scheduler:
                 )
                 return
             self._loop.call_soon_threadsafe(_schedule)
+
+    def notify_off(self, demand_id: str) -> None:
+        """Publish OFF for a withdrawn/expired demand immediately. Threadsafe like
+        notify_change; a no-op without an MQTT bridge (HTTP consumers are gated by
+        live_demand_view)."""
+        if self._on_demand_off is None:
+            return
+
+        def _schedule() -> None:
+            asyncio.ensure_future(self._off(demand_id))
+
+        try:
+            asyncio.get_running_loop()
+            _schedule()
+        except RuntimeError:
+            if self._loop is None:
+                log.warning(
+                    "notify_off(%s) before loop bound; cycle-end cleanup will cover it",
+                    demand_id,
+                )
+                return
+            self._loop.call_soon_threadsafe(_schedule)
+
+    async def _off(self, demand_id: str) -> None:
+        try:
+            await self._on_demand_off(demand_id)
+        except Exception:
+            log.exception(
+                "publish OFF for %s failed; cycle-end cleanup will cover it", demand_id
+            )
 
     async def _debounced(self) -> None:
         try:
