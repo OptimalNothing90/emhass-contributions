@@ -20,7 +20,12 @@ FIRST_BOOT_SLACK = timedelta(minutes=5)
 
 
 def _parse_generated_at(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    """ISO 8601 with Z or an explicit offset; naive values are rejected because their
+    instant is ambiguous."""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError(f"generated_at {value!r} carries no timezone")
+    return parsed
 
 
 class PlanRejected(Exception):
@@ -70,15 +75,30 @@ class EmhassDriver:
             msg = "ok plan without generated_at"
             log.warning(msg)
             raise PlanRejected(msg)
-        if (
-            last_generated_at is not None
-            and plan.get("generated_at") <= last_generated_at
-        ):
-            msg = f"plan generated_at {plan.get('generated_at')} not newer than {last_generated_at}"
+        # Compare instants, not strings: a format change (date layout, local-time
+        # offsets) inverts lexicographic order, and the rejection would persist with the
+        # adopted plan across restarts (#1 Medium 8).
+        try:
+            generated = _parse_generated_at(str(plan["generated_at"]))
+        except ValueError:
+            msg = f"plan generated_at {plan['generated_at']!r} is unparseable"
+            log.warning(msg)
+            raise PlanRejected(msg) from None
+        last = None
+        if last_generated_at is not None:
+            try:
+                last = _parse_generated_at(last_generated_at)
+            except ValueError:
+                log.warning(
+                    "persisted last_generated_at %r is unparseable; falling back to "
+                    "the first-boot freshness guard",
+                    last_generated_at,
+                )
+        if last is not None and generated <= last:
+            msg = f"plan generated_at {plan['generated_at']} not newer than {last_generated_at}"
             log.warning(msg)
             raise PlanRejected(msg)
-        if last_generated_at is None and now is not None and timestep_min is not None:
-            generated = _parse_generated_at(plan["generated_at"])
+        if last is None and now is not None and timestep_min is not None:
             max_age = timedelta(minutes=timestep_min) + FIRST_BOOT_SLACK
             if now - generated > max_age:
                 msg = (

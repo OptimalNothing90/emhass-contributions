@@ -112,3 +112,64 @@ async def test_first_boot_tolerance_is_one_cycle_plus_slack(driver):
     await driver.run_cycle({}, now=within, timestep_min=30)
     with pytest.raises(PlanRejected, match="older than"):
         await driver.run_cycle({}, now=beyond, timestep_min=30)
+
+
+# -- #1 Medium 8: generated_at ordering was a lexicographic string compare --
+def _plan_with_generated_at(value):
+    plan = fixture("plan_ok.json")
+    plan["generated_at"] = value
+    return plan
+
+
+@respx.mock
+async def test_newer_plan_in_negative_offset_accepted_despite_string_order(driver):
+    # 11:30:05-01:00 is 12:30:05Z, newer than the last plan; as strings "11:30" < "12:00"
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
+    respx.get(f"{BASE}/api/v1/plan").respond(
+        200, json=_plan_with_generated_at("2026-07-05T11:30:05-01:00")
+    )
+    plan = await driver.run_cycle({}, last_generated_at="2026-07-05T12:00:05Z")
+    assert plan["generated_at"] == "2026-07-05T11:30:05-01:00"
+
+
+@respx.mock
+async def test_same_instant_in_positive_offset_rejected_despite_string_order(driver):
+    # 14:00:05+02:00 is exactly 12:00:05Z, the last plan; as strings "14:00" > "12:00"
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
+    respx.get(f"{BASE}/api/v1/plan").respond(
+        200, json=_plan_with_generated_at("2026-07-05T14:00:05+02:00")
+    )
+    with pytest.raises(PlanRejected, match="not newer"):
+        await driver.run_cycle({}, last_generated_at="2026-07-05T12:00:05Z")
+
+
+@respx.mock
+async def test_unparseable_generated_at_rejected(driver):
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
+    respx.get(f"{BASE}/api/v1/plan").respond(
+        200, json=_plan_with_generated_at("yesterday")
+    )
+    with pytest.raises(PlanRejected, match="unparseable"):
+        await driver.run_cycle({}, last_generated_at=None)
+    with pytest.raises(PlanRejected, match="unparseable"):
+        await driver.run_cycle({}, last_generated_at="2026-07-05T12:00:05Z")
+
+
+@respx.mock
+async def test_unparseable_last_generated_at_falls_back_to_first_boot_guard(driver):
+    # a persisted value no current parser accepts must not pin the service to
+    # "rejected" until someone removes the adopted-plan file
+    respx.post(f"{BASE}/action/naive-mpc-optim").respond(200, text="ok")
+    respx.get(f"{BASE}/api/v1/plan").respond(200, json=fixture("plan_ok.json"))
+    now = datetime(2026, 7, 5, 12, 10, tzinfo=timezone.utc)
+    plan = await driver.run_cycle(
+        {}, last_generated_at="garbage", now=now, timestep_min=30
+    )
+    assert plan["status"] == "ok"
+    with pytest.raises(PlanRejected, match="older than"):
+        await driver.run_cycle(
+            {},
+            last_generated_at="garbage",
+            now=now + timedelta(days=2),
+            timestep_min=30,
+        )
