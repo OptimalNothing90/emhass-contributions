@@ -29,8 +29,10 @@ class FakeStandingRegistryLocal:
     def mark_done(self, demand_id, now):
         self.done.append(demand_id)
 
-    def correct(self, demand_id, *, remaining_hours, now):
-        self.corrections.append((demand_id, remaining_hours))
+    def correct(self, demand_id, *, remaining_wh, nominal_power_w, now):
+        # records what the transport handed over: energy and the client's power
+        self.corrections.append((demand_id, remaining_wh, nominal_power_w))
+        return remaining_wh / nominal_power_w
 
 
 @pytest.fixture
@@ -246,7 +248,7 @@ async def test_standing_set_config_source_is_correction(bridge):
         "flexd/demands/config/waterheater/set",
         demand_json(energy_target_wh=3000, nominal_power_w=3000),
     )
-    assert b._standing.corrections == [("waterheater", 1.0)]
+    assert b._standing.corrections == [("waterheater", 3000, 3000)]
     assert registry.get("waterheater") is None
 
 
@@ -464,3 +466,47 @@ async def test_template_retrigger_racing_withdraw_publishes_error_event(tmp_path
     ]
     assert len(errors) == 1
     assert "withdrawn" in errors[0]["error"]
+
+
+# -- #1 Lows: corrections mis-scaled when the client's nominal_power_w differs ------
+async def test_mqtt_correction_energy_is_scaled_at_the_definition_power(
+    tmp_path, caplog
+):
+    import logging
+
+    from flexd.config import StandingDefinition
+    from flexd.registry import Registry
+    from flexd.standing import StandingManager
+
+    reg = Registry(tmp_path / "d.json")
+    mgr = StandingManager(
+        [
+            StandingDefinition(
+                id="waterheater",
+                nominal_power_w=3000,
+                daily_hours=5,
+                window="06:00-22:00",
+            )
+        ],
+        ledger_path=tmp_path / "ledger.json",
+        tz="UTC",
+        registry=reg,
+    )
+    view = FakeView()
+    b = MqttBridge(
+        client=FakePublisher(),
+        base_topic="flexd",
+        registry=reg,
+        view=view,
+        scheduler=make_scheduler(reg, FakeDriver(result=PLAN), view),
+        standing=mgr,
+    )
+    with caplog.at_level(logging.WARNING, logger="flexd.standing"):
+        await b.handle_message(
+            "flexd/demands/config/waterheater/set",
+            demand_json(energy_target_wh=3000, nominal_power_w=2000),
+        )
+    ledger = json.loads((tmp_path / "ledger.json").read_text(encoding="utf-8"))
+    (entry,) = ledger.values()
+    assert entry["day_target_override_h"] == 1.0  # 3000 Wh at 3000 W, not 1.5 h
+    assert any("2000" in r.message and "3000" in r.message for r in caplog.records)

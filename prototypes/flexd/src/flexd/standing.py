@@ -194,15 +194,51 @@ class StandingManager:
                     continue
             self._save_ledger()
 
-    def correct(self, demand_id: str, *, remaining_hours: float, now: datetime) -> None:
+    def correct(
+        self,
+        demand_id: str,
+        *,
+        now: datetime,
+        remaining_wh: float | None = None,
+        nominal_power_w: float | None = None,
+        remaining_hours: float | None = None,
+    ) -> float:
         """Rebase today's target: override = remaining + elapsed_h (ledger), so the
-        normal `target − elapsed` formula keeps working and survives restarts."""
-        if demand_id not in self._defs:
+        normal `target − elapsed` formula keeps working and survives restarts.
+
+        Clients correct in energy (`remaining_wh`); the hours are taken at the
+        DEFINITION's power, which is the power the remaining energy is materialized
+        at again. Converting at the client's `nominal_power_w` and back at the
+        definition's mis-scaled the correction whenever the two differed (#1 Lows);
+        a difference above 1 % is logged, because the client's idea of the device is
+        off. `remaining_hours` is accepted directly (already at definition power).
+        Returns the remaining hours at definition power."""
+        defn = self._defs.get(demand_id)
+        if defn is None:
             raise KeyError(demand_id)
+        if remaining_hours is None:
+            if remaining_wh is None:
+                raise ValueError("correct needs remaining_wh or remaining_hours")
+            remaining_hours = remaining_wh / defn.nominal_power_w
+            if (
+                nominal_power_w is not None
+                and abs(nominal_power_w - defn.nominal_power_w) / defn.nominal_power_w
+                > 0.01
+            ):
+                log.warning(
+                    "standing %s: correction sent with nominal_power_w %s, definition "
+                    "has %s; %s Wh is %.3f h at the definition's power",
+                    demand_id,
+                    nominal_power_w,
+                    defn.nominal_power_w,
+                    remaining_wh,
+                    remaining_hours,
+                )
         with self._lock:
             entry = self._entry(demand_id, now)
             entry["day_target_override_h"] = remaining_hours + entry["elapsed_h"]
             self._save_ledger()
+        return remaining_hours
 
     def mark_done(self, demand_id: str, now: datetime) -> None:
         if demand_id not in self._defs:

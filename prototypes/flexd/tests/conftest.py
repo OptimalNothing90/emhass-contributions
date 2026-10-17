@@ -41,8 +41,10 @@ class FakeStandingRegistry:
     def mark_done(self, demand_id, now):
         self.done.append(demand_id)
 
-    def correct(self, demand_id, *, remaining_hours, now):
-        self.corrections.append((demand_id, remaining_hours))
+    def correct(self, demand_id, *, remaining_wh, nominal_power_w, now):
+        # records what the transport handed over: energy and the client's power
+        self.corrections.append((demand_id, remaining_wh, nominal_power_w))
+        return remaining_wh / nominal_power_w
 
     def accrue(self, now, elapsed_lookup):
         pass

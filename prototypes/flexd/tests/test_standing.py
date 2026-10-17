@@ -445,3 +445,43 @@ def test_ledger_save_fsyncs_before_replace(tmp_path, monkeypatch):
     reg, mgr = mk(tmp_path)
     mgr.mark_done("waterheater", now=NOON_UTC)
     assert events and events[0] == "fsync"
+
+
+# -- #1 Lows: a correction's energy was turned into hours at the CLIENT's power and
+#    back into energy at the DEFINITION's power ---------------------------------------
+def test_correction_energy_is_scaled_at_the_definition_power(tmp_path, caplog):
+    import logging
+
+    reg, mgr = mk(tmp_path)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    with caplog.at_level(logging.WARNING, logger="flexd.standing"):
+        hours = mgr.correct(
+            "waterheater", remaining_wh=3000, nominal_power_w=2000, now=NOON_UTC
+        )
+    assert hours == 1.0  # 3000 Wh / 3000 W (definition), not 3000 / 2000 = 1.5
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    assert reg.get("waterheater").energy_target_wh == 3000  # what the client asked for
+    assert any("2000" in r.message and "3000" in r.message for r in caplog.records)
+
+
+def test_correction_with_matching_power_logs_no_warning(tmp_path, caplog):
+    import logging
+
+    _, mgr = mk(tmp_path)
+    with caplog.at_level(logging.WARNING, logger="flexd.standing"):
+        assert (
+            mgr.correct(
+                "waterheater", remaining_wh=3000, nominal_power_w=3000, now=NOON_UTC
+            )
+            == 1.0
+        )
+        # within 1 % is a rounding difference, not a misconfiguration
+        mgr.correct(
+            "waterheater", remaining_wh=3000, nominal_power_w=3020, now=NOON_UTC
+        )
+    assert [r for r in caplog.records if "correction" in r.message] == []
+
+
+def test_correction_in_hours_still_accepted(tmp_path):
+    _, mgr = mk(tmp_path)
+    assert mgr.correct("waterheater", remaining_hours=1.5, now=NOON_UTC) == 1.5

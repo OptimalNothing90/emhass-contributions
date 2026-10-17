@@ -140,7 +140,8 @@ def test_standing_put_config_is_correction(client, standing_fake):
     r = client.put("/api/v1/demands/waterheater", json=payload)
     assert r.status_code == 200
     assert r.json()["corrected"] is True
-    assert standing_fake.corrections == [("waterheater", 1.0)]
+    assert standing_fake.corrections == [("waterheater", 3000, 3000)]
+    assert r.json()["remaining_hours"] == 1.0
 
 
 def test_infinity_body_422_and_not_persisted(client, registry):
@@ -339,3 +340,58 @@ def test_template_retrigger_racing_withdraw_is_409_not_404(tmp_path):
         client.post("/api/v1/templates/ghost/start", json={"source": "ha"}).status_code
         == 404
     )
+
+
+# -- #1 Lows: corrections mis-scaled when the client's nominal_power_w differs ------
+def test_rest_correction_energy_is_scaled_at_the_definition_power(tmp_path, caplog):
+    import json
+    import logging
+
+    from fastapi.testclient import TestClient
+
+    from flexd.config import StandingDefinition
+    from flexd.registry import Registry
+    from flexd.standing import StandingManager
+    from flexd.transports.rest_api import create_app
+    from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+
+    reg = Registry(tmp_path / "d.json")
+    mgr = StandingManager(
+        [
+            StandingDefinition(
+                id="waterheater",
+                nominal_power_w=3000,
+                daily_hours=5,
+                window="06:00-22:00",
+            )
+        ],
+        ledger_path=tmp_path / "ledger.json",
+        tz="UTC",
+        registry=reg,
+    )
+    view = FakeView()
+    client = TestClient(
+        create_app(
+            registry=reg,
+            view=view,
+            scheduler=make_scheduler(reg, FakeDriver(result=PLAN), view),
+            driver=FakeDriver(result=PLAN),
+            standing=mgr,
+        )
+    )
+    with caplog.at_level(logging.WARNING, logger="flexd.standing"):
+        r = client.put(
+            "/api/v1/demands/waterheater",
+            json=_payload(
+                id="waterheater",
+                source="config",
+                energy_target_wh=3000,
+                nominal_power_w=2000,
+            ),
+        )
+    assert r.status_code == 200
+    assert r.json()["remaining_hours"] == 1.0  # 3000 Wh at the definition's 3000 W
+    ledger = json.loads((tmp_path / "ledger.json").read_text(encoding="utf-8"))
+    (entry,) = ledger.values()
+    assert entry["day_target_override_h"] == 1.0
+    assert any("2000" in r.message and "3000" in r.message for r in caplog.records)

@@ -117,16 +117,19 @@ def create_app(
                     status_code=409,
                     detail=f"{demand_id} is reserved for a standing demand",
                 )
-            standing.correct(
+            # energy is the client's statement; hours follow from the definition's
+            # power inside correct (#1 Lows: mis-scaled when the powers differed)
+            remaining_hours = standing.correct(
                 demand_id,
-                remaining_hours=demand.energy_target_wh / demand.nominal_power_w,
+                remaining_wh=demand.energy_target_wh,
+                nominal_power_w=demand.nominal_power_w,
                 now=utcnow(),
             )
             scheduler.notify_change()
             return {
                 "corrected": True,
                 "applies": "next cycle",
-                "remaining_hours": demand.energy_target_wh / demand.nominal_power_w,
+                "remaining_hours": remaining_hours,
             }
         reject_standing_squat(standing, demand.id, demand.source)
         try:

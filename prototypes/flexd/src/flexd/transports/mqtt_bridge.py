@@ -101,9 +101,11 @@ class MqttBridge:
                         raise ValueError(
                             "correction requires numeric energy_target_wh >= 0 and nominal_power_w > 0"
                         )
+                    # energy at the definition's power, not the client's (#1 Lows)
                     self._standing.correct(
                         demand_id,
-                        remaining_hours=energy / power,
+                        remaining_wh=energy,
+                        nominal_power_w=power,
                         now=utcnow(),
                     )
                     self._scheduler.notify_change()
