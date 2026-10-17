@@ -9,9 +9,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from flexd.models import Demand, utcnow
-from flexd.pending_clear import PendingClear
 
 log = logging.getLogger(__name__)
+
+# pending-clear bound: keep the newest across a long broker outage; the oldest were
+# most likely cleared by publish_plan's mapped-but-inactive OFF anyway
+MAX_PENDING_CLEAR = 1000
+LEGACY_PENDING_CLEAR_FILE = "pending_clear.json"
 
 
 class OwnershipError(Exception):
@@ -40,19 +44,19 @@ class Registry:
         *,
         max_demands: int = 32,
         save_debounce_s: float = 5.0,
-        pending_clear: PendingClear | None = None,
     ):
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
         self._demands: dict[str, Demand] = {}
+        # ids whose retained MQTT topics still need clearing. Part of the snapshot:
+        # delete and sweep write the removal and the clear job in ONE _save, so no
+        # crash can leave a removed demand without its clear job (Codex review
+        # 2026-10-17 finding 3). The scheduler drains it after a delivery succeeded.
+        self._pending_clear: list[str] = []
         # next run identity to hand out (see Demand.revision); persisted with the
         # demands so a delete + restart never reissues a revision an adopted
         # mapping may still name
         self._next_revision = 1
-        # ids whose retained MQTT topics still need clearing: every delete path queues
-        # here, the scheduler delivers at cycle end. Persisted when given a path (#1
-        # Medium 11); memory-only otherwise.
-        self.pending_clear = pending_clear or PendingClear()
         self._lock = threading.Lock()  # REST threadpool vs event-loop scheduler: _save is read-modify-write on shared files
         self._max_demands = max_demands
         # Refresh bursts (a client re-arming every few seconds) must not rewrite the
@@ -64,6 +68,7 @@ class Registry:
         self._last_save = -float("inf")
         self._flush_timer: threading.Timer | None = None
         self._load()
+        self._import_legacy_pending_clear()
 
     # -- persistence -------------------------------------------------------
     def _load(self) -> None:
@@ -88,6 +93,16 @@ class Registry:
                 continue
             loaded: dict[str, Demand] = {}
             next_revision = raw.get("next_revision")
+            pending = raw.get("pending_clear", [])
+            if not isinstance(pending, list) or not all(
+                isinstance(i, str) for i in pending
+            ):
+                log.warning(
+                    "registry file %s: pending_clear is not a list of ids; dropped "
+                    "(retained topics of ids deleted before may need a manual clear)",
+                    candidate,
+                )
+                pending = []
             for entry in entries:
                 try:
                     d = Demand.model_validate(entry, context={"persisted": True})
@@ -101,6 +116,7 @@ class Registry:
                     continue
                 loaded[d.id] = d
             self._demands = loaded
+            self._pending_clear = pending[-MAX_PENDING_CLEAR:]
             highest = max((d.revision for d in loaded.values()), default=0)
             if not isinstance(next_revision, int) or next_revision <= highest:
                 # file written before the counter existed (or tampered): continue
@@ -111,6 +127,29 @@ class Registry:
         log.warning("no readable registry file, starting empty")
         self._demands = {}
 
+    def _import_legacy_pending_clear(self) -> None:
+        """Fold a pre-snapshot pending_clear.json (written next to the registry by
+        earlier versions) into the snapshot once, then retire the file."""
+        legacy = self._path.parent / LEGACY_PENDING_CLEAR_FILE
+        if not legacy.exists():
+            return
+        try:
+            ids = json.loads(legacy.read_text(encoding="utf-8"))
+            if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+                raise TypeError("pending-clear file must be a list of ids")
+        except Exception:
+            log.warning(
+                "legacy pending-clear file %s unreadable; ignored (retained topics "
+                "of ids deleted before may need a manual clear)",
+                legacy,
+            )
+            return
+        with self._lock:
+            self._queue_clear(ids)
+            self._save()
+        legacy.unlink()  # the snapshot is durable at this point
+        log.info("imported %d pending-clear ids from %s", len(ids), legacy)
+
     def _save(self) -> None:
         # order matters: write the new state to tmp FIRST; only after it exists on disk,
         # rotate the current file to .bak and swap tmp in. A crash at any point leaves
@@ -120,6 +159,7 @@ class Registry:
             {
                 "demands": [d.model_dump(mode="json") for d in self._demands.values()],
                 "next_revision": self._next_revision,
+                "pending_clear": self._pending_clear,
             },
             indent=2,
         )
@@ -219,10 +259,16 @@ class Registry:
     def delete(self, demand_id: str, source: str) -> Demand:
         with self._lock:
             removed = self._check_owner(demand_id, source)
-            del self._demands[demand_id]
-            self._save()
-            self.pending_clear.add([demand_id])
+            self._remove([demand_id])
             return removed
+
+    def _remove(self, ids: list[str]) -> None:
+        """Drop demands and queue their retained-topic clear in the same snapshot.
+        Caller holds the lock."""
+        for demand_id in ids:
+            del self._demands[demand_id]
+        self._queue_clear(ids)
+        self._save()
 
     def refresh(
         self, demand_id: str, source: str, now: datetime | None = None
@@ -254,8 +300,38 @@ class Registry:
         with self._lock:
             now = now or utcnow()
             expired = [d for d in self._demands.values() if d.expires_at <= now]
-            for d in expired:
-                del self._demands[d.id]
             if expired:
-                self._save()
+                self._remove([d.id for d in expired])
             return expired
+
+    # -- pending retained-topic clears ---------------------------------------
+    def _queue_clear(self, ids) -> None:
+        """Caller holds the lock and saves."""
+        for demand_id in ids:
+            if demand_id not in self._pending_clear:
+                self._pending_clear.append(demand_id)
+        if len(self._pending_clear) > MAX_PENDING_CLEAR:
+            del self._pending_clear[:-MAX_PENDING_CLEAR]
+
+    def pending_clear_ids(self) -> list[str]:
+        with self._lock:
+            return list(self._pending_clear)
+
+    def queue_clear(self, ids) -> None:
+        """Queue ids whose retained topics need clearing (delete and sweep do this
+        themselves; this is for callers that learn of a stale id another way)."""
+        with self._lock:
+            before = list(self._pending_clear)
+            self._queue_clear(ids)
+            if self._pending_clear != before:
+                self._save()
+
+    def clear_delivered(self, ids) -> None:
+        """Drop exactly these ids (the ones a delivery carried) and persist the drain;
+        ids queued meanwhile stay for the next delivery."""
+        gone = set(ids)
+        with self._lock:
+            kept = [i for i in self._pending_clear if i not in gone]
+            if len(kept) != len(self._pending_clear):
+                self._pending_clear = kept
+                self._save()

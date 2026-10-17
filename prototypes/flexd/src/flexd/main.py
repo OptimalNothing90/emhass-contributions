@@ -17,7 +17,6 @@ from pydantic import ValidationError
 
 from flexd.config import load_config
 from flexd.emhass_driver import EmhassDriver
-from flexd.pending_clear import PendingClear
 from flexd.plan_view import PlanView
 from flexd.registry import Registry
 from flexd.scheduler import Scheduler
@@ -94,12 +93,13 @@ async def run() -> None:
         raise SystemExit(f"flexd: invalid configuration: {exc}")
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
 
+    # the pending retained-topic clears live in demands.json too (one snapshot, #1
+    # Medium 11 / Codex 2026-10-17 finding 3); a legacy pending_clear.json in the data
+    # dir is imported once and retired
     registry = Registry(
         cfg.data_dir / "demands.json",
         max_demands=cfg.max_demands,
         save_debounce_s=cfg.save_debounce_s,
-        # survives a crash inside the debounce window (#1 Medium 11)
-        pending_clear=PendingClear(cfg.data_dir / "pending_clear.json"),
     )
     standing_ids = {sd.id for sd in cfg.standing_demands}
     for d in registry.list_active():

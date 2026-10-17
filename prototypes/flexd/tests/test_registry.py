@@ -92,9 +92,9 @@ def test_returned_objects_are_copies(registry):
 def test_delete_queues_the_id_for_retained_topic_clear(registry):
     registry.upsert(make_demand())
     registry.delete("dishwasher", source="loxone")
-    assert registry.pending_clear.ids() == ["dishwasher"]
-    registry.pending_clear.remove(["dishwasher"])
-    assert registry.pending_clear.ids() == []
+    assert registry.pending_clear_ids() == ["dishwasher"]
+    registry.clear_delivered(["dishwasher"])
+    assert registry.pending_clear_ids() == []
 
 
 def test_concurrent_writers_no_corruption(tmp_path):
@@ -424,3 +424,96 @@ def test_legacy_file_without_counter_continues_above_the_stored_revisions(tmp_pa
     reg = Registry(path)
     assert reg.get("old").revision == 7
     assert reg.upsert(make_demand(id="new")).revision > 7
+
+
+# -- Codex review 2026-10-17 finding 3: removal and clear job are ONE write ------------
+def test_crash_right_after_delete_leaves_the_clear_job_with_the_removal(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand())
+    reg.delete("dishwasher", source="loxone")
+    del reg  # the process dies before anything else runs
+    reg2 = Registry(tmp_path / "demands.json")
+    assert reg2.get("dishwasher") is None
+    assert reg2.pending_clear_ids() == ["dishwasher"]
+
+
+def test_delete_writes_the_snapshot_exactly_once(tmp_path, monkeypatch):
+    import flexd.registry as mod
+
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand())
+    writes = []
+    real_replace = mod.os.replace
+
+    def spy(src, dst):
+        if str(dst).endswith("demands.json"):
+            writes.append(str(src))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(mod.os, "replace", spy)
+    reg.delete("dishwasher", source="loxone")
+    assert len(writes) == 1  # removal and clear job land in the same snapshot
+
+
+def test_sweep_queues_the_swept_ids_in_the_same_snapshot(tmp_path):
+    now = datetime.now(timezone.utc)
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(
+        make_demand(
+            id="old",
+            deadline=now - timedelta(hours=1),
+            expires_at=now - timedelta(seconds=1),
+        )
+    )
+    reg.upsert(make_demand(id="live"))
+    swept = reg.sweep(now=now)
+    assert [d.id for d in swept] == ["old"]
+    reg2 = Registry(tmp_path / "demands.json")  # crash right after the sweep
+    assert reg2.get("old") is None and reg2.get("live") is not None
+    assert reg2.pending_clear_ids() == ["old"]
+
+
+def test_clear_delivered_drops_only_the_given_ids_and_persists(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand(id="a"))
+    reg.upsert(make_demand(id="b"))
+    reg.delete("a", source="loxone")
+    snapshot = reg.pending_clear_ids()
+    reg.delete("b", source="loxone")  # arrived while `snapshot` was being delivered
+    reg.clear_delivered(snapshot)
+    assert reg.pending_clear_ids() == ["b"]
+    assert Registry(tmp_path / "demands.json").pending_clear_ids() == ["b"]
+
+
+def test_queue_clear_is_idempotent_and_bounded(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.queue_clear(["a"])
+    reg.queue_clear(["a"])
+    assert reg.pending_clear_ids() == ["a"]
+    reg.queue_clear([f"g{i}" for i in range(1200)])
+    ids = reg.pending_clear_ids()
+    assert len(ids) == 1000 and ids[-1] == "g1199" and "a" not in ids
+
+
+def test_no_separate_pending_clear_file_is_written(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    reg.upsert(make_demand())
+    reg.delete("dishwasher", source="loxone")
+    assert not (tmp_path / "pending_clear.json").exists()
+
+
+def test_legacy_pending_clear_file_is_imported_once(tmp_path):
+    legacy = tmp_path / "pending_clear.json"
+    legacy.write_text(json.dumps(["ghost"]), encoding="utf-8")
+    reg = Registry(tmp_path / "demands.json")
+    assert reg.pending_clear_ids() == ["ghost"]
+    assert not legacy.exists()  # folded into the snapshot, file retired
+    assert Registry(tmp_path / "demands.json").pending_clear_ids() == ["ghost"]
+
+
+def test_malformed_pending_clear_list_in_snapshot_starts_empty(tmp_path):
+    path = tmp_path / "demands.json"
+    path.write_text(
+        json.dumps({"demands": [], "pending_clear": "nope"}), encoding="utf-8"
+    )
+    assert Registry(path).pending_clear_ids() == []

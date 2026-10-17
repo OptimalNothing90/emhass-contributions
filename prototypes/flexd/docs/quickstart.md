@@ -30,7 +30,7 @@ Open `flexd.yaml` and work through it top to bottom:
 - `timezone` — an IANA name (e.g. `Europe/Berlin`). Used to interpret standing-demand windows
   and trigger-template deadline rules in local time; everything else in flexd is UTC internally.
 - `data_dir` — leave as `/data` inside the container; it's where `demands.json`,
-  `standing_ledger.json`, `adopted_plan.json`, `pending_clear.json` and `last_cycle.json` live
+  `standing_ledger.json`, `adopted_plan.json` and `last_cycle.json` live
   (see step 7).
 - `ts_round` — must match `method_ts_round` in the EMHASS config (default `nearest` in both).
   flexd anchors its timestep grid on the same rounding rule EMHASS applies to the first
@@ -153,10 +153,9 @@ Everything flexd persists lives under `/data` (the `flexd-data` volume in the co
 
 | File | Contents |
 |---|---|
-| `demands.json` | the active demand registry |
+| `demands.json` | the active demand registry, plus the ids whose retained MQTT topics still need clearing (written in the same snapshot as the withdrawal, so a crash between a withdraw and the next cycle cannot lose the clear) |
 | `standing_ledger.json` | per-day accounting for standing (recurring) demands |
 | `adopted_plan.json` | the last plan flexd accepted from EMHASS |
-| `pending_clear.json` | ids whose retained MQTT topics still need clearing; survives a crash between a withdraw and the next cycle |
 | `last_cycle.json` | a debug crumb written every cycle: timestamp, payload hash, result |
 
 If something looks wrong — a setpoint that doesn't match expectations, a demand that seems

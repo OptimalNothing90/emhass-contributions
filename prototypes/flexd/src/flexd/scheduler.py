@@ -15,7 +15,6 @@ import httpx
 from flexd.aggregator import build_runtimeparams, grid_anchor
 from flexd.emhass_driver import PlanRejected
 from flexd.models import utcnow
-from flexd.pending_clear import PendingClear
 from flexd.plan_view import verify_plan_structure
 
 log = logging.getLogger(__name__)
@@ -64,12 +63,6 @@ class Scheduler:
         self._debounce_sleeping = False
         self.last_result: str = "no-run"
         self._cycle_lock = asyncio.Lock()
-        # ids awaiting retained-topic cleanup: shared with the registry (every delete
-        # path queues there) and persisted across a crash when the registry was given
-        # a path (#1 Medium 11)
-        self._pending: PendingClear = (
-            getattr(registry, "pending_clear", None) or PendingClear()
-        )
         # Event loop captured for threadsafe notify_change: FastAPI runs sync `def`
         # handlers in a worker thread, where asyncio.get_event_loop() would fail.
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -84,12 +77,12 @@ class Scheduler:
         async with self._cycle_lock:
             pinned = now is not None
             now = now or self._clock()
-            swept = self._registry.sweep(now=now)
-            if self._on_cycle_end is not None:
-                self._pending.add([d.id for d in swept])
-            else:
+            # sweep removes expired demands and queues their retained-topic clear in
+            # the registry snapshot (one write, #1 Medium 11 / Codex 2026-10-17 f.3)
+            self._registry.sweep(now=now)
+            if self._on_cycle_end is None:
                 # nothing to deliver to: drain so the queue is never perpetual
-                self._pending.remove(self._pending.ids())
+                self._registry.clear_delivered(self._registry.pending_clear_ids())
             # ORDER MATTERS: materialize accrues the OLD plan's on-hours into the standing
             # ledger up to cycle start; the tail until the real switch is accrued below.
             self._standing.materialize(
@@ -157,11 +150,12 @@ class Scheduler:
             self._write_crumb(now, payload if demands else None, result)
             self.last_result = result
             if self._on_cycle_end is not None:
-                to_deliver = self._pending.ids()
+                to_deliver = self._registry.pending_clear_ids()
                 try:
                     await self._on_cycle_end(result, to_deliver)
-                    # only what was delivered: an id withdrawn during the await stays
-                    self._pending.remove(to_deliver)
+                    # only what was delivered: an id withdrawn during the await stays;
+                    # the drain is persisted only after the clear succeeded
+                    self._registry.clear_delivered(to_deliver)
                 except Exception:
                     log.exception("on_cycle_end failed; swept ids kept for redelivery")
             return result

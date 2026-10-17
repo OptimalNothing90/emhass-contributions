@@ -559,9 +559,7 @@ async def test_pending_swept_keeps_only_the_last_1000_ids(registry):
         extra_runtime_params={},
         on_cycle_end=failing,
     )
-    registry.pending_clear.add(
-        [f"ghost-{i}" for i in range(1500)]
-    )  # backlog from the outage
+    registry.queue_clear([f"ghost-{i}" for i in range(1500)])  # outage backlog
     await s.run_once(now=NOW)
     assert len(delivered[0]) == 1000
     assert delivered[0][-1] == "old"  # newest kept, oldest dropped
@@ -679,18 +677,15 @@ async def test_emhass_timeout_stays_down(registry):
     assert await s.run_once(now=NOW) == "down"
 
 
-# -- #1 Medium 11 remainder: the pending-clear queue survives a crash --------------
+# -- #1 Medium 11 remainder / Codex 2026-10-17 finding 3: the pending-clear queue
+#    lives in the registry snapshot and survives a crash ---------------------------
 async def test_pending_clear_survives_a_crash_and_is_delivered_after_restart(
     tmp_path,
 ):
-    from flexd.pending_clear import PendingClear
     from flexd.registry import Registry
 
     def boot():
-        return Registry(
-            tmp_path / "demands.json",
-            pending_clear=PendingClear(tmp_path / "pending_clear.json"),
-        )
+        return Registry(tmp_path / "demands.json")
 
     reg = boot()
     reg.upsert(
@@ -722,18 +717,14 @@ async def test_pending_clear_survives_a_crash_and_is_delivered_after_restart(
     )
     await s.run_once(now=NOW)
     assert seen == [("skipped", ["withdrawn"])]
-    assert reg2.pending_clear.ids() == []  # delivered: nothing left for the next boot
-    assert PendingClear(tmp_path / "pending_clear.json").ids() == []
+    assert reg2.pending_clear_ids() == []  # delivered: nothing left for the next boot
+    assert boot().pending_clear_ids() == []  # and the drain is on disk
 
 
 async def test_pending_clear_kept_on_disk_while_delivery_fails(tmp_path):
-    from flexd.pending_clear import PendingClear
     from flexd.registry import Registry
 
-    reg = Registry(
-        tmp_path / "demands.json",
-        pending_clear=PendingClear(tmp_path / "pending_clear.json"),
-    )
+    reg = Registry(tmp_path / "demands.json")
     reg.upsert(
         make_demand(
             id="old",
@@ -756,17 +747,13 @@ async def test_pending_clear_kept_on_disk_while_delivery_fails(tmp_path):
         on_cycle_end=failing,
     )
     await s.run_once(now=NOW)
-    assert PendingClear(tmp_path / "pending_clear.json").ids() == ["old"]
+    assert Registry(tmp_path / "demands.json").pending_clear_ids() == ["old"]
 
 
 async def test_without_mqtt_the_pending_clear_queue_is_drained_each_cycle(tmp_path):
-    from flexd.pending_clear import PendingClear
     from flexd.registry import Registry
 
-    reg = Registry(
-        tmp_path / "demands.json",
-        pending_clear=PendingClear(tmp_path / "pending_clear.json"),
-    )
+    reg = Registry(tmp_path / "demands.json")
     reg.upsert(
         make_demand(
             id="withdrawn",
@@ -777,7 +764,7 @@ async def test_without_mqtt_the_pending_clear_queue_is_drained_each_cycle(tmp_pa
     reg.delete("withdrawn", source="loxone")
     s = make_scheduler(reg, FakeDriver(result=PLAN), FakeView())  # no on_cycle_end
     await s.run_once(now=NOW)
-    assert reg.pending_clear.ids() == []  # nothing to deliver to: no perpetual queue
+    assert reg.pending_clear_ids() == []  # nothing to deliver to: no perpetual queue
 
 
 # -- #1 Lows: delete-then-re-register during an in-flight solve served the old
