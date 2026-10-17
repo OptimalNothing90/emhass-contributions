@@ -5,7 +5,7 @@ mutator (refresh/updated_at). validate_assignment is deliberately off — see
 the registry for the write discipline.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
@@ -21,7 +21,7 @@ MAX_TTL_S = 366 * 24 * 3600.0  # one year
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Demand(BaseModel):
@@ -58,7 +58,7 @@ class Demand(BaseModel):
             return v
         if v.tzinfo is None:
             raise ValueError("datetime must be timezone-aware")
-        return v.astimezone(timezone.utc)
+        return v.astimezone(UTC)
 
     @model_validator(mode="after")
     def _finalize(self, info: ValidationInfo) -> "Demand":
@@ -67,6 +67,15 @@ class Demand(BaseModel):
         if self.p_min_w > self.nominal_power_w:
             raise ValueError("p_min_w must not exceed nominal_power_w")
         persisted = bool(info.context and info.context.get("persisted"))
+        if not persisted:
+            # Client input: no expiry further out than one year (#1 Medium 12). A
+            # registry reload is exempt so nothing already persisted is thrown away.
+            now = (info.context or {}).get("now") or utcnow()
+            if (self.expires_at - now).total_seconds() > MAX_TTL_S:
+                raise ValueError(
+                    f"expires_at must not be more than {MAX_TTL_S:.0f} s (one year) "
+                    "from now"
+                )
         if self.ttl_s is None:
             # expires_at in the past -> ttl_s 0: born expired, swept next cycle (intended).
             # Derived ttl is not capped: it must round-trip through the registry file.

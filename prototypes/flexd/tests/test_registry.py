@@ -99,7 +99,7 @@ def test_drain_deleted_tracks_delete_then_clears(registry):
 def test_concurrent_writers_no_corruption(tmp_path):
     import threading
 
-    reg = Registry(tmp_path / "demands.json")
+    reg = Registry(tmp_path / "demands.json", max_demands=100)  # 90 writes below
     errors = []
 
     def writer(prefix):
@@ -191,14 +191,14 @@ def test_refreshed_far_expiry_demand_reloads(tmp_path):
     reg.upsert(
         make_demand(
             created_at=now,  # pinned: ttl derives from created_at, not the wall clock
-            deadline=now + timedelta(days=800),
-            expires_at=now + timedelta(days=801),
+            deadline=now + timedelta(days=300),
+            expires_at=now + timedelta(days=301),
         )
     )
     reg.refresh("dishwasher", source="loxone", now=now + timedelta(seconds=2))
     reloaded = Registry(tmp_path / "demands.json")
     assert reloaded.get("dishwasher") is not None
-    assert reloaded.get("dishwasher").ttl_s == pytest.approx(801 * 24 * 3600, rel=1e-3)
+    assert reloaded.get("dishwasher").ttl_s == pytest.approx(301 * 24 * 3600, rel=1e-3)
 
 
 def test_explicit_ttl_with_matching_timestamps_still_rejected():
@@ -239,3 +239,71 @@ def test_refresh_of_expired_demand_is_rejected(registry):
     with pytest.raises(KeyError):
         registry.refresh("dishwasher", source="loxone", now=now)
     assert registry.list_active(now=now) == []  # still expired, nothing revived
+
+
+# -- #1 Medium 12: every refresh rewrote the whole registry file --
+def test_refresh_bursts_coalesce_into_one_save(tmp_path, monkeypatch):
+    import time
+
+    reg = Registry(tmp_path / "demands.json", save_debounce_s=0.3)
+    saves = []
+    real_save = reg._save
+    monkeypatch.setattr(reg, "_save", lambda: (saves.append(1), real_save()))
+    reg.upsert(make_demand(ttl_s=3600))  # explicit write, flushes immediately
+    assert len(saves) == 1
+    for _ in range(10):
+        reg.refresh("dishwasher", source="loxone")
+    assert len(saves) == 1  # inside the debounce window: nothing written yet
+    time.sleep(0.6)
+    assert len(saves) == 2  # one deferred write for the whole burst
+    on_disk = Registry(tmp_path / "demands.json").get("dishwasher")
+    assert on_disk.expires_at == reg.get("dishwasher").expires_at
+
+
+def test_flush_writes_a_pending_refresh_now(tmp_path):
+    reg = Registry(tmp_path / "demands.json", save_debounce_s=60)
+    reg.upsert(make_demand(ttl_s=3600))
+    before = Registry(tmp_path / "demands.json").get("dishwasher").expires_at
+    reg.refresh("dishwasher", source="loxone")
+    assert Registry(tmp_path / "demands.json").get("dishwasher").expires_at == before
+    reg.flush()
+    on_disk = Registry(tmp_path / "demands.json").get("dishwasher").expires_at
+    assert on_disk == reg.get("dishwasher").expires_at
+
+
+def test_upsert_and_delete_flush_a_pending_refresh(tmp_path):
+    reg = Registry(tmp_path / "demands.json", save_debounce_s=60)
+    reg.upsert(make_demand(ttl_s=3600))
+    reg.refresh("dishwasher", source="loxone")
+    refreshed = reg.get("dishwasher").expires_at
+    reg.upsert(make_demand(id="other"))
+    assert Registry(tmp_path / "demands.json").get("dishwasher").expires_at == refreshed
+
+
+def test_register_beyond_max_demands_rejected(tmp_path):
+    from flexd.registry import RegistryFull
+
+    reg = Registry(tmp_path / "demands.json", max_demands=2)
+    reg.upsert(make_demand(id="aaa"))
+    reg.upsert(make_demand(id="bbb"))
+    with pytest.raises(RegistryFull):
+        reg.upsert(make_demand(id="ccc"))
+    reg.upsert(make_demand(id="aaa", energy_target_wh=900))  # re-declaring is fine
+    assert reg.get("aaa").energy_target_wh == 900
+    reg.delete("bbb", source="loxone")
+    reg.upsert(make_demand(id="ccc"))  # room again
+    assert len(reg.list_active()) == 2
+
+
+def test_expired_demands_do_not_count_against_max(tmp_path):
+    now = datetime.now(timezone.utc)
+    reg = Registry(tmp_path / "demands.json", max_demands=1)
+    reg.upsert(
+        make_demand(
+            id="old",
+            deadline=now - timedelta(hours=2),
+            expires_at=now - timedelta(hours=1),
+        )
+    )
+    reg.upsert(make_demand(id="new"))  # the expired one is not folded into a payload
+    assert [d.id for d in reg.list_active()] == ["new"]

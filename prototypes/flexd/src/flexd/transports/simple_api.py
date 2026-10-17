@@ -7,7 +7,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import ValidationError
 
 from flexd.models import MAX_ENERGY_WH, MAX_POWER_W, Demand, utcnow
-from flexd.registry import OwnershipError
+from flexd.registry import OwnershipError, RegistryFull
 from flexd.transports import live_demand_view, reject_standing_squat
 
 MAX_HORIZON_H = 366 * 24.0  # one year; timedelta() must never see an unbounded float
@@ -77,7 +77,7 @@ def create_simple_router(
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        except OwnershipError as exc:
+        except (OwnershipError, RegistryFull) as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
         return "1"
@@ -136,7 +136,7 @@ def create_simple_router(
             templates.start(template_id, source=source, now=utcnow())
         except KeyError:
             raise HTTPException(status_code=404, detail="unknown template")
-        except OwnershipError as exc:
+        except (OwnershipError, RegistryFull) as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
         return "1"

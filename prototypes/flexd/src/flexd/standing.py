@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 from flexd.config import StandingDefinition
 from flexd.models import Demand
-from flexd.registry import OwnershipError, Registry
+from flexd.registry import OwnershipError, Registry, RegistryFull
 
 log = logging.getLogger(__name__)
 
@@ -187,7 +187,7 @@ class StandingManager:
                             modulating=defn.modulating,
                         )
                     )
-                except OwnershipError as exc:
+                except (OwnershipError, RegistryFull) as exc:
                     log.warning("standing %s skipped this cycle: %s", defn.id, exc)
                     continue
             self._save_ledger()

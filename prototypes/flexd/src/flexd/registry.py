@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -21,18 +22,34 @@ class DemandExpired(KeyError):
     concerned, even if the sweep has not removed it yet. Register again instead."""
 
 
+class RegistryFull(Exception):
+    """Registering a NEW id would exceed max_demands (#1 Medium 12): the MILP and the
+    registry file must not grow without limit on a buggy client."""
+
+
 class Registry:
     """Single-writer demand registry with atomic JSON persistence.
 
     Returned Demand objects are defensive copies; mutating them never changes registry state.
     """
 
-    def __init__(self, path: Path):
+    def __init__(
+        self, path: Path, *, max_demands: int = 32, save_debounce_s: float = 5.0
+    ):
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
         self._demands: dict[str, Demand] = {}
         self._deleted_ids: list[str] = []
         self._lock = threading.Lock()  # REST threadpool vs event-loop scheduler: _save is read-modify-write on shared files
+        self._max_demands = max_demands
+        # Refresh bursts (a client re-arming every few seconds) must not rewrite the
+        # whole file each time on an SD-card host (#1 Medium 12): a refresh inside the
+        # debounce window only marks the state dirty and arms one timer that flushes it.
+        # upsert, delete and sweep write immediately and take any pending refresh along.
+        self._save_debounce_s = save_debounce_s
+        self._dirty = False
+        self._last_save = -float("inf")
+        self._flush_timer: threading.Timer | None = None
         self._load()
 
     # -- persistence -------------------------------------------------------
@@ -90,6 +107,32 @@ class Registry:
         if self._path.exists():
             os.replace(self._path, self._bak)
         os.replace(tmp, self._path)
+        self._dirty = False
+        self._last_save = time.monotonic()
+        if self._flush_timer is not None:
+            self._flush_timer.cancel()
+            self._flush_timer = None
+
+    def _save_deferred(self) -> None:
+        """Write now if the debounce window has passed, else arm one flush timer.
+        Caller holds the lock."""
+        self._dirty = True
+        if time.monotonic() - self._last_save >= self._save_debounce_s:
+            self._save()
+            return
+        if self._flush_timer is None:
+            self._flush_timer = threading.Timer(self._save_debounce_s, self.flush)
+            self._flush_timer.daemon = True
+            self._flush_timer.start()
+
+    def flush(self) -> None:
+        """Write a pending deferred change now (timer callback, and at shutdown)."""
+        with self._lock:
+            if self._flush_timer is not None:
+                self._flush_timer.cancel()
+                self._flush_timer = None
+            if self._dirty:
+                self._save()
 
     # -- ownership guard ---------------------------------------------------
     def _check_owner(self, demand_id: str, source: str) -> Demand:
@@ -111,6 +154,14 @@ class Registry:
                 raise OwnershipError(
                     f"{demand.id} is owned by {existing.source!r}, not {demand.source!r}"
                 )
+            if existing is None:
+                now = utcnow()
+                active = sum(1 for d in self._demands.values() if d.expires_at > now)
+                if active >= self._max_demands:
+                    raise RegistryFull(
+                        f"registry holds {active} active demands; max_demands is "
+                        f"{self._max_demands}"
+                    )
             demand.updated_at = utcnow()
             self._demands[demand.id] = demand
             self._save()
@@ -151,7 +202,7 @@ class Registry:
                 raise DemandExpired(demand_id)
             d.expires_at = max(d.expires_at, now + timedelta(seconds=d.ttl_s or 0))
             d.updated_at = now
-            self._save()
+            self._save_deferred()  # expires_at/updated_at only: coalesce bursts
             return d.model_copy()
 
     def list_active(self, now: datetime | None = None) -> list[Demand]:

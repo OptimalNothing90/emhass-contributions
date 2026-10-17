@@ -149,3 +149,17 @@ def test_mqtt_base_topic_rejects_leading_or_trailing_slash():
     for bad in ("/flexd", "flexd/", "", "home//flexd", "home/+/flexd", "flexd/#"):
         with pytest.raises(ValidationError):
             MqttConfig(base_topic=bad)
+
+
+def test_max_demands_and_save_debounce_defaults_and_validation(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.max_demands == 32
+    assert cfg.save_debounce_s == 5.0
+    p.write_text(YAML + "max_demands: 4\nsave_debounce_s: 0\n", encoding="utf-8")
+    cfg = load_config(p)
+    assert (cfg.max_demands, cfg.save_debounce_s) == (4, 0.0)
+    p.write_text(YAML + "max_demands: 0\n", encoding="utf-8")
+    with pytest.raises(ValidationError):
+        load_config(p)

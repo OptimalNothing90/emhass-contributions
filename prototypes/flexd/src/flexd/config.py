@@ -141,6 +141,10 @@ class FlexdConfig(BaseModel):
     data_dir: Path = Path("/data")
     stale_after_cycles: int = 2
     default_ttl_s: int = 3600
+    # registering a new id beyond this is a 409: bounds the MILP and the registry file
+    max_demands: int = Field(default=32, ge=1)
+    # refresh bursts coalesce into one registry write per window (0 = write every time)
+    save_debounce_s: float = Field(default=5.0, ge=0)
     # must equal EMHASS method_ts_round: flexd anchors its timestep grid on the same rule
     ts_round: Literal["nearest", "first", "last"] = "nearest"
     mqtt: MqttConfig = MqttConfig()

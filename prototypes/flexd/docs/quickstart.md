@@ -35,6 +35,12 @@ Open `flexd.yaml` and work through it top to bottom:
   flexd anchors its timestep grid on the same rounding rule EMHASS applies to the first
   optimization step, so start and end slots line up with the plan EMHASS returns.
 - `stale_after_cycles` / `default_ttl_s` — safe to leave at their defaults for a first run.
+- `max_demands` (default 32) — registering a new id beyond this many active demands returns
+  `409`, so one misbehaving client cannot grow the registry and the optimization without limit.
+  `expires_at` is also capped at one year from now on registration.
+- `save_debounce_s` (default 5) — refreshes inside this window are written to `demands.json`
+  once, together, instead of rewriting the file on every refresh (SD-card hosts). Registrations
+  and withdrawals are written immediately.
 - `mqtt:` block — only needed if you plan to use MQTT (Home Assistant, ioBroker). Set
   `enabled: true` and point `host`/`port` at your broker, or leave the bundled Mosquitto profile
   (step 4) running and keep `host: mosquitto`. Loxone and plain REST/agent use don't need this.

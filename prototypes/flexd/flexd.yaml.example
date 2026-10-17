@@ -12,6 +12,10 @@ data_dir: /data
 stale_after_cycles: 2
 # expiry cushion for Simple-API registrations without explicit expiry
 default_ttl_s: 3600
+# registering a NEW id beyond this many active demands is a 409 (bounds the MILP and the registry file)
+max_demands: 32
+# refresh bursts coalesce into one registry write per window; 0 writes on every refresh
+save_debounce_s: 5
 # enabled/host/port/base_topic; username/password optional
 mqtt:
   enabled: true

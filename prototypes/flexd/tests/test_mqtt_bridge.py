@@ -342,3 +342,26 @@ async def test_nested_base_ignores_partial_prefix_and_own_topics(nested_bridge):
     await b.handle_message("home/flexdx/demands/loxone/dishwasher/set", demand_json())
     assert registry.get("dishwasher") is None
     assert pub.published == []
+
+
+# -- #1 Medium 12: registry capacity surfaces as an error event --
+async def test_set_beyond_max_demands_publishes_error(tmp_path):
+    from flexd.registry import Registry
+
+    registry = Registry(tmp_path / "demands.json", max_demands=1)
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    pub = FakePublisher()
+    b = MqttBridge(
+        client=pub,
+        base_topic="flexd",
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+    )
+    await b.handle_message("flexd/demands/loxone/first/set", demand_json())
+    await b.handle_message("flexd/demands/loxone/second/set", demand_json())
+    assert registry.get("second") is None
+    errors = [(t, p) for t, p, _ in pub.published if t.endswith("/error")]
+    assert errors and errors[0][0] == "flexd/demands/loxone/second/error"
+    assert "max_demands" in errors[0][1]

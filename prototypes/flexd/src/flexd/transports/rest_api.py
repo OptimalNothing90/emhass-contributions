@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from flexd.models import Demand, utcnow
-from flexd.registry import OwnershipError
+from flexd.registry import OwnershipError, RegistryFull
 from flexd.transports import live_demand_view, reject_standing_squat
 from flexd.transports.simple_api import create_simple_router
 
@@ -58,7 +58,7 @@ def create_app(
         reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
-        except OwnershipError as exc:
+        except (OwnershipError, RegistryFull) as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
         return saved
@@ -93,7 +93,7 @@ def create_app(
         reject_standing_squat(standing, demand.id, demand.source)
         try:
             saved = registry.upsert(demand)
-        except OwnershipError as exc:
+        except (OwnershipError, RegistryFull) as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
         return saved
@@ -179,7 +179,7 @@ def create_app(
             saved = templates.start(template_id, source=source, now=utcnow())
         except KeyError:
             raise HTTPException(status_code=404, detail="unknown template")
-        except OwnershipError as exc:
+        except (OwnershipError, RegistryFull) as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         scheduler.notify_change()
         return saved

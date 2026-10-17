@@ -10,7 +10,7 @@ import logging
 from fastapi import HTTPException
 
 from flexd.models import Demand, utcnow
-from flexd.registry import OwnershipError
+from flexd.registry import OwnershipError, RegistryFull
 from flexd.transports import reject_standing_squat
 
 log = logging.getLogger(__name__)
@@ -56,7 +56,13 @@ class MqttBridge:
                     raise KeyError(template_id)
                 self._templates.start(template_id, source=source, now=utcnow())
                 self._scheduler.notify_change()
-            except (ValueError, KeyError, OwnershipError, HTTPException) as exc:
+            except (
+                ValueError,
+                KeyError,
+                OwnershipError,
+                RegistryFull,
+                HTTPException,
+            ) as exc:
                 detail = getattr(exc, "detail", None) or str(exc)
                 await self._client.publish(
                     f"{self._base}/templates/{source}/{template_id}/error",
@@ -123,7 +129,13 @@ class MqttBridge:
                 self._scheduler.notify_change()
             else:
                 log.debug("unknown action %r on %s", action, topic)
-        except (ValueError, KeyError, OwnershipError, HTTPException) as exc:
+        except (
+            ValueError,
+            KeyError,
+            OwnershipError,
+            RegistryFull,
+            HTTPException,
+        ) as exc:
             detail = getattr(exc, "detail", None) or str(exc)
             await self._client.publish(
                 f"{self._base}/demands/{source}/{demand_id}/error",

@@ -1,4 +1,7 @@
-from tests.conftest import _payload
+from datetime import datetime, timedelta, timezone
+
+from tests.conftest import _payload, make_demand
+from tests.test_simple_api import _app_with_on_view, _client_with_on_view
 
 
 def test_crud_roundtrip(client):
@@ -177,10 +180,6 @@ def test_422_body_does_not_echo_input(client):
 
 
 # -- Codex review 2026-10-16 finding 3: plan read-back gated by the registry --
-from datetime import datetime, timedelta, timezone
-
-from tests.conftest import make_demand
-from tests.test_simple_api import _app_with_on_view, _client_with_on_view
 
 
 def test_plan_demand_expired_is_off_not_on(registry):
@@ -220,3 +219,44 @@ def test_rest_standing_withdraw_triggers_notify_off(registry, monkeypatch):
     monkeypatch.setattr(scheduler, "notify_off", lambda i: calls.append(i))
     assert c.delete("/api/v1/demands/waterheater?source=config").status_code == 204
     assert calls == ["waterheater"]
+
+
+# -- #1 Medium 12: a client must not grow the registry and the MILP without limit --
+def _client_with_capacity(tmp_path, max_demands):
+    from fastapi.testclient import TestClient
+
+    from flexd.registry import Registry
+    from flexd.transports.rest_api import create_app
+    from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+
+    registry = Registry(tmp_path / "demands.json", max_demands=max_demands)
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    app = create_app(
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        driver=FakeDriver(result=PLAN),
+    )
+    return TestClient(app), registry
+
+
+def test_rest_register_beyond_max_demands_409(tmp_path):
+    c, registry = _client_with_capacity(tmp_path, max_demands=1)
+    assert c.post("/api/v1/demands", json=_payload(id="first")).status_code == 201
+    r = c.post("/api/v1/demands", json=_payload(id="second"))
+    assert r.status_code == 409
+    assert "max_demands" in r.json()["detail"]
+    assert registry.get("second") is None
+    r = c.put("/api/v1/demands/second", json=_payload(id="second"))
+    assert r.status_code == 409
+
+
+def test_simple_register_beyond_max_demands_409(tmp_path):
+    c, registry = _client_with_capacity(tmp_path, max_demands=1)
+    params = dict(source="loxone", power_w=2000, energy_wh=1000)
+    first = c.post("/simple/demands/register", params={**params, "id": "a"})
+    assert first.status_code == 201
+    r = c.post("/simple/demands/register", params={**params, "id": "b"})
+    assert r.status_code == 409
+    assert registry.get("b") is None

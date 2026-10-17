@@ -116,10 +116,9 @@ def test_realistic_maxima_accepted():
 def test_far_expiry_round_trips_through_dump_and_load():
     # derived ttl_s may exceed MAX_TTL_S; the persisted form must validate again
     now = datetime.now(timezone.utc)
-    d = Demand(
-        **_base(
-            deadline=now + timedelta(days=800), expires_at=now + timedelta(days=801)
-        )
+    d = Demand.model_validate(  # client input is capped at one year; a file is not
+        _base(deadline=now + timedelta(days=800), expires_at=now + timedelta(days=801)),
+        context={"persisted": True},
     )
     again = Demand.model_validate(
         d.model_dump(mode="json"), context={"persisted": True}
@@ -142,3 +141,32 @@ def test_modulating_defaults_false_and_round_trips():
         Demand(**Demand(**_base(modulating=True)).model_dump(mode="json")).modulating
         is True
     )
+
+
+# -- #1 Medium 12: no upper bound on expires_at --
+def test_expires_at_more_than_a_year_out_rejected_for_client_input():
+    now = datetime.now(timezone.utc)
+    with pytest.raises(ValidationError, match="expires_at"):
+        Demand(
+            **_base(
+                deadline=now + timedelta(days=400), expires_at=now + timedelta(days=401)
+            )
+        )
+    ok = Demand(
+        **_base(
+            deadline=now + timedelta(days=300), expires_at=now + timedelta(days=301)
+        )
+    )
+    assert ok.ttl_s == pytest.approx(301 * 24 * 3600, rel=1e-3)
+
+
+def test_expires_at_more_than_a_year_out_accepted_when_persisted():
+    now = datetime.now(timezone.utc)
+    raw = {
+        **_base(
+            deadline=now + timedelta(days=400), expires_at=now + timedelta(days=401)
+        ),
+        "created_at": now,
+    }
+    d = Demand.model_validate(raw, context={"persisted": True})
+    assert d.expires_at > now + timedelta(days=400)

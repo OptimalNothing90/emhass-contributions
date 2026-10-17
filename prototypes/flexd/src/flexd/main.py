@@ -38,7 +38,11 @@ async def run() -> None:
         raise SystemExit(f"flexd: invalid configuration: {exc}")
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
 
-    registry = Registry(cfg.data_dir / "demands.json")
+    registry = Registry(
+        cfg.data_dir / "demands.json",
+        max_demands=cfg.max_demands,
+        save_debounce_s=cfg.save_debounce_s,
+    )
     standing_ids = {sd.id for sd in cfg.standing_demands}
     for d in registry.list_active():
         if d.id in standing_ids and d.source != "config":
@@ -169,7 +173,10 @@ async def run() -> None:
                 log.warning("mqtt disconnected (%s); retrying in 10s", exc)
                 await asyncio.sleep(10)
 
-    await asyncio.gather(server.serve(), scheduler.run_forever(), mqtt_loop())
+    try:
+        await asyncio.gather(server.serve(), scheduler.run_forever(), mqtt_loop())
+    finally:
+        registry.flush()  # a refresh still inside the debounce window must hit disk
 
 
 def cli() -> None:
