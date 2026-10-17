@@ -124,11 +124,9 @@ def build_runtimeparams(
         # one step). START keeps ceil (to_step): never start before window_start.
         end_raw = math.floor((d.deadline - anchor).total_seconds() / 60 / timestep_min)
         clamped = end_raw > horizon_steps
+        # A deadline inside the first step leaves no whole slot before it: unschedulable,
+        # not a stretched slot that would run past the deadline (Codex 2026-10-17 f.1).
         end_step = min(max(end_raw, 0), horizon_steps)
-        if end_step == 0 and d.deadline > anchor:
-            # a deadline inside the first timestep is satisfiable by running the device
-            # now: one slot starting at step 0, not "unschedulable" (#1 Lows)
-            end_step = 1
         start_step = (
             0
             if d.window_start is None
