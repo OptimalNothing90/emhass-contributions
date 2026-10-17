@@ -10,6 +10,13 @@ from flexd.models import Demand
 log = logging.getLogger(__name__)
 
 
+class TemplateRunWithdrawn(Exception):
+    """The run existed when the re-trigger was checked and was withdrawn before it
+    could be refreshed. Deliberately not a KeyError: the transports map KeyError to
+    404 "unknown template", which misnamed this race (#1 Lows). Trigger again to
+    start a new run."""
+
+
 def _to_time(hhmm: str) -> time:
     h, m = map(int, hhmm.split(":"))
     return time(h, m)
@@ -43,7 +50,14 @@ class TemplateManager:
             and existing.deadline > now
             and existing.expires_at > now
         ):
-            return self._registry.refresh(template_id, source=source, now=now)
+            try:
+                return self._registry.refresh(template_id, source=source, now=now)
+            except KeyError as exc:
+                # withdrawn between get() and refresh(): name the race, not the template
+                raise TemplateRunWithdrawn(
+                    f"template run {template_id!r} was withdrawn while being "
+                    "re-triggered; trigger again to start a new run"
+                ) from exc
 
         local = now.astimezone(self._tz)
         rule = self._match_rule(defn, local.time())

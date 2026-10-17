@@ -1,3 +1,13 @@
+from datetime import datetime, timedelta, timezone
+
+from fastapi.testclient import TestClient
+
+from flexd.plan_view import DemandView
+from flexd.transports.rest_api import create_app
+from tests.conftest import FakeStandingRegistry, make_demand
+from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+
+
 def test_simple_register_and_setpoint(client):
     r = client.post(
         "/simple/demands/register",
@@ -238,16 +248,6 @@ def test_simple_huge_window_start_422_not_500(client):
 
 
 # -- Codex review 2026-10-16 finding 3: reads are gated by the registry, not the last plan --
-from datetime import datetime, timedelta, timezone
-
-from fastapi.testclient import TestClient
-
-from flexd.plan_view import DemandView
-from flexd.transports.rest_api import create_app
-from tests.conftest import FakeStandingRegistry, make_demand
-from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
-
-
 class OnView(FakeView):
     """Adopted plan says 2000 W for every known id; the registry must be the gate."""
 
@@ -340,3 +340,19 @@ def test_simple_register_modulating_query(client, registry):
     )
     assert r.status_code == 201
     assert registry.get("pump").modulating is False
+
+
+# -- #1 Lows: withdraw racing a template re-trigger ---------------------------------
+def test_simple_template_retrigger_racing_withdraw_is_409_not_404(tmp_path):
+    from tests.test_rest_api import _client_with_templates_over
+    from tests.test_templates import WithdrawnMidRefresh
+
+    client = _client_with_templates_over(WithdrawnMidRefresh(tmp_path / "d.json"))
+    assert (
+        client.post("/simple/templates/dishwasher/start?source=loxone").status_code
+        == 201
+    )
+    r = client.post("/simple/templates/dishwasher/start?source=loxone")
+    assert r.status_code == 409
+    assert "withdrawn" in r.text
+    assert client.post("/simple/templates/ghost/start?source=loxone").status_code == 404

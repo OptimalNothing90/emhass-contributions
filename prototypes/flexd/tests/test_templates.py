@@ -257,3 +257,26 @@ def test_not_before_same_day_when_still_ahead(tmp_path):
     d = reg.get("dryer")
     assert d.deadline == datetime(2026, 7, 6, 4, 30, tzinfo=timezone.utc)
     assert d.window_start == datetime(2026, 7, 5, 23, 0, tzinfo=timezone.utc)
+
+
+# -- #1 Lows: a withdraw racing a re-trigger surfaced as 404 "unknown template" -------
+class WithdrawnMidRefresh(Registry):
+    """The withdraw lands between TemplateManager.start's get() and its refresh()."""
+
+    def refresh(self, demand_id, source, now=None):
+        self.delete(demand_id, source=source)
+        return super().refresh(demand_id, source=source, now=now)
+
+
+def test_withdraw_racing_retrigger_is_not_an_unknown_template(tmp_path):
+    from flexd.templates import TemplateRunWithdrawn
+
+    reg = WithdrawnMidRefresh(tmp_path / "demands.json")
+    mgr = TemplateManager([TPL], tz="UTC", registry=reg, default_ttl_s=3600)
+    now = datetime(2026, 7, 5, 6, 0, tzinfo=timezone.utc)
+    mgr.start("dishwasher", source="loxone", now=now)
+    with pytest.raises(TemplateRunWithdrawn) as info:
+        mgr.start("dishwasher", source="loxone", now=now + timedelta(minutes=1))
+    assert not isinstance(info.value, KeyError)  # transports map KeyError to 404
+    assert "withdrawn" in str(info.value)
+    assert reg.get("dishwasher") is None  # the race is reported, not papered over

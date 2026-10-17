@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError, RegistryFull
+from flexd.templates import TemplateRunWithdrawn
 from flexd.transports import reject_standing_squat
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class MqttBridge:
                 KeyError,
                 OwnershipError,
                 RegistryFull,
+                TemplateRunWithdrawn,
                 HTTPException,
             ) as exc:
                 detail = getattr(exc, "detail", None) or str(exc)

@@ -392,3 +392,34 @@ async def test_set_with_unknown_key_publishes_error(bridge):
     assert registry.get("dishwasher") is None
     errors = [(t, p) for t, p, _ in pub.published if t.endswith("/error")]
     assert errors and "p_min_watt" in errors[0][1]
+
+
+# -- #1 Lows: withdraw racing a template re-trigger ---------------------------------
+async def test_template_retrigger_racing_withdraw_publishes_error_event(tmp_path):
+    from flexd.templates import TemplateManager
+    from tests.test_templates import TPL, WithdrawnMidRefresh
+
+    registry = WithdrawnMidRefresh(tmp_path / "d.json")
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    pub = FakePublisher()
+    b = MqttBridge(
+        client=pub,
+        base_topic="flexd",
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        standing=FakeStandingRegistryLocal(),
+        templates=TemplateManager(
+            [TPL], tz="UTC", registry=registry, default_ttl_s=3600
+        ),
+    )
+    await b.handle_message("flexd/templates/loxone/dishwasher/start", "")
+    await b.handle_message("flexd/templates/loxone/dishwasher/start", "")
+    errors = [
+        json.loads(p)
+        for t, p, r in pub.published
+        if t == "flexd/templates/loxone/dishwasher/error"
+    ]
+    assert len(errors) == 1
+    assert "withdrawn" in errors[0]["error"]

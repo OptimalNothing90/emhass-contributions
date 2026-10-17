@@ -295,3 +295,47 @@ def test_chunked_body_without_length_is_411(client, registry):
     )
     assert r.status_code == 411
     assert registry.get("dishwasher") is None
+
+
+# -- #1 Lows: withdraw racing a template re-trigger ---------------------------------
+def _client_with_templates_over(registry):
+    from fastapi.testclient import TestClient
+
+    from flexd.templates import TemplateManager
+    from flexd.transports.rest_api import create_app
+    from tests.conftest import FakeStandingRegistry
+    from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+    from tests.test_templates import TPL
+
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    templates = TemplateManager([TPL], tz="UTC", registry=registry, default_ttl_s=3600)
+    app = create_app(
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        driver=FakeDriver(result=PLAN),
+        standing=FakeStandingRegistry(),
+        templates=templates,
+    )
+    return TestClient(app)
+
+
+def test_template_retrigger_racing_withdraw_is_409_not_404(tmp_path):
+    from tests.test_templates import WithdrawnMidRefresh
+
+    client = _client_with_templates_over(WithdrawnMidRefresh(tmp_path / "d.json"))
+    assert (
+        client.post(
+            "/api/v1/templates/dishwasher/start", json={"source": "ha"}
+        ).status_code
+        == 201
+    )
+    r = client.post("/api/v1/templates/dishwasher/start", json={"source": "ha"})
+    assert r.status_code == 409
+    assert "withdrawn" in r.json()["detail"]
+    # a truly unknown template stays 404
+    assert (
+        client.post("/api/v1/templates/ghost/start", json={"source": "ha"}).status_code
+        == 404
+    )
