@@ -11,7 +11,7 @@ EMHASS contribution workspace: audits, design RFCs, board source-of-truth, and t
 - **`rfcs/`** — design proposals for upstream features (e.g. `/api/last-run`, `/healthz`, openapi.json generation). Pre-PR thinking.
 - **`prototypes/`** — feature-flagged Python additions running alongside vanilla EMHASS. Off by default. Used to validate proposed features in production before opening upstream PRs.
 - **`docker/`** — Dockerfile and Docker Compose files that build/run the production image.
-- **`skills/`** — public Claude Code skill plugins (anonymized variants of personal tooling). Initial home for the AG-B1 board item.
+- **`skills/`** — the public `emhass-skills` Claude Code plugin (config validation, plan explanation, log anomaly scan, PR readiness). Install guide in [`skills/README.md`](skills/README.md); marketplace manifest at `.claude-plugin/marketplace.json`.
 - **`docs/`** — staging area for documentation that may eventually land upstream (e.g. AI-coder contributor onboarding).
 - **`upstream/`** — git submodule pinned to a fixed upstream commit: a release tag when one carries what we build against, otherwise a pinned `master` SHA (currently the release tag `v0.18.6`, which contains `GET /api/v1/plan` / `plan_store` from PR #995, which the `prototypes/flexd/` sidecar builds against).
 

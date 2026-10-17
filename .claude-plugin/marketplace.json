@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "emhass-contributions",
+  "description": "EMHASS end-user and contributor skills for Claude Code (config validation, plan explanation, log anomaly scan, PR readiness).",
+  "owner": {
+    "name": "OptimalNothing90",
+    "url": "https://github.com/OptimalNothing90"
+  },
+  "plugins": [
+    {
+      "name": "emhass-skills",
+      "source": "./skills",
+      "description": "Validate EMHASS config and runtime params, explain the optimizer plan, classify action_logs.txt failures, check PR readiness for upstream EMHASS.",
+      "category": "development",
+      "tags": ["emhass", "home-energy", "home-assistant"]
+    }
+  ]
+}
