@@ -11,7 +11,7 @@ services:
     depends_on: [emhass]
 
   emhass:
-    image: ghcr.io/davidusb-geek/emhass:latest
+    image: ghcr.io/davidusb-geek/emhass:v0.18.6  # release tag of the upstream/ submodule pin; bump together
     ports: ["5000:5000"]
     volumes:
       - emhass-data:/data
