@@ -334,7 +334,9 @@ def render(report: Report) -> str:
     if not fired:
         out.append("OK: no known failure signatures found")
         return "\n".join(out)
-    fired.sort(key=lambda c: (0 if c.severity == "ERROR" else 1, -c.count))
+    # ERROR before WARN; inside a severity by first appearance, so the root cause
+    # (earliest ERROR) is printed before its consequences.
+    fired.sort(key=lambda c: (0 if c.severity == "ERROR" else 1, c.first_line or 0))
     for c in fired:
         where = f"lines {c.first_line}-{c.last_line}"
         if c.first_ts:

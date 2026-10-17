@@ -46,7 +46,12 @@ input cannot be read. `--json` gives the same facts as a machine-readable object
      window, `def_minimum_on_time`, `set_deferrable_max_startups`, PV self-consumption
      (`costfun`), battery priority, `treat_deferrable_load_as_semi_cont`.
    - fewer steps than configured: the horizon is too short for the operating hours or
-     the window clamps them.
+     the window clamps them. Which knob depends on the action in `--last-run`:
+     `naive-mpc-optim` → raise `prediction_horizon` in the runtime payload (the horizon
+     is `prediction_horizon` steps; the next MPC cycle re-plans the rest using
+     `def_current_state` / `def_current_operating_timesteps` if the caller passes them);
+     `dayahead-optim` / `perfect-optim` → the horizon is `delta_forecast_daily` days, so
+     shorten the operating hours or widen `end_timesteps_of_each_deferrable_load`.
 3. **Battery k**: SOC path (fractions), charge/discharge energy and steps, and whether it
    charges from the grid (PV below charge power while importing). Grid charging is
    legal unless `set_nocharge_from_grid` is true; it usually means cheap night prices.

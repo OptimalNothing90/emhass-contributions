@@ -49,13 +49,17 @@ runtime forecasts with NaN/null, `prediction_horizon` < 5.
 ## Workflow
 
 1. Run the validator on the file the user named. If they only pasted JSON, write it to a
-   temp file first.
-2. Report ERRORs first, quoting the key and the fix. Then WARNs that change behaviour.
-3. Do not restate INFO lines unless the user asks why a value "does nothing".
-4. If `unknown key` fires on a key the user insists exists: ask which EMHASS version runs,
+   temp file first (any scratch location; the script only reads it).
+2. Findings are sorted by severity, then alphabetically by key, not by importance. Start
+   from the ERROR that matches the user's symptom, then the rest. Report each key once:
+   a WARN on the same key as an ERROR (e.g. target SOC "outside [20, 0.9]" after a
+   percent-instead-of-fraction ERROR) is a consequence, not a second problem.
+3. Then WARNs on other keys that change behaviour.
+4. Do not restate INFO lines unless the user asks why a value "does nothing".
+5. If `unknown key` fires on a key the user insists exists: ask which EMHASS version runs,
    then re-run with `--schema-dir` pointing at that version's files. Never edit the
    bundled schema.
-5. The validator does not know the user's sensors, tariff or hardware. "No errors" means
+6. The validator does not know the user's sensors, tariff or hardware. "No errors" means
    the file is schema-valid, not that the plant model is right.
 
 ## Not covered

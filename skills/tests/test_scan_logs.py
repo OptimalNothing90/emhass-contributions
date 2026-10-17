@@ -240,3 +240,19 @@ def test_cli_list_signatures():
     proc = _run_cli("--list")
     assert proc.returncode == 0
     assert "infeasible" in proc.stdout and "Solcast" in proc.stdout
+
+
+def test_render_orders_error_classes_by_first_appearance(scan_logs_mod):
+    text = scan_logs_mod.render(scan_logs_mod.scan(ACTION_LOG.splitlines()))
+    order = [
+        cls
+        for cls in ("infeasible", "nan_forecast", "missing_sensor", "solcast_quota")
+        if f"ERROR {cls}:" in text
+    ]
+    assert order == ["infeasible", "nan_forecast", "missing_sensor", "solcast_quota"]
+    assert (
+        text.index("ERROR infeasible:")
+        < text.index("ERROR nan_forecast:")
+        < text.index("ERROR solcast_quota:")
+    )
+    assert text.index("ERROR solcast_quota:") < text.index("WARN  relaxed:")

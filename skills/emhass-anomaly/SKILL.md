@@ -36,7 +36,7 @@ it is ignored with a note. Exit 1 when an ERROR class fired, 0 otherwise, 2 unre
 | Class | Sev | Fix direction |
 |---|---|---|
 | `infeasible` | ERROR | Constraint conflict. Run `emhass-config-validate`; compare SOC targets, operating hours vs window, hybrid inverter limits, grid limits. |
-| `relaxed` | WARN | MILP failed, LP fallback published as `Optimal (Relaxed)`. Treat as infeasible with a usable plan; still find the cause. |
+| `relaxed` | WARN | MILP failed, LP fallback published as `Optimal (Relaxed)`. Treat as infeasible; the published plan is a best effort and worthless when the cause is bad input (`nan_forecast`, `missing_sensor`). |
 | `nan_forecast` | ERROR | Runtime forecast list has NaN/null/str or wrong length. Fix the producer (template, automation) not EMHASS. |
 | `missing_sensor` | ERROR | Entity id wrong, no numeric history, bad token/URL. Check config.json sensors and HA history. |
 | `solcast_quota` | ERROR | 402/429 or safety cap. Cache the forecast (`weather-forecast-cache` action + `weather_forecast_cache_only`), check key / rooftop id. |
@@ -50,11 +50,15 @@ it is ignored with a note. Exit 1 when an ERROR class fired, 0 otherwise, 2 unre
 
 ## Workflow
 
-1. Run the scanner, report ERROR classes first with count and the `e.g.:` line.
-2. Open the log at the `first_line` of the top class and read 10 lines before it: the
-   cause is usually logged as INFO/WARNING just above the ERROR.
-3. One root cause at a time. `infeasible` after `nan_forecast` or `missing_sensor` is a
-   consequence, not a separate problem.
+1. Run the scanner. Classes are printed ERROR before WARN, and within a severity in
+   order of first appearance (`first_line`), so the first ERROR line is normally the root
+   cause and the ones below it are consequences.
+2. Report the first ERROR class with its count and the `e.g.:` line. Open the log at its
+   `first_line` and read 10 lines before it: the cause is usually logged as INFO/WARNING
+   just above the ERROR.
+3. One root cause at a time. `infeasible` or `relaxed` appearing after `nan_forecast`,
+   `missing_sensor` or `runtime_400` is a consequence, not a separate problem; say so and
+   do not send the user chasing constraints.
 4. Give the user the fix direction from the table and the exact config key to change.
 5. "OK: no known failure signatures" plus a bad plan means a modelling problem, not a
    failure: switch to `emhass-plan-explain`.
