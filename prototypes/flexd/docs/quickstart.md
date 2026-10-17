@@ -88,8 +88,11 @@ curl localhost:8321/healthz
 # {"status":"ok","emhass":"ok"}
 ```
 
-`emhass: "ok"` means flexd can reach EMHASS. If it says `"down"`, EMHASS is still starting up
-(give it a minute) or `emhass_url` is wrong.
+`emhass: "ok"` means flexd can reach EMHASS and EMHASS reports healthy. It says `"down"`
+while EMHASS is still starting up (give it a minute), when `emhass_url` is wrong, and on a fresh
+EMHASS that has not completed a single optimization yet: EMHASS answers `/healthz` with
+`503 degraded` until its first run, so expect `"down"` to turn into `"ok"` after the first
+cycle in step 5.
 
 ## 5. Register your first demand and read it back
 

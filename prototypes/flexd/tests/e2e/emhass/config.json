@@ -1,0 +1,23 @@
+{
+  "costfun": "profit",
+  "logging_level": "INFO",
+  "optimization_time_step": 30,
+  "method_ts_round": "nearest",
+  "set_use_pv": false,
+  "set_use_adjusted_pv": false,
+  "set_use_battery": false,
+  "load_forecast_method": "list",
+  "load_cost_forecast_method": "hp_hc_periods",
+  "production_price_forecast_method": "constant",
+  "photovoltaic_production_sell_price": 0.08,
+  "maximum_power_from_grid": 9000,
+  "maximum_power_to_grid": 9000,
+  "number_of_deferrable_loads": 2,
+  "nominal_power_of_deferrable_loads": [2000, 3000],
+  "minimum_power_of_deferrable_loads": [0, 0],
+  "operating_hours_of_each_deferrable_load": [0, 0],
+  "treat_deferrable_load_as_semi_cont": [true, false],
+  "set_deferrable_load_single_constant": [false, false],
+  "start_timesteps_of_each_deferrable_load": [0, 0],
+  "end_timesteps_of_each_deferrable_load": [0, 0]
+}

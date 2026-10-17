@@ -1,0 +1,18 @@
+# flexd config for the compose e2e run against the pinned EMHASS release.
+# Derived from flexd.yaml.example: MQTT off, no standing demands (they would occupy a
+# deferrable slot and change the expected per-slot contract), and the forecasts EMHASS
+# needs are passed as runtime lists so the bundle runs offline (no Home Assistant, no
+# weather API). The lists carry 96 values (two days at 30 min); EMHASS ignores extras.
+emhass_url: http://emhass:5000
+timestep_min: 30
+horizon_steps: 48
+timezone: Europe/Berlin
+data_dir: /data
+stale_after_cycles: 2
+default_ttl_s: 3600
+ts_round: nearest
+mqtt:
+  enabled: false
+extra_runtime_params:
+  load_power_forecast: [500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500]
+  load_cost_forecast: [0.3, 0.3, 0.3, 0.3, 0.1, 0.1, 0.1, 0.1, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
