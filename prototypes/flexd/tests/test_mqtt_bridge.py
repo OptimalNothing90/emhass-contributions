@@ -204,6 +204,22 @@ async def test_clear_expired(bridge):
     assert "flexd/plan/demands/gone-demand/on" in cleared
 
 
+async def test_clear_expired_publishes_off_before_clearing_even_when_never_mapped(
+    bridge,
+):
+    # #1 Medium 11 remainder: an id withdrawn before it was ever mapped gets no
+    # mapped-but-inactive OFF from publish_plan; the clear itself must say OFF first
+    b, pub, registry = bridge
+    assert "never-mapped" not in b._view.mapped_ids()
+    await b.clear_expired(["never-mapped"])
+    seq = [
+        (t.rsplit("/", 1)[1], p)
+        for t, p, r in pub.published
+        if t.startswith("flexd/plan/demands/never-mapped/") and r
+    ]
+    assert seq == [("setpoint", "0"), ("on", "0"), ("setpoint", ""), ("on", "")]
+
+
 async def test_foreign_topic_ignored(bridge):
     b, pub, registry = bridge
     await b.handle_message("other/topic/entirely", "x")

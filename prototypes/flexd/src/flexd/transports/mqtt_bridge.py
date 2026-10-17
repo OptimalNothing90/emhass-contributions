@@ -192,5 +192,9 @@ class MqttBridge:
             )
 
     async def clear_expired(self, expired_ids: list[str]) -> None:
+        """OFF first, then clear. An id withdrawn before it was ever mapped gets no
+        mapped-but-inactive OFF from publish_plan, and a consumer that keeps its last
+        value must still stop (#1 Medium 11 remainder)."""
         for demand_id in expired_ids:
+            await self.publish_off(demand_id)
             await self._clear_demand_topics(demand_id)

@@ -15,13 +15,10 @@ import httpx
 from flexd.aggregator import build_runtimeparams, grid_anchor
 from flexd.emhass_driver import PlanRejected
 from flexd.models import utcnow
+from flexd.pending_clear import PendingClear
 from flexd.plan_view import verify_plan_structure
 
 log = logging.getLogger(__name__)
-
-# ids awaiting retained-topic cleanup while the broker is away: keep the newest, the
-# oldest were most likely cleared by publish_plan's mapped-but-inactive sweep anyway
-MAX_PENDING_SWEPT = 1000
 
 
 class Scheduler:
@@ -67,7 +64,12 @@ class Scheduler:
         self._debounce_sleeping = False
         self.last_result: str = "no-run"
         self._cycle_lock = asyncio.Lock()
-        self._pending_swept: list[str] = []
+        # ids awaiting retained-topic cleanup: shared with the registry (every delete
+        # path queues there) and persisted across a crash when the registry was given
+        # a path (#1 Medium 11)
+        self._pending: PendingClear = (
+            getattr(registry, "pending_clear", None) or PendingClear()
+        )
         # Event loop captured for threadsafe notify_change: FastAPI runs sync `def`
         # handlers in a worker thread, where asyncio.get_event_loop() would fail.
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -83,11 +85,11 @@ class Scheduler:
             pinned = now is not None
             now = now or self._clock()
             swept = self._registry.sweep(now=now)
-            deleted = self._registry.drain_deleted()
             if self._on_cycle_end is not None:
-                self._remember_swept(
-                    [d.id for d in swept] + deleted
-                )  # nothing to deliver to otherwise
+                self._pending.add([d.id for d in swept])
+            else:
+                # nothing to deliver to: drain so the queue is never perpetual
+                self._pending.remove(self._pending.ids())
             # ORDER MATTERS: materialize accrues the OLD plan's on-hours into the standing
             # ledger up to cycle start; the tail until the real switch is accrued below.
             self._standing.materialize(
@@ -155,17 +157,14 @@ class Scheduler:
             self._write_crumb(now, payload if demands else None, result)
             self.last_result = result
             if self._on_cycle_end is not None:
-                to_deliver = list(self._pending_swept)
+                to_deliver = self._pending.ids()
                 try:
                     await self._on_cycle_end(result, to_deliver)
-                    self._pending_swept.clear()
+                    # only what was delivered: an id withdrawn during the await stays
+                    self._pending.remove(to_deliver)
                 except Exception:
                     log.exception("on_cycle_end failed; swept ids kept for redelivery")
             return result
-
-    def _remember_swept(self, ids: list[str]) -> None:
-        self._pending_swept.extend(ids)
-        del self._pending_swept[:-MAX_PENDING_SWEPT]  # bounded across a long outage
 
     def _write_crumb(self, now: datetime, payload: dict | None, result: str) -> None:
         if self._crumb_path is None:

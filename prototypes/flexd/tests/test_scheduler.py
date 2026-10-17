@@ -559,7 +559,9 @@ async def test_pending_swept_keeps_only_the_last_1000_ids(registry):
         extra_runtime_params={},
         on_cycle_end=failing,
     )
-    s._pending_swept = [f"ghost-{i}" for i in range(1500)]  # backlog from the outage
+    registry.pending_clear.add(
+        [f"ghost-{i}" for i in range(1500)]
+    )  # backlog from the outage
     await s.run_once(now=NOW)
     assert len(delivered[0]) == 1000
     assert delivered[0][-1] == "old"  # newest kept, oldest dropped
@@ -675,3 +677,104 @@ async def test_emhass_timeout_stays_down(registry):
     driver, view = FakeDriver(error=httpx.ReadTimeout("slow solve")), FakeView()
     s = make_scheduler(registry, driver, view)
     assert await s.run_once(now=NOW) == "down"
+
+
+# -- #1 Medium 11 remainder: the pending-clear queue survives a crash --------------
+async def test_pending_clear_survives_a_crash_and_is_delivered_after_restart(
+    tmp_path,
+):
+    from flexd.pending_clear import PendingClear
+    from flexd.registry import Registry
+
+    def boot():
+        return Registry(
+            tmp_path / "demands.json",
+            pending_clear=PendingClear(tmp_path / "pending_clear.json"),
+        )
+
+    reg = boot()
+    reg.upsert(
+        make_demand(
+            id="withdrawn",
+            deadline=NOW + timedelta(hours=4),
+            expires_at=NOW + timedelta(hours=5),
+        )
+    )
+    reg.delete("withdrawn", source="loxone")
+    # crash inside the debounce window: no cycle ran, the process is gone
+    del reg
+
+    reg2 = boot()
+    seen = []
+
+    async def on_end(state, swept_ids):
+        seen.append((state, list(swept_ids)))
+
+    s = Scheduler(
+        registry=reg2,
+        driver=FakeDriver(result=PLAN),
+        view=FakeView(),
+        standing=FakeStanding(),
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        on_cycle_end=on_end,
+    )
+    await s.run_once(now=NOW)
+    assert seen == [("skipped", ["withdrawn"])]
+    assert reg2.pending_clear.ids() == []  # delivered: nothing left for the next boot
+    assert PendingClear(tmp_path / "pending_clear.json").ids() == []
+
+
+async def test_pending_clear_kept_on_disk_while_delivery_fails(tmp_path):
+    from flexd.pending_clear import PendingClear
+    from flexd.registry import Registry
+
+    reg = Registry(
+        tmp_path / "demands.json",
+        pending_clear=PendingClear(tmp_path / "pending_clear.json"),
+    )
+    reg.upsert(
+        make_demand(
+            id="old",
+            deadline=NOW - timedelta(seconds=2),
+            expires_at=NOW - timedelta(seconds=1),
+        )
+    )
+
+    async def failing(state, swept_ids):
+        raise RuntimeError("broker down")
+
+    s = Scheduler(
+        registry=reg,
+        driver=FakeDriver(result=PLAN),
+        view=FakeView(),
+        standing=FakeStanding(),
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        on_cycle_end=failing,
+    )
+    await s.run_once(now=NOW)
+    assert PendingClear(tmp_path / "pending_clear.json").ids() == ["old"]
+
+
+async def test_without_mqtt_the_pending_clear_queue_is_drained_each_cycle(tmp_path):
+    from flexd.pending_clear import PendingClear
+    from flexd.registry import Registry
+
+    reg = Registry(
+        tmp_path / "demands.json",
+        pending_clear=PendingClear(tmp_path / "pending_clear.json"),
+    )
+    reg.upsert(
+        make_demand(
+            id="withdrawn",
+            deadline=NOW + timedelta(hours=4),
+            expires_at=NOW + timedelta(hours=5),
+        )
+    )
+    reg.delete("withdrawn", source="loxone")
+    s = make_scheduler(reg, FakeDriver(result=PLAN), FakeView())  # no on_cycle_end
+    await s.run_once(now=NOW)
+    assert reg.pending_clear.ids() == []  # nothing to deliver to: no perpetual queue

@@ -89,11 +89,12 @@ def test_returned_objects_are_copies(registry):
     assert registry.get("r2").energy_target_wh == 1200
 
 
-def test_drain_deleted_tracks_delete_then_clears(registry):
+def test_delete_queues_the_id_for_retained_topic_clear(registry):
     registry.upsert(make_demand())
     registry.delete("dishwasher", source="loxone")
-    assert registry.drain_deleted() == ["dishwasher"]
-    assert registry.drain_deleted() == []
+    assert registry.pending_clear.ids() == ["dishwasher"]
+    registry.pending_clear.remove(["dishwasher"])
+    assert registry.pending_clear.ids() == []
 
 
 def test_concurrent_writers_no_corruption(tmp_path):

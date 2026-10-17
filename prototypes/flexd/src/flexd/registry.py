@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from flexd.models import Demand, utcnow
+from flexd.pending_clear import PendingClear
 
 log = logging.getLogger(__name__)
 
@@ -34,12 +35,20 @@ class Registry:
     """
 
     def __init__(
-        self, path: Path, *, max_demands: int = 32, save_debounce_s: float = 5.0
+        self,
+        path: Path,
+        *,
+        max_demands: int = 32,
+        save_debounce_s: float = 5.0,
+        pending_clear: PendingClear | None = None,
     ):
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
         self._demands: dict[str, Demand] = {}
-        self._deleted_ids: list[str] = []
+        # ids whose retained MQTT topics still need clearing: every delete path queues
+        # here, the scheduler delivers at cycle end. Persisted when given a path (#1
+        # Medium 11); memory-only otherwise.
+        self.pending_clear = pending_clear or PendingClear()
         self._lock = threading.Lock()  # REST threadpool vs event-loop scheduler: _save is read-modify-write on shared files
         self._max_demands = max_demands
         # Refresh bursts (a client re-arming every few seconds) must not rewrite the
@@ -179,16 +188,9 @@ class Registry:
         with self._lock:
             removed = self._check_owner(demand_id, source)
             del self._demands[demand_id]
-            self._deleted_ids.append(demand_id)
             self._save()
+            self.pending_clear.add([demand_id])
             return removed
-
-    def drain_deleted(self) -> list[str]:
-        """Demand ids deleted since the last drain — the scheduler funnels these into
-        retained-topic cleanup so no delete path can ghost MQTT topics."""
-        with self._lock:
-            drained, self._deleted_ids = self._deleted_ids, []
-            return drained
 
     def refresh(
         self, demand_id: str, source: str, now: datetime | None = None
