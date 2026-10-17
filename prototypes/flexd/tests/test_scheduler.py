@@ -519,6 +519,110 @@ async def test_plan_without_records_rejected(registry):
     assert view.adopted == []
 
 
+# -- Codex review 2026-10-17 finding 4: every record is validated before adoption, not
+#    just the columns of the first and the step of the first two ---------------------
+def _three_records(**overrides):
+    recs = [
+        {"timestamp": _ts(NOW + timedelta(minutes=30 * i)), "P_deferrable0": 2000}
+        for i in range(3)
+    ]
+    for index, patch in overrides.items():
+        recs[int(index)].update(patch)
+    return _plan(recs)
+
+
+async def test_plan_with_null_power_rejected(registry):
+    # upstream serialises NaN as null (plan_store.serialize, v0.18.6); float(None)
+    # would otherwise blow up at read or accrual time
+    plan = _three_records(**{"2": {"P_deferrable0": None}})
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_non_numeric_power_rejected(registry):
+    plan = _three_records(**{"1": {"P_deferrable0": "2000"}})
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_non_finite_power_rejected(registry):
+    plan = _three_records(**{"1": {"P_deferrable0": float("inf")}})
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_uneven_spacing_rejected(registry):
+    plan = _three_records(**{"2": {"timestamp": _ts(NOW + timedelta(minutes=75))}})
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_naive_timestamp_rejected(registry):
+    plan = _three_records(**{"2": {"timestamp": "2026-07-05T13:00:00"}})
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_missing_timestamp_in_a_later_record_rejected(registry):
+    plan = _three_records()
+    del plan["plan"][2]["timestamp"]
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_non_object_record_rejected(registry):
+    plan = _three_records()
+    plan["plan"][2] = None
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_rejected_plan_keeps_the_previous_adoption(registry):
+    view = FakeView()
+    registry.upsert(
+        make_demand(
+            id="load-0",
+            deadline=NOW + timedelta(hours=4),
+            expires_at=NOW + timedelta(hours=5),
+        )
+    )
+    good = _three_records()
+    assert (
+        await make_scheduler(registry, FakeDriver(result=good), view).run_once(now=NOW)
+        == "ok"
+    )
+    bad = _three_records(**{"2": {"P_deferrable0": None}})
+    assert (
+        await make_scheduler(registry, FakeDriver(result=bad), view).run_once(
+            now=NOW + timedelta(minutes=30)
+        )
+        == "rejected"
+    )
+    assert len(view.adopted) == 1 and view.adopted[0][0] is good
+
+
+async def test_pandas_style_iso_timestamps_with_millis_accepted(registry):
+    # plan_store.serialize emits "2026-07-05T12:00:00.000Z"
+    recs = [
+        {
+            "timestamp": (NOW + timedelta(minutes=30 * i)).strftime(
+                "%Y-%m-%dT%H:%M:%S.000Z"
+            ),
+            "P_deferrable0": 2000.0,
+        }
+        for i in range(3)
+    ]
+    result, view = await _run_with_plan(registry, _plan(recs))
+    assert result == "ok"
+
+
 async def test_matching_plan_adopted(registry):
     plan = _plan(
         [

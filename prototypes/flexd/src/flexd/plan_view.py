@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -53,38 +54,62 @@ def verify_plan_structure(plan: dict, mapping: dict, timestep: timedelta) -> Non
     """Fail loud before adoption instead of reading 0 on schema drift or rescaling
     every window on a flexd-vs-EMHASS timestep mismatch (#1 Medium 9).
 
-    - every submitted slot 0..N-1 has a P_deferrable{slot} column in every record;
-    - the plan's record step equals the configured timestep;
+    Every record is checked, not just the first two (Codex review 2026-10-17
+    finding 4): upstream serialises NaN as null and a bad later timestamp used to
+    pass, then float(None) failed at read or accrual time with the plan adopted.
+
+    - every record is an object with an aware ISO timestamp;
+    - consecutive timestamps are exactly one configured timestep apart;
+    - every submitted slot 0..N-1 has a finite numeric P_deferrable{slot} in every
+      record;
     - record 0 sits on the mapping's anchor, one step either way allowed (the
       rounding-boundary limit documented in aggregator.grid_anchor).
     """
     records = plan.get("plan")
     if not isinstance(records, list) or not records:
         raise PlanStructureError("plan carries no records for the submitted loads")
-    try:
-        for slot in range(len(mapping)):
-            key = f"P_deferrable{slot}"
-            for i, rec in enumerate(records):
-                if key not in rec:
-                    raise PlanStructureError(
-                        f"plan record {i} lacks {key}; {len(mapping)} loads were submitted"
-                    )
-        step = _records_step(records, timestep)
-        if step != timestep:
+    keys = [f"P_deferrable{slot}" for slot in range(len(mapping))]
+    previous: datetime | None = None
+    for i, rec in enumerate(records):
+        if not isinstance(rec, dict):
+            raise PlanStructureError(f"plan record {i} is not an object")
+        try:
+            ts = _parse(rec["timestamp"])
+        except (KeyError, TypeError, ValueError) as exc:
             raise PlanStructureError(
-                f"plan step {step} differs from the configured timestep {timestep}"
+                f"plan record {i} has no parseable timestamp: {exc!r}"
+            ) from exc
+        if ts.tzinfo is None:
+            raise PlanStructureError(f"plan record {i} timestamp is not tz-aware")
+        if previous is not None and ts - previous != timestep:
+            raise PlanStructureError(
+                f"plan step {ts - previous} between records {i - 1} and {i} differs "
+                f"from the configured timestep {timestep}"
             )
-        anchors = {e.get("anchor") for e in mapping.values()} - {None}
-        if anchors:
-            anchor = _parse(anchors.pop())
-            first = _parse(records[0]["timestamp"])
-            if abs(first - anchor) > timestep:
+        previous = ts
+        for key in keys:
+            if key not in rec:
                 raise PlanStructureError(
-                    f"plan starts at {records[0]['timestamp']}, payload was anchored at "
-                    f"{anchor.isoformat()} (more than one step apart)"
+                    f"plan record {i} lacks {key}; {len(mapping)} loads were submitted"
                 )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise PlanStructureError(f"plan records are malformed: {exc!r}") from exc
+            value = rec[key]
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise PlanStructureError(
+                    f"plan record {i} {key} is {value!r}, not a finite number"
+                )
+    anchors = {e.get("anchor") for e in mapping.values()} - {None}
+    if anchors:
+        anchor = _parse(anchors.pop())
+        first = _parse(records[0]["timestamp"])
+        if abs(first - anchor) > timestep:
+            raise PlanStructureError(
+                f"plan starts at {records[0]['timestamp']}, payload was anchored at "
+                f"{anchor.isoformat()} (more than one step apart)"
+            )
 
 
 class PlanView:
