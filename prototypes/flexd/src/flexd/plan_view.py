@@ -16,6 +16,17 @@ class PlanStructureError(PlanRejected):
     """The plan does not match the payload flexd submitted (#1 Medium 9)."""
 
 
+@dataclass(frozen=True)
+class _Adopted:
+    """One adoption: the plan, the mapping it was solved with and the instant it
+    became effective. Immutable and swapped as one reference so a reader on the
+    REST threadpool can never pair a new plan with the old mapping (#1 Lows)."""
+
+    plan: dict
+    mapping: dict
+    adopted_at: datetime
+
+
 @dataclass
 class DemandView:
     setpoint_w: float
@@ -83,9 +94,8 @@ class PlanView:
         self._path = Path(path)
         self._stale_after = stale_after
         self._timestep = timestep
-        self._plan: dict | None = None
-        self._mapping: dict = {}
-        self._adopted_at: datetime | None = None
+        # the ONLY mutable state: one reference, read once per call (snapshot)
+        self._adopted: _Adopted | None = None
         self._load()
 
     def _load(self) -> None:
@@ -93,17 +103,21 @@ class PlanView:
             return
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-            self._plan = raw["plan"]
-            self._mapping = raw["mapping"]
-            self._adopted_at = _parse(raw["adopted_at"])
+            self._adopted = _Adopted(
+                plan=raw["plan"],
+                mapping=raw["mapping"],
+                adopted_at=_parse(raw["adopted_at"]),
+            )
         except Exception:
             log.warning(
                 "adopted-plan file %s unreadable; starting as no-run", self._path
             )
-            self._plan = None  # corrupt view is recoverable: next cycle re-adopts
+            self._adopted = None  # corrupt view is recoverable: next cycle re-adopts
 
     def adopt(self, plan: dict, mapping: dict, now: datetime) -> None:
-        self._plan, self._mapping, self._adopted_at = plan, mapping, now
+        # one reference swap: readers see either the previous adoption whole or this
+        # one whole, never plan and mapping from different adoptions
+        self._adopted = _Adopted(plan=plan, mapping=mapping, adopted_at=now)
         tmp = self._path.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as fh:
             fh.write(
@@ -117,33 +131,41 @@ class PlanView:
             )  # no .bak here: the tmp must be durable before the swap
         os.replace(tmp, self._path)  # atomic: a crash mid-write never corrupts the view
 
+    def snapshot(self) -> tuple[dict | None, dict, datetime | None]:
+        """(plan, mapping, adopted_at) from ONE adoption. Callers that need more than
+        one of the three take this once instead of reading the properties one by one."""
+        snap = self._adopted
+        if snap is None:
+            return None, {}, None
+        return snap.plan, snap.mapping, snap.adopted_at
+
     def state(self, now: datetime) -> str:
-        if self._plan is None:
+        snap = self._adopted
+        if snap is None:
             return "no-run"
-        if now - self._adopted_at > self._stale_after:
+        if now - snap.adopted_at > self._stale_after:
             return "stale"
         return "ok"
 
     @property
     def raw_plan(self) -> dict | None:
-        return self._plan
+        snap = self._adopted
+        return snap.plan if snap else None
 
     def mapped_ids(self) -> set[str]:
-        return set(self._mapping)
+        snap = self._adopted
+        return set(snap.mapping) if snap else set()
 
     @property
     def generated_at(self) -> str | None:
-        return self._plan.get("generated_at") if self._plan else None
+        snap = self._adopted
+        return snap.plan.get("generated_at") if snap else None
 
-    def _records(self) -> list[dict]:
-        return self._plan["plan"] if self._plan else []
+    def _step(self, records: list[dict]) -> timedelta:
+        return _records_step(records, self._timestep)
 
-    def _step(self) -> timedelta:
-        return _records_step(self._records(), self._timestep)
-
-    def _record_at(self, now: datetime) -> dict | None:
+    def _record_at(self, records: list[dict], now: datetime) -> dict | None:
         current = None
-        records = self._records()
         for rec in records:
             if _parse(rec["timestamp"]) <= now:
                 current = rec
@@ -155,13 +177,12 @@ class PlanView:
             # serving 0 until then would switch a running load off for up to half a
             # slot (e2e v0.18.6 observation 3). The first record covers up to one step
             # before its timestamp; a full step or more early is a real gap.
-            if records and _parse(records[0]["timestamp"]) - now < self._step():
+            if records and _parse(records[0]["timestamp"]) - now < self._step(records):
                 return records[0]
             return None
         # a record only covers its own timestep; past plan end -> no coverage
-        records = self._records()
         last_ts = _parse(records[-1]["timestamp"])
-        if now >= last_ts + self._step():
+        if now >= last_ts + self._step(records):
             return None
         return current
 
@@ -173,12 +194,13 @@ class PlanView:
         registry membership separately: registered-but-unmapped means
         'pending next solve', not 'unknown'.
         """
-        if self._plan is None or demand_id not in self._mapping:
+        snap = self._adopted
+        if snap is None or demand_id not in snap.mapping:
             return None
-        entry = self._mapping[demand_id]
+        entry = snap.mapping[demand_id]
         slot = entry["slot"]
         clamped = entry.get("clamped", False)
-        rec = self._record_at(now)
+        rec = self._record_at(snap.plan["plan"], now)
         power = float(rec.get(f"P_deferrable{slot}", 0)) if rec else 0.0
         return DemandView(
             setpoint_w=power,
@@ -202,20 +224,22 @@ class PlanView:
         Cross-adoption accumulation is the standing ledger's job (the scheduler
         accrues before each adoption).
         """
-        if self._plan is None or demand_id not in self._mapping:
+        snap = self._adopted
+        if snap is None or demand_id not in snap.mapping:
             return 0.0
-        entry = self._mapping[demand_id]
+        entry = snap.mapping[demand_id]
         slot = entry["slot"]
         # adopted files written before nominal_power_w was mapped: full-slot credit
         nominal = float(entry.get("nominal_power_w") or 0.0)
-        step = self._step()
+        records = snap.plan["plan"]
+        step = self._step(records)
         total_h = 0.0
-        for i, rec in enumerate(self._records()):
+        for i, rec in enumerate(records):
             ts = _parse(rec["timestamp"])
             # the first record is also served up to one step early (_record_at); the
             # ledger credits what consumers were told, so its coverage starts there too,
             # but never before the plan was adopted (nothing was served before that)
-            covered_from = max(ts - step, self._adopted_at) if i == 0 else ts
+            covered_from = max(ts - step, snap.adopted_at) if i == 0 else ts
             lo, hi = max(covered_from, since), min(ts + step, until)
             if hi <= lo:
                 continue

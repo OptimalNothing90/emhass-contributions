@@ -244,3 +244,73 @@ def test_on_hours_elapsed_credits_the_early_served_first_record(tmp_path):
     assert v.on_hours_elapsed(
         "dishwasher", since=early, until=T0 + timedelta(hours=1)
     ) == pytest.approx(44 / 60)
+
+
+# -- #1 Lows: REST threads could pair a new plan with the old mapping for one poll ----
+def test_snapshot_returns_the_adopted_triple(tmp_path):
+    v = make_view(tmp_path)
+    assert v.snapshot() == (None, {}, None)
+    v.adopt(PLAN, MAPPING, now=T0)
+    plan, mapping, adopted_at = v.snapshot()
+    assert plan is PLAN and mapping is MAPPING and adopted_at == T0
+
+
+def test_readers_never_see_plan_and_mapping_from_different_adoptions(
+    tmp_path, monkeypatch
+):
+    import sys
+    import threading
+
+    import flexd.plan_view as mod
+
+    # durability is covered elsewhere; here the adopt loop must not starve on fsync
+    monkeypatch.setattr(mod.os, "fsync", lambda fd: None)
+    v = make_view(tmp_path)
+
+    def plan_for(i):
+        return {
+            "generated_at": str(i),
+            "plan": [
+                {"timestamp": "2026-07-05T12:00:00Z", "P_deferrable0": i},
+                {"timestamp": "2026-07-05T12:30:00Z", "P_deferrable0": i},
+            ],
+        }
+
+    def mapping_for(i):
+        # the mapping carries the same tag as its plan, in two different places
+        return {"x": {"slot": 0, "truncated": i % 2 == 1, "tag": i}}
+
+    v.adopt(plan_for(0), mapping_for(0), now=T0)
+    mismatches = []
+    reads = [0]
+    stop = threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            reads[0] += 1
+            plan, mapping, _ = v.snapshot()
+            if int(plan["generated_at"]) != mapping["x"]["tag"]:
+                mismatches.append(
+                    ("snapshot", plan["generated_at"], mapping["x"]["tag"])
+                )
+            dv = v.demand_view("x", now=T0 + timedelta(minutes=5))
+            if dv.truncated != (int(dv.setpoint_w) % 2 == 1):
+                mismatches.append(("demand_view", dv.setpoint_w, dv.truncated))
+
+    # spinning readers would otherwise starve the writer's I/O of the GIL for
+    # seconds per adoption; a short switch interval keeps the test fast
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-4)
+    threads = [threading.Thread(target=reader) for _ in range(2)]
+    for t in threads:
+        t.start()
+    try:
+        for i in range(1, 41):
+            v.adopt(plan_for(i), mapping_for(i), now=T0 + timedelta(seconds=i))
+    finally:
+        stop.set()
+        for t in threads:
+            t.join()
+        sys.setswitchinterval(interval)
+    assert reads[0] > 100  # the readers really ran alongside the adoptions
+    assert mismatches == []
