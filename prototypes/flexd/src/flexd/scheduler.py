@@ -7,7 +7,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -15,6 +15,7 @@ import httpx
 from flexd.aggregator import build_runtimeparams
 from flexd.emhass_driver import PlanRejected
 from flexd.models import utcnow
+from flexd.plan_view import verify_plan_structure
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +104,11 @@ class Scheduler:
                         last_generated_at=self._view.generated_at,
                         now=now,
                         timestep_min=self._timestep_min,
+                    )
+                    # structural match against what was submitted, before anything is
+                    # credited or adopted (raises PlanRejected)
+                    verify_plan_structure(
+                        plan, mapping, timedelta(minutes=self._timestep_min)
                     )
                     # The old plan was served until this instant; credit it up to here,
                     # then make the new plan effective from here (Codex review finding 4).

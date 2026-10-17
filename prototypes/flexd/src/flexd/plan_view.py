@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from flexd.emhass_driver import PlanRejected
+
 log = logging.getLogger(__name__)
+
+
+class PlanStructureError(PlanRejected):
+    """The plan does not match the payload flexd submitted (#1 Medium 9)."""
 
 
 @dataclass
@@ -21,6 +27,50 @@ class DemandView:
 
 def _parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def _records_step(records: list[dict], default: timedelta) -> timedelta:
+    if len(records) >= 2:
+        return _parse(records[1]["timestamp"]) - _parse(records[0]["timestamp"])
+    return default  # single-record plans: trust the configured grid, not a 30-min guess
+
+
+def verify_plan_structure(plan: dict, mapping: dict, timestep: timedelta) -> None:
+    """Fail loud before adoption instead of reading 0 on schema drift or rescaling
+    every window on a flexd-vs-EMHASS timestep mismatch (#1 Medium 9).
+
+    - every submitted slot 0..N-1 has a P_deferrable{slot} column in every record;
+    - the plan's record step equals the configured timestep;
+    - record 0 sits on the mapping's anchor, one step either way allowed (the
+      rounding-boundary limit documented in aggregator.grid_anchor).
+    """
+    records = plan.get("plan")
+    if not isinstance(records, list) or not records:
+        raise PlanStructureError("plan carries no records for the submitted loads")
+    try:
+        for slot in range(len(mapping)):
+            key = f"P_deferrable{slot}"
+            for i, rec in enumerate(records):
+                if key not in rec:
+                    raise PlanStructureError(
+                        f"plan record {i} lacks {key}; {len(mapping)} loads were submitted"
+                    )
+        step = _records_step(records, timestep)
+        if step != timestep:
+            raise PlanStructureError(
+                f"plan step {step} differs from the configured timestep {timestep}"
+            )
+        anchors = {e.get("anchor") for e in mapping.values()} - {None}
+        if anchors:
+            anchor = _parse(anchors.pop())
+            first = _parse(records[0]["timestamp"])
+            if abs(first - anchor) > timestep:
+                raise PlanStructureError(
+                    f"plan starts at {records[0]['timestamp']}, payload was anchored at "
+                    f"{anchor.isoformat()} (more than one step apart)"
+                )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PlanStructureError(f"plan records are malformed: {exc!r}") from exc
 
 
 class PlanView:
@@ -85,12 +135,7 @@ class PlanView:
         return self._plan["plan"] if self._plan else []
 
     def _step(self) -> timedelta:
-        records = self._records()
-        if len(records) >= 2:
-            return _parse(records[1]["timestamp"]) - _parse(records[0]["timestamp"])
-        return (
-            self._timestep
-        )  # single-record plans: trust the configured grid, not a 30-min guess
+        return _records_step(self._records(), self._timestep)
 
     def _record_at(self, now: datetime) -> dict | None:
         current = None

@@ -55,7 +55,12 @@ PLAN = {
     "status": "ok",
     "generated_at": "2026-07-05T12:00:05Z",
     "emhass_schema_version": "1.0",
-    "plan": [],
+    # one slot on the 30-min grid anchored at NOW: what a solve for one demand returns
+    # (the structural check rejects an empty plan, #1 Medium 9)
+    "plan": [
+        {"timestamp": "2026-07-05T12:00:00Z", "P_deferrable0": 2000},
+        {"timestamp": "2026-07-05T12:30:00Z", "P_deferrable0": 0},
+    ],
 }
 
 
@@ -430,3 +435,100 @@ async def test_scheduler_hands_now_and_timestep_to_driver(registry):
     await s.run_once(now=NOW)
     assert driver.kwargs[0]["now"] == NOW
     assert driver.kwargs[0]["timestep_min"] == 30
+
+
+# -- #1 Medium 9: the adopted plan must structurally match the submitted payload --
+def _plan(records):
+    return {**PLAN, "plan": records}
+
+
+def _ts(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+async def _run_with_plan(registry, plan, now=NOW, demands=1):
+    for n in range(demands):
+        registry.upsert(
+            make_demand(
+                id=f"load-{n}",
+                deadline=NOW + timedelta(hours=4),
+                expires_at=NOW + timedelta(hours=5),
+            )
+        )
+    view = FakeView()
+    s = make_scheduler(registry, FakeDriver(result=plan), view)
+    return await s.run_once(now=now), view
+
+
+async def test_plan_missing_deferrable_column_rejected(registry):
+    plan = _plan(
+        [
+            {"timestamp": _ts(NOW), "P_deferrable0": 2000},
+            {"timestamp": _ts(NOW + timedelta(minutes=30)), "P_deferrable0": 0},
+        ]
+    )
+    result, view = await _run_with_plan(registry, plan, demands=2)  # slot 1 absent
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_with_wrong_step_rejected(registry):
+    plan = _plan(
+        [
+            {"timestamp": _ts(NOW), "P_deferrable0": 2000},
+            {"timestamp": _ts(NOW + timedelta(minutes=15)), "P_deferrable0": 0},
+        ]
+    )
+    result, view = await _run_with_plan(registry, plan)  # flexd runs a 30-min grid
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_anchored_elsewhere_rejected(registry):
+    plan = _plan(
+        [
+            {"timestamp": _ts(NOW + timedelta(hours=2)), "P_deferrable0": 2000},
+            {
+                "timestamp": _ts(NOW + timedelta(hours=2, minutes=30)),
+                "P_deferrable0": 0,
+            },
+        ]
+    )
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_plan_one_step_off_anchor_still_adopted(registry):
+    # grid_anchor's documented limit: a rounding boundary crossed between flexd's now and
+    # EMHASS's receipt shifts step 0 by one slot
+    plan = _plan(
+        [
+            {"timestamp": _ts(NOW + timedelta(minutes=30)), "P_deferrable0": 2000},
+            {"timestamp": _ts(NOW + timedelta(hours=1)), "P_deferrable0": 0},
+        ]
+    )
+    result, view = await _run_with_plan(registry, plan)
+    assert result == "ok"
+    assert len(view.adopted) == 1
+
+
+async def test_plan_without_records_rejected(registry):
+    result, view = await _run_with_plan(registry, _plan([]))
+    assert result == "rejected"
+    assert view.adopted == []
+
+
+async def test_matching_plan_adopted(registry):
+    plan = _plan(
+        [
+            {"timestamp": _ts(NOW), "P_deferrable0": 2000, "P_deferrable1": 0},
+            {
+                "timestamp": _ts(NOW + timedelta(minutes=30)),
+                "P_deferrable0": 0,
+                "P_deferrable1": 3000,
+            },
+        ]
+    )
+    result, view = await _run_with_plan(registry, plan, demands=2)
+    assert result == "ok"
