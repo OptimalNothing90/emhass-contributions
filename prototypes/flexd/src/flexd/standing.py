@@ -6,6 +6,8 @@ Day-state (elapsed accrual, corrections, done) lives in a ledger keyed (id, loca
 import json
 import logging
 import os
+import tempfile
+import threading
 from datetime import datetime, time, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -30,22 +32,51 @@ class StandingManager:
     ):
         self._defs = {d.id: d for d in definitions}
         self._ledger_path = Path(ledger_path)
+        self._bak = self._ledger_path.with_suffix(self._ledger_path.suffix + ".bak")
         self._tz = ZoneInfo(tz)
         self._registry = registry
+        # REST threadpool (correct, mark_done) vs event-loop scheduler (materialize,
+        # accrue): every public method is a read-modify-write on the ledger and its file
+        # (#1 Medium 2). Same discipline as Registry; lock order is standing -> registry,
+        # never the reverse.
+        self._lock = threading.Lock()
         self._ledger: dict = self._load_ledger()
 
     def _load_ledger(self) -> dict:
-        if self._ledger_path.exists():
+        """Ledger, else its .bak, else empty. A torn ledger would otherwise silently zero
+        the day's elapsed hours (over-delivery that day)."""
+        for candidate in (self._ledger_path, self._bak):
+            if not candidate.exists():
+                continue
             try:
-                return json.loads(self._ledger_path.read_text(encoding="utf-8"))
+                raw = json.loads(candidate.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict):
+                    raise TypeError("ledger must be a JSON object")
+                return raw
             except Exception:
-                return {}
+                log.warning(
+                    "standing ledger %s unreadable or malformed, trying fallback",
+                    candidate,
+                )
+        log.warning("no readable standing ledger, starting with an empty day")
         return {}
 
     def _save_ledger(self) -> None:
-        tmp = self._ledger_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._ledger, indent=2), encoding="utf-8")
-        os.replace(tmp, self._ledger_path)  # atomic, same principle as the registry
+        # tmp first, then rotate the current file to .bak, then swap tmp in: a crash at
+        # any point leaves at least one readable file (see Registry._save). The tmp name
+        # is unique per call so two writers can never share (and tear) one file.
+        fd, tmp_name = tempfile.mkstemp(
+            dir=self._ledger_path.parent, prefix=self._ledger_path.name, suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(self._ledger, indent=2))
+        except Exception:
+            os.unlink(tmp_name)
+            raise
+        if self._ledger_path.exists():
+            os.replace(self._ledger_path, self._bak)
+        os.replace(tmp_name, self._ledger_path)
 
     def _day_key(self, demand_id: str, now: datetime) -> str:
         local_date = now.astimezone(self._tz).date().isoformat()
@@ -101,10 +132,11 @@ class StandingManager:
         Called by the scheduler right before a new plan is adopted, with the real
         adoption instant, so the old plan is accounted until it actually stops being
         served (Codex review 2026-10-16 finding 4). Never touches the registry."""
-        self._prune_ledger(now)
-        for defn in self._defs.values():
-            self._accrue_one(defn, now, elapsed_lookup)
-        self._save_ledger()
+        with self._lock:
+            self._prune_ledger(now)
+            for defn in self._defs.values():
+                self._accrue_one(defn, now, elapsed_lookup)
+            self._save_ledger()
 
     def materialize(self, now: datetime, elapsed_lookup) -> None:
         """elapsed_lookup(id, since_utc, until_utc) -> nominal-equivalent on-hours in the
@@ -121,59 +153,64 @@ class StandingManager:
         deliberately dropped: yesterday's ledger entry and instance are both
         dead; today accrues from today's window start.
         """
-        self._prune_ledger(now)
-        for defn in self._defs.values():
-            try:
-                entry, win_start, win_end = self._accrue_one(defn, now, elapsed_lookup)
-                if entry["done"] or not (win_start <= now < win_end):
-                    continue
-                override = entry["day_target_override_h"]
-                # explicit None-check: correct(remaining=0.0) legitimately writes override 0.0
-                target_h = (
-                    override if override is not None else defn.effective_daily_hours
-                )
-                remaining_h = target_h - entry["elapsed_h"]
-                if remaining_h <= 0:
-                    # a previously-materialized instance must not keep soliciting energy
-                    if self._registry.get(defn.id) is not None:
-                        self._registry.delete(defn.id, source=CONFIG_SOURCE)
-                    continue
-                self._registry.upsert(
-                    Demand(
-                        id=defn.id,
-                        source=CONFIG_SOURCE,
-                        type=defn.type,
-                        nominal_power_w=defn.nominal_power_w,
-                        energy_target_wh=remaining_h * defn.nominal_power_w,
-                        window_start=None,  # materialize only runs inside the window (guard above); pre-window seeding is future work
-                        deadline=win_end,
-                        expires_at=win_end,
-                        interruptible=defn.interruptible,
-                        modulating=defn.modulating,
+        with self._lock:
+            self._prune_ledger(now)
+            for defn in self._defs.values():
+                try:
+                    entry, win_start, win_end = self._accrue_one(
+                        defn, now, elapsed_lookup
                     )
-                )
-            except OwnershipError as exc:
-                log.warning("standing %s skipped this cycle: %s", defn.id, exc)
-                continue
-        self._save_ledger()
+                    if entry["done"] or not (win_start <= now < win_end):
+                        continue
+                    override = entry["day_target_override_h"]
+                    # explicit None-check: correct(remaining=0.0) legitimately writes override 0.0
+                    target_h = (
+                        override if override is not None else defn.effective_daily_hours
+                    )
+                    remaining_h = target_h - entry["elapsed_h"]
+                    if remaining_h <= 0:
+                        # a previously-materialized instance must not keep soliciting energy
+                        if self._registry.get(defn.id) is not None:
+                            self._registry.delete(defn.id, source=CONFIG_SOURCE)
+                        continue
+                    self._registry.upsert(
+                        Demand(
+                            id=defn.id,
+                            source=CONFIG_SOURCE,
+                            type=defn.type,
+                            nominal_power_w=defn.nominal_power_w,
+                            energy_target_wh=remaining_h * defn.nominal_power_w,
+                            window_start=None,  # materialize only runs inside the window (guard above); pre-window seeding is future work
+                            deadline=win_end,
+                            expires_at=win_end,
+                            interruptible=defn.interruptible,
+                            modulating=defn.modulating,
+                        )
+                    )
+                except OwnershipError as exc:
+                    log.warning("standing %s skipped this cycle: %s", defn.id, exc)
+                    continue
+            self._save_ledger()
 
     def correct(self, demand_id: str, *, remaining_hours: float, now: datetime) -> None:
         """Rebase today's target: override = remaining + elapsed_h (ledger), so the
         normal `target − elapsed` formula keeps working and survives restarts."""
         if demand_id not in self._defs:
             raise KeyError(demand_id)
-        entry = self._entry(demand_id, now)
-        entry["day_target_override_h"] = remaining_hours + entry["elapsed_h"]
-        self._save_ledger()
+        with self._lock:
+            entry = self._entry(demand_id, now)
+            entry["day_target_override_h"] = remaining_hours + entry["elapsed_h"]
+            self._save_ledger()
 
     def mark_done(self, demand_id: str, now: datetime) -> None:
         if demand_id not in self._defs:
             raise KeyError(demand_id)
-        entry = self._entry(demand_id, now)
-        entry["done"] = True
-        if self._registry.get(demand_id) is not None:
-            self._registry.delete(demand_id, source=CONFIG_SOURCE)
-        self._save_ledger()
+        with self._lock:
+            entry = self._entry(demand_id, now)
+            entry["done"] = True
+            if self._registry.get(demand_id) is not None:
+                self._registry.delete(demand_id, source=CONFIG_SOURCE)
+            self._save_ledger()
 
     def is_standing(self, demand_id: str) -> bool:
         return demand_id in self._defs

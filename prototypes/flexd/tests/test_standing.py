@@ -337,3 +337,94 @@ def test_standing_modulating_flag_reaches_demand(tmp_path):
     )
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg.get("pump").modulating is True
+
+
+# -- #1 Medium 2: ledger gets the registry's lock + tmp/bak discipline --
+def test_torn_ledger_falls_back_to_bak(tmp_path):
+    reg, mgr = mk(tmp_path)
+    mgr.mark_done("waterheater", now=NOON_UTC)  # first save
+    mgr.correct(
+        "waterheater", remaining_hours=1.0, now=NOON_UTC
+    )  # rotates done into .bak
+    assert (tmp_path / "ledger.json.bak").exists()
+    (tmp_path / "ledger.json").write_text(
+        '{"waterheater:2026-07-05": {"done": tr', encoding="utf-8"
+    )  # torn write
+    reg2 = Registry(tmp_path / "demands.json")
+    mgr2 = StandingManager(
+        [DEF], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg2
+    )
+    mgr2.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    assert reg2.get("waterheater") is None  # today's done flag recovered from .bak
+
+
+def test_ledger_that_is_not_an_object_falls_back_to_bak(tmp_path):
+    reg, mgr = mk(tmp_path)
+    mgr.mark_done("waterheater", now=NOON_UTC)
+    mgr.correct("waterheater", remaining_hours=1.0, now=NOON_UTC)
+    (tmp_path / "ledger.json").write_text("[1, 2, 3]", encoding="utf-8")
+    reg2 = Registry(tmp_path / "demands.json")
+    mgr2 = StandingManager(
+        [DEF], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg2
+    )
+    mgr2.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    assert reg2.get("waterheater") is None
+
+
+def test_correct_waits_for_materialize_to_finish(tmp_path):
+    # REST threadpool `correct` vs event-loop `materialize`: the read-modify-write on the
+    # ledger must be serialized, or the correction lands in a dict the prune just dropped.
+    import threading
+
+    reg, mgr = mk(tmp_path)
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_lookup(i, s, u):
+        entered.set()
+        release.wait(timeout=5)
+        return 0.0
+
+    t_mat = threading.Thread(
+        target=mgr.materialize, kwargs=dict(now=NOON_UTC, elapsed_lookup=slow_lookup)
+    )
+    t_mat.start()
+    assert entered.wait(timeout=5)
+    t_cor = threading.Thread(
+        target=mgr.correct,
+        args=("waterheater",),
+        kwargs=dict(remaining_hours=1.0, now=NOON_UTC),
+    )
+    t_cor.start()
+    t_cor.join(timeout=0.3)
+    assert t_cor.is_alive()  # blocked behind materialize
+    release.set()
+    t_mat.join(timeout=5)
+    t_cor.join(timeout=5)
+    assert not t_cor.is_alive()
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+    assert reg.get("waterheater").energy_target_wh == 1 * 3000  # correction applied
+
+
+def test_concurrent_ledger_writers_no_corruption(tmp_path):
+    import threading
+
+    reg, mgr = mk(tmp_path)
+    errors = []
+
+    def worker():
+        try:
+            for k in range(30):
+                mgr.correct("waterheater", remaining_hours=float(k), now=NOON_UTC)
+                mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
+        except Exception as exc:  # noqa: BLE001 — any exception is the failure signal
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    saved = json.loads((tmp_path / "ledger.json").read_text(encoding="utf-8"))
+    assert "waterheater:2026-07-05" in saved
+    assert not list(tmp_path.glob("*.tmp"))  # no leftover temp files
