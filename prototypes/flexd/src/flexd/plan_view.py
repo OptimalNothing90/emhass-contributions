@@ -105,12 +105,16 @@ class PlanView:
     def adopt(self, plan: dict, mapping: dict, now: datetime) -> None:
         self._plan, self._mapping, self._adopted_at = plan, mapping, now
         tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(
-                {"plan": plan, "mapping": mapping, "adopted_at": now.isoformat()}
-            ),
-            encoding="utf-8",
-        )
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(
+                json.dumps(
+                    {"plan": plan, "mapping": mapping, "adopted_at": now.isoformat()}
+                )
+            )
+            fh.flush()
+            os.fsync(
+                fh.fileno()
+            )  # no .bak here: the tmp must be durable before the swap
         os.replace(tmp, self._path)  # atomic: a crash mid-write never corrupts the view
 
     def state(self, now: datetime) -> str:

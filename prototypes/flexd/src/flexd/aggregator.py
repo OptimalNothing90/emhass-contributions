@@ -124,6 +124,10 @@ def build_runtimeparams(
         end_raw = math.floor((d.deadline - anchor).total_seconds() / 60 / timestep_min)
         clamped = end_raw > horizon_steps
         end_step = min(max(end_raw, 0), horizon_steps)
+        if end_step == 0 and d.deadline > anchor:
+            # a deadline inside the first timestep is satisfiable by running the device
+            # now: one slot starting at step 0, not "unschedulable" (#1 Lows)
+            end_step = 1
         start_step = (
             0
             if d.window_start is None

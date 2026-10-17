@@ -260,3 +260,38 @@ def test_simple_register_beyond_max_demands_409(tmp_path):
     r = c.post("/simple/demands/register", params={**params, "id": "b"})
     assert r.status_code == 409
     assert registry.get("b") is None
+
+
+# -- #1 Lows: typo'd field is a 422, oversized or length-less bodies are refused --
+def test_unknown_field_422(client, registry):
+    r = client.post("/api/v1/demands", json=_payload(p_min_watt=500))
+    assert r.status_code == 422
+    assert ["body", "p_min_watt"] in [err["loc"] for err in r.json()["detail"]]
+    assert registry.get("dishwasher") is None
+
+
+def test_body_above_64kib_is_413(client, registry):
+    body = _payload()
+    body["note"] = "x" * (64 * 1024)
+    r = client.post("/api/v1/demands", json=body)
+    assert r.status_code == 413
+    assert registry.get("dishwasher") is None
+
+
+def test_body_within_limit_still_registers(client):
+    assert client.post("/api/v1/demands", json=_payload()).status_code == 201
+
+
+def test_chunked_body_without_length_is_411(client, registry):
+    import json as _json
+
+    def chunks():
+        yield _json.dumps(_payload()).encode()
+
+    r = client.post(
+        "/api/v1/demands",
+        content=chunks(),
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 411
+    assert registry.get("dishwasher") is None

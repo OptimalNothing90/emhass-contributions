@@ -365,3 +365,14 @@ async def test_set_beyond_max_demands_publishes_error(tmp_path):
     errors = [(t, p) for t, p, _ in pub.published if t.endswith("/error")]
     assert errors and errors[0][0] == "flexd/demands/loxone/second/error"
     assert "max_demands" in errors[0][1]
+
+
+# -- #1 Lows: an unknown key in a set payload is an error event, not a silent drop --
+async def test_set_with_unknown_key_publishes_error(bridge):
+    b, pub, registry = bridge
+    await b.handle_message(
+        "flexd/demands/loxone/dishwasher/set", demand_json(p_min_watt=500)
+    )
+    assert registry.get("dishwasher") is None
+    errors = [(t, p) for t, p, _ in pub.published if t.endswith("/error")]
+    assert errors and "p_min_watt" in errors[0][1]

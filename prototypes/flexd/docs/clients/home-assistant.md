@@ -209,8 +209,15 @@ appliance to confirm the event type and attributes before wiring the automations
 ## Fail-safe contract
 
 - Actuate only when `state == "ok"` **and** `on == 1`.
-- On `stale`, `down`/`offline`, `no-run`, or a request timeout: fall back to the device's own
-  native logic (EV: evcc `off` or `pv` mode; dishwasher: just run the program now).
+- `flexd/plan/state` carries the **result of the last cycle**, not a plan age: `ok`, `skipped`
+  (no demands were registered, nothing was solved), `rejected` (EMHASS answered but the plan
+  failed flexd's guards) or `down` (EMHASS unreachable). `stale` and `no-run` exist only on the
+  HTTP side (`/api/v1/plan`, `/simple/status`); this topic never carries them. The topic is
+  retained, so after a flexd crash it keeps showing the last value — `flexd/availability`
+  turning `offline` is the signal for that case.
+- On anything other than `ok`, on `offline`, or when the `generated_at` in the state payload is
+  older than two cycles: fall back to the device's own native logic (EV: evcc `off` or `pv`
+  mode; dishwasher: just run the program now).
 - Never expose flexd, EMHASS, or the MQTT broker to the internet unauthenticated. Keep them on
   the LAN, or put a reverse proxy with authentication in front. flexd's `source` claim is an
   ownership convention, not authentication — it assumes a trusted LAN. Per-source tokens are a

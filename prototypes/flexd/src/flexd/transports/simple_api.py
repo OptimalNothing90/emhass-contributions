@@ -1,4 +1,9 @@
-"""Plain-value transport for Loxone Virtual I/O. text/plain in, text/plain out, no JSON."""
+"""Plain-value transport for Loxone Virtual I/O. text/plain in, text/plain out, no JSON.
+
+Deliberately not offered here: `p_min_w`. The Demand model validates it (it must not
+exceed nominal_power_w) but the aggregator does not map it to EMHASS yet, so it would
+have no effect on the plan (#1 informational).
+"""
 
 from datetime import timedelta
 

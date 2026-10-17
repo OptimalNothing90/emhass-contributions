@@ -9,6 +9,42 @@ from flexd.registry import OwnershipError, RegistryFull
 from flexd.transports import live_demand_view, reject_standing_squat
 from flexd.transports.simple_api import create_simple_router
 
+MAX_BODY_BYTES = 64 * 1024  # a demand is a few hundred bytes; anything bigger is abuse
+
+
+class BodyLimitMiddleware:
+    """Refuse oversized request bodies before a handler reads them (#1 Lows).
+
+    Content-Length above the limit is a 413. A chunked body without Content-Length
+    is a 411: flexd's clients (Loxone, HA rest_command, curl) all send a length, and
+    refusing the length-less case keeps the check a header check, no body streaming.
+    """
+
+    def __init__(self, app, max_bytes: int = MAX_BODY_BYTES):
+        self._app = app
+        self._max = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("method") in ("POST", "PUT", "PATCH"):
+            headers = {k.lower(): v for k, v in scope.get("headers", [])}
+            length = headers.get(b"content-length")
+            if length is None:
+                if b"chunked" in headers.get(b"transfer-encoding", b"").lower():
+                    response = JSONResponse(
+                        status_code=411,
+                        content={"detail": "Content-Length required"},
+                    )
+                    await response(scope, receive, send)
+                    return
+            elif not length.isdigit() or int(length) > self._max:
+                response = JSONResponse(
+                    status_code=413,
+                    content={"detail": f"request body exceeds {self._max} bytes"},
+                )
+                await response(scope, receive, send)
+                return
+        await self._app(scope, receive, send)
+
 
 def _lean_errors(errors: list[dict]) -> list[dict]:
     """Keep loc/msg/type only. FastAPI's stock body echoes `input` and `ctx`; the
@@ -37,6 +73,7 @@ def create_app(
     default_ttl_s: int = 3600,
 ) -> FastAPI:
     app = FastAPI(title="flexd", version="0.1.0")
+    app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_422(request: Request, exc: RequestValidationError):

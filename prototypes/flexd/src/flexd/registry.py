@@ -101,9 +101,12 @@ class Registry:
             indent=2,
         )
         tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(payload, encoding="utf-8")
-        # no fsync before the renames: on power loss the bak fallback recovers the prior
-        # state; accepted for the LAN MVP.
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(
+                fh.fileno()
+            )  # the tmp content must be durable before it is renamed in
         if self._path.exists():
             os.replace(self._path, self._bak)
         os.replace(tmp, self._path)

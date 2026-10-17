@@ -192,3 +192,19 @@ def test_single_record_uses_configured_timestep(tmp_path):
     assert (
         v.demand_view("dishwasher", now=T0 + timedelta(minutes=20)).setpoint_w == 0
     )  # past the single 15-min record
+
+
+# -- #1 Lows: the adopted-plan write fsyncs before the swap (it has no .bak) --
+def test_adopt_fsyncs_before_replace(tmp_path, monkeypatch):
+    import flexd.plan_view as mod
+
+    events = []
+    real_fsync, real_replace = mod.os.fsync, mod.os.replace
+    monkeypatch.setattr(
+        mod.os, "fsync", lambda fd: (events.append("fsync"), real_fsync(fd))
+    )
+    monkeypatch.setattr(
+        mod.os, "replace", lambda a, b: (events.append("replace"), real_replace(a, b))
+    )
+    make_view(tmp_path).adopt(PLAN, MAPPING, now=T0)
+    assert events == ["fsync", "replace"]

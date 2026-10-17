@@ -357,3 +357,22 @@ def test_future_window_start_is_anchored():
     )
     # anchor 12:00, 12:46 -> ceil to 13:00 = step 2
     assert payload["start_timesteps_of_each_deferrable_load"] == [2]
+
+
+# -- #1 Lows: a deadline inside the first timestep is satisfiable by running now --
+def test_deadline_inside_first_timestep_plans_one_slot_now():
+    d = make_demand(
+        deadline=NOW + timedelta(minutes=10), expires_at=NOW + timedelta(hours=1)
+    )
+    payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    assert mapping["dishwasher"]["unschedulable"] is False
+    assert payload["end_timesteps_of_each_deferrable_load"] == [1]
+    assert payload["start_timesteps_of_each_deferrable_load"] == [0]
+    assert payload["operating_timesteps_of_each_deferrable_load"] == [1]
+
+
+def test_deadline_at_or_before_anchor_stays_unschedulable():
+    for deadline in (NOW, NOW - timedelta(minutes=5)):
+        d = make_demand(deadline=deadline, expires_at=NOW + timedelta(hours=1))
+        _, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+        assert mapping["dishwasher"]["unschedulable"] is True

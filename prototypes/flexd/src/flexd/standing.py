@@ -71,6 +71,8 @@ class StandingManager:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(json.dumps(self._ledger, indent=2))
+                fh.flush()
+                os.fsync(fh.fileno())
         except Exception:
             os.unlink(tmp_name)
             raise

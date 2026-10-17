@@ -307,3 +307,20 @@ def test_expired_demands_do_not_count_against_max(tmp_path):
     )
     reg.upsert(make_demand(id="new"))  # the expired one is not folded into a payload
     assert [d.id for d in reg.list_active()] == ["new"]
+
+
+# -- #1 Lows: no write path fsynced before os.replace --
+def test_save_fsyncs_before_replace(tmp_path, monkeypatch):
+    import flexd.registry as mod
+
+    events = []
+    real_fsync, real_replace = mod.os.fsync, mod.os.replace
+    monkeypatch.setattr(
+        mod.os, "fsync", lambda fd: (events.append("fsync"), real_fsync(fd))
+    )
+    monkeypatch.setattr(
+        mod.os, "replace", lambda a, b: (events.append("replace"), real_replace(a, b))
+    )
+    Registry(tmp_path / "demands.json").upsert(make_demand())
+    assert events and events[0] == "fsync"
+    assert events.index("fsync") < events.index("replace")

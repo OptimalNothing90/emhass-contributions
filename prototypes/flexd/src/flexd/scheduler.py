@@ -19,6 +19,10 @@ from flexd.plan_view import verify_plan_structure
 
 log = logging.getLogger(__name__)
 
+# ids awaiting retained-topic cleanup while the broker is away: keep the newest, the
+# oldest were most likely cleared by publish_plan's mapped-but-inactive sweep anyway
+MAX_PENDING_SWEPT = 1000
+
 
 class Scheduler:
     def __init__(
@@ -78,7 +82,7 @@ class Scheduler:
             swept = self._registry.sweep(now=now)
             deleted = self._registry.drain_deleted()
             if self._on_cycle_end is not None:
-                self._pending_swept.extend(
+                self._remember_swept(
                     [d.id for d in swept] + deleted
                 )  # nothing to deliver to otherwise
             # ORDER MATTERS: materialize accrues the OLD plan's on-hours into the standing
@@ -141,6 +145,10 @@ class Scheduler:
                 except Exception:
                     log.exception("on_cycle_end failed; swept ids kept for redelivery")
             return result
+
+    def _remember_swept(self, ids: list[str]) -> None:
+        self._pending_swept.extend(ids)
+        del self._pending_swept[:-MAX_PENDING_SWEPT]  # bounded across a long outage
 
     def _write_crumb(self, now: datetime, payload: dict | None, result: str) -> None:
         if self._crumb_path is None:

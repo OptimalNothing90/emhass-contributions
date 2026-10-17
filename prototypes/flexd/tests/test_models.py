@@ -170,3 +170,17 @@ def test_expires_at_more_than_a_year_out_accepted_when_persisted():
     }
     d = Demand.model_validate(raw, context={"persisted": True})
     assert d.expires_at > now + timedelta(days=400)
+
+
+# -- #1 Lows: unknown fields were silently ignored (a typo'd p_min_w just vanished) --
+def test_unknown_field_rejected():
+    with pytest.raises(ValidationError, match="p_min_watt"):
+        Demand(**_base(p_min_watt=500))
+
+
+def test_dumped_demand_reloads_with_persisted_context():
+    d = Demand(**_base())
+    again = Demand.model_validate(
+        d.model_dump(mode="json"), context={"persisted": True}
+    )
+    assert again == d

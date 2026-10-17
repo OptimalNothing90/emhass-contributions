@@ -532,3 +532,35 @@ async def test_matching_plan_adopted(registry):
     )
     result, view = await _run_with_plan(registry, plan, demands=2)
     assert result == "ok"
+
+
+# -- #1 Lows: _pending_swept grew without bound across a long broker outage --
+async def test_pending_swept_keeps_only_the_last_1000_ids(registry):
+    registry.upsert(
+        make_demand(
+            id="old",
+            deadline=NOW - timedelta(seconds=2),
+            expires_at=NOW - timedelta(seconds=1),
+        )
+    )
+    delivered = []
+
+    async def failing(state, swept_ids):
+        delivered.append(list(swept_ids))
+        raise RuntimeError("broker down")
+
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(result=PLAN),
+        view=FakeView(),
+        standing=FakeStanding(),
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        on_cycle_end=failing,
+    )
+    s._pending_swept = [f"ghost-{i}" for i in range(1500)]  # backlog from the outage
+    await s.run_once(now=NOW)
+    assert len(delivered[0]) == 1000
+    assert delivered[0][-1] == "old"  # newest kept, oldest dropped
+    assert delivered[0][0] == "ghost-501"

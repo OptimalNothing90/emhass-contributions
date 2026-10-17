@@ -29,7 +29,13 @@ curl -X POST http://<flexd-host>:8321/api/v1/demands \
 `id` must be unique and match `[a-z0-9][a-z0-9-]{0,63}`. `source` is an ownership tag — only
 requests carrying the same `source` may later update or delete this demand. `expires_at` is
 mandatory: flexd sweeps and drops any demand past its expiry, so a crashed or disconnected agent
-never leaves a stale charging target active indefinitely.
+never leaves a stale charging target active indefinitely. It may not lie more than one year
+ahead.
+
+Unknown fields are rejected with `422` (so a typo cannot silently vanish). `p_min_w` is
+accepted and validated (it must not exceed `nominal_power_w`) but is **not yet mapped** to
+EMHASS: it has no effect on the plan today. The same holds for `interruptible` and `priority`.
+Oversized bodies (above 64 KiB) are refused with `413`.
 
 ## 2. Read the plan for that demand
 

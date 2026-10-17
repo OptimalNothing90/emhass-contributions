@@ -8,7 +8,14 @@ the registry for the write discipline.
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 ID_PATTERN = r"^[a-z0-9][a-z0-9-]{0,63}$"
 
@@ -25,6 +32,10 @@ def utcnow() -> datetime:
 
 
 class Demand(BaseModel):
+    # a typo'd field (p_min_watt) must be a 422, not a silent no-op (#1 Lows). Registry
+    # files are dumped from this model, so a reload only ever sees known fields.
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(pattern=ID_PATTERN)
     source: str = Field(pattern=ID_PATTERN)
     type: Literal["ev", "thermal", "generic"] = "generic"

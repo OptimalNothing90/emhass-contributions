@@ -428,3 +428,20 @@ def test_concurrent_ledger_writers_no_corruption(tmp_path):
     saved = json.loads((tmp_path / "ledger.json").read_text(encoding="utf-8"))
     assert "waterheater:2026-07-05" in saved
     assert not list(tmp_path.glob("*.tmp"))  # no leftover temp files
+
+
+# -- #1 Lows: the ledger write fsyncs before the swap --
+def test_ledger_save_fsyncs_before_replace(tmp_path, monkeypatch):
+    import flexd.standing as mod
+
+    events = []
+    real_fsync, real_replace = mod.os.fsync, mod.os.replace
+    monkeypatch.setattr(
+        mod.os, "fsync", lambda fd: (events.append("fsync"), real_fsync(fd))
+    )
+    monkeypatch.setattr(
+        mod.os, "replace", lambda a, b: (events.append("replace"), real_replace(a, b))
+    )
+    reg, mgr = mk(tmp_path)
+    mgr.mark_done("waterheater", now=NOON_UTC)
+    assert events and events[0] == "fsync"

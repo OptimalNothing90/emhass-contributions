@@ -28,6 +28,61 @@ from flexd.transports.rest_api import create_app
 log = logging.getLogger("flexd")
 
 KNOWN_SCHEMA_VERSIONS = {"1.0"}
+MQTT_RETRY_S = 10.0
+
+
+async def mqtt_loop(
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    base_topic: str,
+    make_bridge,
+    bridge_holder: dict,
+    client_factory=aiomqtt.Client,
+    retry_s: float = MQTT_RETRY_S,
+    sleep=asyncio.sleep,
+) -> None:
+    """Connect, subscribe, dispatch; on ANY failure drop the bridge, log and reconnect.
+
+    Only MqttError used to be caught, and with an unqualified asyncio.gather any other
+    exception from the MQTT side cancelled the REST server and the scheduler with it
+    (#1 Lows). Cancellation still propagates.
+    """
+    will = aiomqtt.Will(f"{base_topic}/availability", "offline", retain=True)
+    while True:
+        try:
+            async with client_factory(
+                host, port, username=username, password=password, will=will
+            ) as client:
+                bridge_holder["bridge"] = make_bridge(client)
+                await client.publish(
+                    f"{base_topic}/availability", "online", retain=True
+                )
+                await client.subscribe(f"{base_topic}/demands/+/+/set")
+                await client.subscribe(f"{base_topic}/demands/+/+/delete")
+                await client.subscribe(f"{base_topic}/demands/+/+/refresh")
+                await client.subscribe(f"{base_topic}/templates/+/+/start")
+                async for message in client.messages:
+                    try:
+                        await bridge_holder["bridge"].handle_message(
+                            str(message.topic),
+                            message.payload.decode("utf-8", "replace"),
+                        )
+                    except Exception:
+                        log.exception("mqtt message handling failed; continuing")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — the loop must outlive any broker/client fault
+            bridge_holder["bridge"] = None
+            log.warning(
+                "mqtt loop failed (%s: %s); retrying in %ss",
+                type(exc).__name__,
+                exc,
+                retry_s,
+            )
+            await sleep(retry_s)
 
 
 async def run() -> None:
@@ -128,53 +183,32 @@ async def run() -> None:
         )
     )
 
-    async def mqtt_loop() -> None:
-        if not cfg.mqtt.enabled:
-            return
-        will = aiomqtt.Will(
-            f"{cfg.mqtt.base_topic}/availability", "offline", retain=True
+    def make_bridge(client) -> MqttBridge:
+        return MqttBridge(
+            client=client,
+            base_topic=cfg.mqtt.base_topic,
+            registry=registry,
+            view=view,
+            scheduler=scheduler,
+            standing=standing,
+            templates=templates,
         )
-        while True:
-            try:
-                async with aiomqtt.Client(
-                    cfg.mqtt.host,
-                    cfg.mqtt.port,
-                    username=cfg.mqtt.username,
-                    password=cfg.mqtt.password,
-                    will=will,
-                ) as client:
-                    bridge = MqttBridge(
-                        client=client,
-                        base_topic=cfg.mqtt.base_topic,
-                        registry=registry,
-                        view=view,
-                        scheduler=scheduler,
-                        standing=standing,
-                        templates=templates,
-                    )
-                    bridge_holder["bridge"] = bridge
-                    await client.publish(
-                        f"{cfg.mqtt.base_topic}/availability", "online", retain=True
-                    )
-                    await client.subscribe(f"{cfg.mqtt.base_topic}/demands/+/+/set")
-                    await client.subscribe(f"{cfg.mqtt.base_topic}/demands/+/+/delete")
-                    await client.subscribe(f"{cfg.mqtt.base_topic}/demands/+/+/refresh")
-                    await client.subscribe(f"{cfg.mqtt.base_topic}/templates/+/+/start")
-                    async for message in client.messages:
-                        try:
-                            await bridge.handle_message(
-                                str(message.topic),
-                                message.payload.decode("utf-8", "replace"),
-                            )
-                        except Exception:
-                            log.exception("mqtt message handling failed; continuing")
-            except aiomqtt.MqttError as exc:
-                bridge_holder["bridge"] = None
-                log.warning("mqtt disconnected (%s); retrying in 10s", exc)
-                await asyncio.sleep(10)
 
+    tasks = [server.serve(), scheduler.run_forever()]
+    if cfg.mqtt.enabled:
+        tasks.append(
+            mqtt_loop(
+                host=cfg.mqtt.host,
+                port=cfg.mqtt.port,
+                username=cfg.mqtt.username,
+                password=cfg.mqtt.password,
+                base_topic=cfg.mqtt.base_topic,
+                make_bridge=make_bridge,
+                bridge_holder=bridge_holder,
+            )
+        )
     try:
-        await asyncio.gather(server.serve(), scheduler.run_forever(), mqtt_loop())
+        await asyncio.gather(*tasks)
     finally:
         registry.flush()  # a refresh still inside the debounce window must hit disk
 

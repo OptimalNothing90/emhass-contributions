@@ -61,8 +61,13 @@ instead — the URL and query parameters are unchanged.
 ## Fail-safe contract
 
 - Actuate only when `state == "ok"` **and** `on == 1`.
-- On `stale`, `down`/`offline`, `no-run`, or a request timeout: fall back to the device's own
-  native logic rather than trusting a stale setpoint.
+- `flexd/plan/state` carries the result of the last cycle: `ok`, `skipped`, `rejected` or
+  `down` (see the [Home Assistant guide](home-assistant.md#fail-safe-contract) for what each
+  means). `stale` and `no-run` are HTTP-side values (`/simple/status`) and never appear on this
+  topic.
+- On anything other than `ok`, on `flexd/availability` = `offline`, or when the state payload's
+  `generated_at` is older than two cycles: fall back to the device's own native logic rather
+  than trusting a stale setpoint.
 - Never expose flexd, EMHASS, or the MQTT broker to the internet unauthenticated. Keep them on
   the LAN, or put a reverse proxy with authentication in front. flexd's `source` claim is an
   ownership convention, not authentication — it assumes a trusted LAN. Per-source tokens are a
