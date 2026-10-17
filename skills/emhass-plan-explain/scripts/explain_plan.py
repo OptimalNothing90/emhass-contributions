@@ -29,7 +29,7 @@ import math
 import sys
 import urllib.request
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 OK_STATUSES = ("Optimal", "Optimal_Inaccurate", "Optimal (Relaxed)")
@@ -170,14 +170,14 @@ def _col(records: list[dict], name: str) -> list[float | None]:
 def _parse_ts(value) -> datetime | None:
     if isinstance(value, (int, float)):
         # pandas to_json may emit epoch milliseconds
-        return datetime.fromtimestamp(value / 1000.0, tz=UTC)
+        return datetime.fromtimestamp(value / 1000.0, tz=timezone.utc)
     if not isinstance(value, str):
         return None
     try:
         dt = datetime.fromisoformat(value)
     except ValueError:
         return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _fmt_time(dt: datetime | None, tz=None) -> str | None:
