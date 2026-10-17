@@ -13,7 +13,7 @@ endpoints.
 | `emhass-pr-readiness` | before `gh pr create` against `davidusb-geek/emhass` | `pr_readiness.sh`, `check_param_definitions.py` |
 
 Each skill is a folder with a `SKILL.md` (when to use it, how to read the output) and
-`scripts/` (stdlib Python 3.10+, no pip installs; PyYAML optional for YAML configs).
+`scripts/` (stdlib Python 3.10+, no pip installs; PyYAML only if you validate YAML configs).
 
 ## Install
 

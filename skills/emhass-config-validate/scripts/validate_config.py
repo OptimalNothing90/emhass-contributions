@@ -3,7 +3,8 @@
 
 Checks every key against EMHASS's own machine-readable schema files
 (param_definitions.json, runtime_params.json, config_defaults.json,
-associations.csv). Stdlib only. A copy of the v0.18.6 schema files ships next
+associations.csv). Stdlib only; YAML configs need PyYAML, JSON needs nothing.
+A copy of the v0.18.6 schema files ships next
 to this script under ../schema/v0.18.6 and is used when --schema-dir is omitted.
 
 Usage:
@@ -22,7 +23,6 @@ import csv
 import difflib
 import json
 import math
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -230,130 +230,6 @@ def load_schemas(schema_dir: str | Path | None = None) -> dict:
 # ---------------------------------------------------------------------- config loading
 
 
-def _parse_scalar(token: str):
-    t = token.strip()
-    if t == "" or t in ("null", "~", "None"):
-        return None
-    if t in ("true", "True"):
-        return True
-    if t in ("false", "False"):
-        return False
-    if (t.startswith('"') and t.endswith('"')) or (
-        t.startswith("'") and t.endswith("'")
-    ):
-        return t[1:-1]
-    if re.fullmatch(r"[-+]?\d+", t):
-        return int(t)
-    if re.fullmatch(r"[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?", t):
-        return float(t)
-    return t
-
-
-def _split_flow(body: str) -> list[str]:
-    parts, depth, cur, quote = [], 0, "", None
-    for ch in body:
-        if quote:
-            cur += ch
-            if ch == quote:
-                quote = None
-            continue
-        if ch in "\"'":
-            quote = ch
-            cur += ch
-        elif ch in "[{":
-            depth += 1
-            cur += ch
-        elif ch in "]}":
-            depth -= 1
-            cur += ch
-        elif ch == "," and depth == 0:
-            parts.append(cur)
-            cur = ""
-        else:
-            cur += ch
-    if cur.strip():
-        parts.append(cur)
-    return parts
-
-
-def _parse_flow(token: str):
-    t = token.strip()
-    if t.startswith("[") and t.endswith("]"):
-        return [_parse_flow(p) for p in _split_flow(t[1:-1])]
-    if t.startswith("{") and t.endswith("}"):
-        out = {}
-        for p in _split_flow(t[1:-1]):
-            if ":" in p:
-                k, v = p.split(":", 1)
-                out[_parse_scalar(k)] = _parse_flow(v)
-        return out
-    return _parse_scalar(t)
-
-
-def _mini_yaml(text: str):
-    """Small YAML subset parser (block maps, block/flow lists, scalars).
-
-    Used only when PyYAML is not installed. Enough for EMHASS config files.
-    """
-    lines = []
-    for raw in text.splitlines():
-        stripped = (
-            raw.split(" #", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
-        )
-        if stripped.strip() == "" or stripped.strip() == "---":
-            continue
-        indent = len(stripped) - len(stripped.lstrip(" "))
-        lines.append((indent, stripped.strip()))
-
-    def parse_block(i: int, indent: int):
-        if i >= len(lines):
-            return None, i
-        if lines[i][1].startswith("- "):
-            items = []
-            while (
-                i < len(lines)
-                and lines[i][0] == indent
-                and lines[i][1].startswith("- ")
-            ):
-                body = lines[i][1][2:].strip()
-                if ":" in body and not body.startswith(("[", "{", '"', "'")):
-                    # mapping item: "- key: value"
-                    k, v = body.split(":", 1)
-                    item = {_parse_scalar(k): _parse_flow(v) if v.strip() else None}
-                    i += 1
-                    if i < len(lines) and lines[i][0] > indent:
-                        sub, i = parse_block(i, lines[i][0])
-                        if isinstance(sub, dict):
-                            item.update(sub)
-                    items.append(item)
-                else:
-                    items.append(_parse_flow(body))
-                    i += 1
-            return items, i
-        mapping = {}
-        while i < len(lines) and lines[i][0] == indent:
-            line = lines[i][1]
-            if ":" not in line:
-                i += 1
-                continue
-            k, v = line.split(":", 1)
-            key = _parse_scalar(k)
-            v = v.strip()
-            if v:
-                mapping[key] = _parse_flow(v)
-                i += 1
-            else:
-                i += 1
-                if i < len(lines) and lines[i][0] > indent:
-                    mapping[key], i = parse_block(i, lines[i][0])
-                else:
-                    mapping[key] = None
-        return mapping, i
-
-    result, _ = parse_block(0, lines[0][0] if lines else 0)
-    return result
-
-
 LEGACY_SECTIONS = ("retrieve_hass_conf", "optim_conf", "plant_conf", "params_secrets")
 
 
@@ -367,13 +243,19 @@ def load_config(path: str | Path, legacy_names: dict[str, str] | None = None):
     text = path.read_text(encoding="utf-8")
     notes: list[str] = []
     if path.suffix.lower() in (".yaml", ".yml"):
+        # No fallback parser: a home-grown YAML subset reported broken files as
+        # clean (Codex review 2026-10-17 finding 5). Refuse instead.
         try:
             import yaml  # type: ignore
-
-            doc = yaml.safe_load(text)
         except ImportError:
-            doc = _mini_yaml(text)
-            notes.append("PyYAML not installed; used built-in minimal YAML parser")
+            raise ValueError(
+                "PyYAML is not installed; convert the config to JSON "
+                "(e.g. save it from the EMHASS web UI) or 'pip install pyyaml'"
+            ) from None
+        try:
+            doc = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"invalid YAML: {exc}") from exc
     else:
         doc = json.loads(text)
     if not isinstance(doc, dict):

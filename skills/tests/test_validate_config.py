@@ -601,3 +601,44 @@ def test_cli_accepts_json_and_yaml(tmp_path, config_defaults, schema_dir, ext):
         )
     proc = _run_cli(cfg_path, "--schema-dir", schema_dir)
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+# -- Codex review 2026-10-17 finding 5: no hand-written YAML parser ---------------------
+
+
+def test_yaml_without_pyyaml_is_refused_with_a_clear_message(
+    validate_config_mod, tmp_path, monkeypatch
+):
+    import sys
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("costfun: profit\n", encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "yaml", None)  # import yaml -> ImportError
+    with pytest.raises(ValueError, match="PyYAML"):
+        validate_config_mod.load_config(cfg_path)
+
+
+def test_broken_yaml_is_an_input_error_not_a_clean_config(tmp_path, schema_dir):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        "costfun: profit\nTHIS IS BROKEN\noptimization_time_step: 30\n",
+        encoding="utf-8",
+    )
+    proc = _run_cli(cfg_path, "--schema-dir", schema_dir)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR config" in proc.stdout
+    assert "Traceback" not in proc.stderr
+
+
+def test_quoted_hash_in_yaml_string_survives(validate_config_mod, tmp_path):
+    pytest.importorskip("yaml")
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        'load_forecast_method: "mlforecaster # keep"\n', encoding="utf-8"
+    )
+    cfg, _ = validate_config_mod.load_config(cfg_path)
+    assert cfg["load_forecast_method"] == "mlforecaster # keep"
+
+
+def test_no_builtin_yaml_parser_remains(validate_config_mod):
+    assert not hasattr(validate_config_mod, "_mini_yaml")

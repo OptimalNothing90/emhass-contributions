@@ -24,7 +24,8 @@ python ${CLAUDE_SKILL_DIR}/scripts/validate_config.py <config.json|config.yaml> 
   `runtime_params.json`, `src/emhass/data/config_defaults.json`, `associations.csv`)
   into one directory and point here.
 
-Stdlib Python 3.10+. PyYAML is optional (a minimal built-in YAML reader is used otherwise).
+Stdlib Python 3.10+. YAML configs need PyYAML (`pip install pyyaml`); without it the
+script refuses YAML with exit 2 and asks for JSON. config.json needs nothing extra.
 
 ## Read the output
 
