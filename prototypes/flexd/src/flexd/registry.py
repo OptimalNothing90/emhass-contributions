@@ -174,6 +174,11 @@ class Registry:
                         f"registry holds {active} active demands; max_demands is "
                         f"{self._max_demands}"
                     )
+            if existing is not None:
+                # a re-declaration of a live demand (PUT, MQTT set) is the same run:
+                # created_at stays, so the adopted slot keeps serving it. Only a
+                # delete followed by a new register moves created_at (#1 Lows).
+                demand.created_at = existing.created_at
             demand.updated_at = utcnow()
             self._demands[demand.id] = demand
             self._save()

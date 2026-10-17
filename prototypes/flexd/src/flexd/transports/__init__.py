@@ -24,10 +24,15 @@ def live_demand_view(registry, view, demand_id: str, now: datetime):
 
     Returns (DemandView | None, status) where status is one of
     "unknown" (not in registry), "expired" (in registry, expires_at <= now),
-    "pending" (registered, not in the adopted mapping) or "ok". A withdrawn or
-    expired demand must read as OFF immediately; the adopted plan may still carry a
-    positive slot for it until the next successful solve, and a solve with zero
-    demands is skipped altogether.
+    "pending" (registered, not in the adopted mapping, or registered after the
+    adopted plan was solved) or "ok". A withdrawn or expired demand must read as OFF
+    immediately; the adopted plan may still carry a positive slot for it until the
+    next successful solve, and a solve with zero demands is skipped altogether.
+
+    A demand deleted and registered again while a solve was in flight keeps its id
+    but is a different run: the mapped slot was solved for the old one, so until the
+    next adoption it is pending, not served (#1 Lows). created_at marks that: the
+    registry keeps it across re-declarations of a live demand (PUT, MQTT set).
     """
     demand = registry.get(demand_id)
     if demand is None:
@@ -36,5 +41,7 @@ def live_demand_view(registry, view, demand_id: str, now: datetime):
         return OFF, "expired"
     dv = view.demand_view(demand_id, now=now)
     if dv is None:
+        return None, "pending"
+    if dv.solved_at is not None and demand.created_at > dv.solved_at:
         return None, "pending"
     return dv, "ok"

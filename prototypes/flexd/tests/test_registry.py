@@ -325,3 +325,24 @@ def test_save_fsyncs_before_replace(tmp_path, monkeypatch):
     Registry(tmp_path / "demands.json").upsert(make_demand())
     assert events and events[0] == "fsync"
     assert events.index("fsync") < events.index("replace")
+
+
+# -- #1 Lows: created_at marks a new registration, not a re-declaration ------------
+def test_upsert_of_an_existing_id_keeps_the_original_created_at(registry):
+    from datetime import datetime, timedelta, timezone
+
+    first = datetime(2026, 7, 5, 10, 0, tzinfo=timezone.utc)
+    registry.upsert(make_demand(created_at=first))
+    saved = registry.upsert(make_demand(created_at=first + timedelta(hours=1)))
+    assert saved.created_at == first  # PUT / re-set: the same demand, re-declared
+    assert registry.get("dishwasher").created_at == first
+
+
+def test_register_after_delete_gets_the_new_created_at(registry):
+    from datetime import datetime, timedelta, timezone
+
+    first = datetime(2026, 7, 5, 10, 0, tzinfo=timezone.utc)
+    registry.upsert(make_demand(created_at=first))
+    registry.delete("dishwasher", source="loxone")
+    saved = registry.upsert(make_demand(created_at=first + timedelta(hours=1)))
+    assert saved.created_at == first + timedelta(hours=1)  # a new demand

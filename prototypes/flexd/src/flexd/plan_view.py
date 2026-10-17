@@ -34,6 +34,9 @@ class DemandView:
     clamped: bool
     truncated: bool = False
     unschedulable: bool = False
+    # cycle instant the slot was solved for (None for adopted files written before
+    # solved_at was mapped); live_demand_view compares the demand's created_at to it
+    solved_at: datetime | None = None
 
 
 def _parse(ts: str) -> datetime:
@@ -202,12 +205,14 @@ class PlanView:
         clamped = entry.get("clamped", False)
         rec = self._record_at(snap.plan["plan"], now)
         power = float(rec.get(f"P_deferrable{slot}", 0)) if rec else 0.0
+        solved_at = entry.get("solved_at")
         return DemandView(
             setpoint_w=power,
             on=power > 0,
             clamped=clamped,
             truncated=entry.get("truncated", False),
             unschedulable=entry.get("unschedulable", False),
+            solved_at=_parse(solved_at) if solved_at else None,
         )
 
     def on_hours_elapsed(

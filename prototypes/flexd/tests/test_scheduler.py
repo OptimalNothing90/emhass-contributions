@@ -778,3 +778,46 @@ async def test_without_mqtt_the_pending_clear_queue_is_drained_each_cycle(tmp_pa
     s = make_scheduler(reg, FakeDriver(result=PLAN), FakeView())  # no on_cycle_end
     await s.run_once(now=NOW)
     assert reg.pending_clear.ids() == []  # nothing to deliver to: no perpetual queue
+
+
+# -- #1 Lows: delete-then-re-register during an in-flight solve served the old
+#    demand's setpoints until the next solve ------------------------------------------
+async def test_demand_re_registered_after_the_solve_is_pending_until_next_adoption(
+    registry, tmp_path
+):
+    from flexd.plan_view import PlanView
+    from flexd.transports import live_demand_view
+
+    view = PlanView(tmp_path / "adopted_plan.json", stale_after=timedelta(hours=2))
+    registry.upsert(
+        make_demand(
+            created_at=NOW - timedelta(hours=1),
+            deadline=NOW + timedelta(hours=4),
+            expires_at=NOW + timedelta(hours=5),
+        )
+    )
+    s = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    assert await s.run_once(now=NOW) == "ok"
+    dv, status = live_demand_view(registry, view, "dishwasher", now=NOW)
+    assert status == "ok" and dv.setpoint_w == 2000  # the planned slot is served
+
+    # withdrawn and registered again (a different run) after the solve
+    registry.delete("dishwasher", source="loxone")
+    registry.upsert(
+        make_demand(
+            created_at=NOW + timedelta(minutes=1),
+            deadline=NOW + timedelta(hours=4),
+            expires_at=NOW + timedelta(hours=5),
+        )
+    )
+    dv, status = live_demand_view(
+        registry, view, "dishwasher", now=NOW + timedelta(minutes=2)
+    )
+    assert (dv, status) == (None, "pending")  # not the old run's 2000 W
+
+    # the next adoption plans the new run and serves it again
+    assert await s.run_once(now=NOW + timedelta(minutes=10)) == "ok"
+    dv, status = live_demand_view(
+        registry, view, "dishwasher", now=NOW + timedelta(minutes=11)
+    )
+    assert status == "ok" and dv.setpoint_w == 2000

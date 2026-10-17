@@ -311,6 +311,47 @@ async def test_publish_plan_sends_off_for_mapped_but_expired_demand(bridge):
     assert ("flexd/plan/demands/dishwasher/setpoint", "0", True) in pub.published
 
 
+async def test_publish_plan_sends_zero_for_a_demand_re_registered_after_the_solve(
+    registry, tmp_path
+):
+    # #1 Lows: the adopted slot belongs to the withdrawn run, not to the new one
+    from flexd.plan_view import PlanView
+
+    view = PlanView(tmp_path / "adopted_plan.json", stale_after=timedelta(hours=2))
+    pub = FakePublisher()
+    b = MqttBridge(
+        client=pub,
+        base_topic="flexd",
+        registry=registry,
+        view=view,
+        scheduler=make_scheduler(registry, FakeDriver(result=PLAN), view),
+    )
+    now = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)  # PLAN's first record
+    registry.upsert(
+        make_demand(
+            created_at=now + timedelta(minutes=1),
+            deadline=now + timedelta(hours=4),
+            expires_at=now + timedelta(hours=5),
+        )
+    )
+    view.adopt(
+        PLAN,
+        {
+            "dishwasher": {
+                "slot": 0,
+                "clamped": False,
+                "nominal_power_w": 2000,
+                "solved_at": now.isoformat(),
+            }
+        },
+        now=now,
+    )
+    await b.publish_plan(state="ok", now=now + timedelta(minutes=2))
+    assert ("flexd/plan/demands/dishwasher/on", "0", True) in pub.published
+    assert ("flexd/plan/demands/dishwasher/setpoint", "0", True) in pub.published
+    assert ("flexd/plan/demands/dishwasher/setpoint", "2000", True) not in pub.published
+
+
 # -- #1 Medium 10: a multi-segment base_topic silently dropped every message --
 @pytest.fixture
 def nested_bridge(registry):

@@ -6,13 +6,14 @@ which the scheduler's at-least-once on_cycle_end delivery requires.
 
 import json
 import logging
+from datetime import datetime
 
 from fastapi import HTTPException
 
 from flexd.models import Demand, utcnow
 from flexd.registry import OwnershipError, RegistryFull
 from flexd.templates import TemplateRunWithdrawn
-from flexd.transports import reject_standing_squat
+from flexd.transports import live_demand_view, reject_standing_squat
 
 log = logging.getLogger(__name__)
 
@@ -146,15 +147,17 @@ class MqttBridge:
             )
 
     # -- publish ----------------------------------------------------------------
-    async def publish_plan(self, state: str) -> None:
-        now = utcnow()
+    async def publish_plan(self, state: str, now: datetime | None = None) -> None:
+        now = now or utcnow()
         await self._client.publish(
             f"{self._base}/plan/state",
             json.dumps({"state": state, "generated_at": self._view.generated_at}),
             retain=True,
         )
         for demand in self._registry.list_active(now=now):
-            dv = self._view.demand_view(demand.id, now=now)
+            # same gate as the HTTP reads: a demand registered after the adopted
+            # plan was solved is pending (0), not the withdrawn run's slot
+            dv, _ = live_demand_view(self._registry, self._view, demand.id, now=now)
             setpoint = round(dv.setpoint_w) if dv else 0
             on = "1" if (dv and dv.on) else "0"
             await self._client.publish(

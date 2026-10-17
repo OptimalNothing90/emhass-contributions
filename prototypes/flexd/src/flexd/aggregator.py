@@ -188,6 +188,10 @@ def build_runtimeparams(
             # read-back only, not sent to EMHASS
             "timesteps": steps,
             "anchor": anchor.isoformat(),
+            # the cycle instant this slot was solved for: a demand whose created_at is
+            # later is a different run (deleted and registered again during the
+            # solve) and must read as pending until the next adoption (#1 Lows)
+            "solved_at": now.isoformat(),
         }
 
     payload.update(

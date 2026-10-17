@@ -314,3 +314,17 @@ def test_readers_never_see_plan_and_mapping_from_different_adoptions(
         sys.setswitchinterval(interval)
     assert reads[0] > 100  # the readers really ran alongside the adoptions
     assert mismatches == []
+
+
+# -- #1 Lows: delete-then-re-register during a solve served the old demand's slot ----
+def test_demand_view_exposes_solved_at_from_the_mapping(tmp_path):
+    v = make_view(tmp_path)
+    mapping = {"dishwasher": {**MAPPING["dishwasher"], "solved_at": T0.isoformat()}}
+    v.adopt(PLAN, mapping, now=T0)
+    assert v.demand_view("dishwasher", now=T0).solved_at == T0
+
+
+def test_demand_view_solved_at_is_none_for_legacy_mappings(tmp_path):
+    v = make_view(tmp_path)
+    v.adopt(PLAN, MAPPING, now=T0)  # adopted files written before solved_at existed
+    assert v.demand_view("dishwasher", now=T0).solved_at is None
