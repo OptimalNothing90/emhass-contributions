@@ -51,6 +51,6 @@ What hasn't been decided yet?
 
 ## Current RFCs
 
-- [0001](0001-shared-plan-registry.md) — EMHASS as a stateful shared-plan service / persistent flexible-load registry (**Issue-filed** → [discussion #931](https://github.com/davidusb-geek/emhass/discussions/931))
+- [0001](0001-shared-plan-registry.md) — Shared-plan coordination via an external registry sidecar, stateless EMHASS; the sidecar is the demand-lifecycle layer with acceptance criteria (**Issue-filed** → [discussion #931](https://github.com/davidusb-geek/emhass/discussions/931); revised 2026-10-17)
 
 (The earlier note earmarking 0001 for /api/last-run is retired: `/api/v1/last-run` shipped directly via #835 without an RFC.)
