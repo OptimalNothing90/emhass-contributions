@@ -2,10 +2,28 @@
 
 **Status:** Draft (Issue-filed)
 **Discussion:** https://github.com/davidusb-geek/emhass/discussions/931
-**Upstream context:** #824 (EV use-cases follow-up to #789)
-**Verification basis:** `audits/2026-05-31-emhass-evcc-coordination-synthesis.md` (facts F1–F16, build menu N1–N7)
+**Upstream context:** #824 (EV use-cases follow-up to #789); #1157 / #1158 (federated backend, `dry_run`); #610 / #1150 (multi-battery phases 1 to 3)
+**Verification basis:** `audits/2026-05-31-emhass-evcc-coordination-synthesis.md` (facts F1–F16, build menu N1–N7); `prototypes/flexd/` against upstream `v0.18.6`
+**Companion document:** `docs/ev-requirements.md` (EV charging requirements from the evcc side)
 **Author:** OptimalNothing90
-**Date:** 2026-06-02 · **Revised:** 2026-06-16
+**Date:** 2026-06-02 · **Revised:** 2026-06-16, 2026-10-17
+
+## Changelog
+
+- **2026-10-17.** flexd is positioned as the demand-lifecycle layer in front of a stateless
+  core, with explicit acceptance criteria (new section "What the sidecar is accountable for").
+  The relation to the federated backend RFC (#1157) and to the `dry_run` runtime flag from
+  draft PR #1158 is stated: `dry_run` is the core primitive the sidecar needs for context and
+  what-if queries, the sidecar does not compete with a solver-side coordinator, and it shrinks
+  to adapters and conformance tests if the core ever absorbs lifecycle. The "await the POST,
+  then the GET belongs to my POST" assumption is replaced by request-bound results, with the
+  current `generated_at` guard named as the interim. The sentence declaring N2 independent of
+  multi-battery is reconciled with multi-battery phase 2; the EV requirements move to
+  `docs/ev-requirements.md`. N1 is marked shipped (`GET /api/v1/plan`, upstream #995, in
+  v0.18.x). Every reduction of a request now has to carry a machine-readable reason.
+- **2026-06-16.** In-core registry replaced by an external sidecar after LesIT1's steer in
+  #931. See the revision note below; the original text is kept in the appendix.
+- **2026-06-02.** First version, in-core stateful registry. Filed as discussion #931.
 
 ## Revision note (2026-06-16): in-core registry → external sidecar
 
@@ -32,16 +50,17 @@ happens even in summer, where surplus is finite at any given instant, and it get
 the shoulder seasons.
 
 EMHASS already solves the whole-house MILP that arbitrates this, and it already co-optimizes
-competing deferrable loads inside a single call. Two things are missing, and neither is the
-solve itself:
+competing deferrable loads inside a single call. Two things were missing in June 2026, and
+neither is the solve itself:
 
 1. **No persistent shared state across cycles.** EMHASS is stateless, one request at a time.
    There is no persistent notion of "the flexible loads currently in play". A multi-source
    setup (evcc, a heat pump, HA automations, later LLM agents) has no shared plan to
    contribute to. Each source rebuilds and resubmits the whole problem every MPC cycle.
-2. **No machine-readable plan output.** `/action/*` returns a plain-text acknowledgement; the
-   schedule is published to Home Assistant or written to `opt_res_latest.csv` (synthesis F11).
-   Nothing hands a caller the structured plan back.
+2. **No machine-readable plan output.** `/action/*` returned a plain-text acknowledgement; the
+   schedule was published to Home Assistant or written to `opt_res_latest.csv` (synthesis
+   F11). Nothing handed a caller the structured plan back. This gap closed with
+   `GET /api/v1/plan` (upstream #995, in the v0.18 line).
 
 There are two ways to add the shared state. The original version of this RFC put it inside
 EMHASS. The problem, raised by LesIT1 in #931 and consistent with #789, is that an in-core
@@ -49,7 +68,8 @@ registry makes EMHASS stateful: concurrency, atomic writes, file corruption, and
 lifecycle all become core concerns the project has chosen to avoid. The alternative keeps
 EMHASS stateless and puts the state in a **sidecar**: a small separate service that owns the
 registry and renders the active demands down into an ordinary stateless optim call. The
-solver never knows the registry exists. This RFC takes the sidecar route.
+solver never knows the registry exists. This RFC takes the sidecar route. The sidecar exists
+as a prototype under `prototypes/flexd/` in this repository ("flexd" is a working name).
 
 ## Architecture
 
@@ -63,7 +83,7 @@ solver never knows the registry exists. This RFC takes the sidecar route.
                                                    │ each MPC cycle:
                                                    │ aggregate → deferrable payload
                                                    ▼
-                                       POST /action/dayahead-optim (runtimeparams)  ──▶  MILP solve
+                                       POST /action/naive-mpc-optim (runtimeparams)  ──▶  MILP solve
                                                    ▲                                       │
                                        GET /api/v1/plan  (structured plan, N1) ◀───────────┘
                                                    │
@@ -72,26 +92,155 @@ solver never knows the registry exists. This RFC takes the sidecar route.
 
 Placement against the #789 guard (synthesis F16): the registry and any actuation are glue,
 outside EMHASS core. EMHASS stays the MILP optimizer and nothing more. The sidecar submits
-demands through the **existing** `/action/*` runtime-params path — the same mechanism a
-multi-deferrable operator already uses by hand today — so no new inbound API is added to
-EMHASS. The one core addition is the plan output (N1) so the sidecar can read the result back
-without scraping a CSV.
+demands through the **existing** `/action/*` runtime-params path, the same mechanism a
+multi-deferrable operator already uses by hand today, so no new inbound API is added to
+EMHASS. The one core addition was the plan output (N1) so the sidecar can read the result
+back without scraping a CSV.
 
-## EMHASS-core change (the only ask): N1, structured plan output
+## What the sidecar is accountable for (2026-10-17)
+
+The sidecar is the **demand-lifecycle layer** in front of a stateless core. It is not a second
+optimizer and not a coordinator between solvers. Its job is everything that happens to a
+demand between the moment a consumer raises it and the moment the consumer reads a setpoint
+back: registration, ownership, expiry, persistence across restarts, mapping onto the core's
+runtime parameters, attribution of the result back to the demand, and an honest account of
+what the mapping had to change. The core keeps solving; the sidecar keeps the books.
+
+The division of labour in one table:
+
+| Concern | Sidecar | EMHASS core |
+|---|---|---|
+| Who wants what, by when, at which power | owns (registry) | receives per call as runtime params |
+| Lifecycle: expiry, refresh, withdrawal, restart | owns | none (stateless by design) |
+| Ownership: a source cannot overwrite another's demand | owns | none |
+| Mapping a demand to `number_of_deferrable_loads` and friends | owns | validates the payload |
+| Solving the whole-house problem | never | owns |
+| Reading the plan back and attributing slots to demands | owns | serves `GET /api/v1/plan` |
+| Telling the consumer what got reduced and why | owns | reports `optim_status` per run |
+| Actuation | never | never |
+
+### Acceptance criteria
+
+These are the criteria a sidecar implementation has to meet before it is trusted with a real
+household. They were sharpened by LesIT1's adversarial review of the prototype
+(OptimalNothing90/emhass-contributions#1) and by the two fix batches that followed; the
+criteria are stated here so the design, not the prototype, is what gets held to them.
+
+1. **Withdrawn reads OFF within one poll on every transport.** When a consumer withdraws a
+   demand, or the demand expires, the next read of that demand's setpoint on every transport
+   the sidecar offers (REST, plain-value HTTP, retained MQTT) says OFF / 0 W, before the next
+   solve, not after it. A consumer never has to wait a cycle to learn that its demand is gone.
+2. **A restart loses no demand and no adopted plan.** After a process restart, every demand
+   that was active and unexpired is active again with the same expiry, and the last adopted
+   plan is served as it was, marked stale by age rather than forgotten. A structurally valid
+   registry file with one corrupt entry keeps every valid entry and logs the bad one.
+3. **Remaining energy never produces an infeasible semi-continuous solve.** A device that runs
+   at nominal power or not at all is asked for whole timesteps (rounded up, capped at its
+   window); a device that modulates is asked for fractional hours. In neither case does the
+   sidecar hand the core an energy target that cannot be met inside the window at the
+   declared power, and a demand whose window has closed is passed as inactive rather than
+   pinned on with zero hours.
+4. **Plan attribution survives a plan switch.** Elapsed energy for a standing or long-running
+   demand is credited from the plan that was actually in force at each instant, including the
+   seconds between a new plan's adoption and the cycle boundary. Switching plans mid-cycle
+   neither double-counts nor drops energy.
+5. **Every reduction carries a machine-readable reason.** When the mapping changes what a
+   consumer asked for, the per-demand view says so with a stable, enumerable field, not a log
+   line. The current vocabulary is `truncated` (energy does not fit the window at the declared
+   power), `clamped` (deadline beyond the horizon), rounded to whole slots (`timesteps` versus
+   the requested hours), and `unschedulable` (window closed or degenerate). This is the
+   sidecar-side counterpart of the explainability request in upstream #1185: a consumer, human
+   or agent, must be able to answer "why did I get less than I asked for" from the response
+   alone.
+6. **Ownership is enforced, not assumed.** A `source` can refresh or withdraw only the demands
+   it registered. A register with an id another source already owns is rejected.
+7. **Bad input is rejected at the door.** Non-finite numbers, absurd magnitudes, naive
+   datetimes and malformed ids never reach the registry file, on any transport, because one
+   bad entry would otherwise poison every solve until its expiry.
+
+The companion document `docs/ev-requirements.md` applies the same discipline to one demand
+type, the EV, and lists the acceptance scenarios an EV demand has to pass.
+
+## Relation to the federated backend (#1157) and to `dry_run` (#1158)
+
+The federated backend proposed in #1157 (draft PR #1158, ameetdesh) coordinates several
+**solvers** by prices at the meter: EMHASS's own models, a dynamic-programming battery solver,
+or an outside participant such as evcc, each answering "what would you do at these prices".
+That is a coordination problem between optimizers. This RFC addresses a different problem:
+one optimizer, many **consumers** that come and go. The two do not compete.
+
+- The sidecar sits in front of whichever solving path the core offers. If a user turns on a
+  coordinated backend, the sidecar's payload is still ordinary runtime parameters and its
+  read-back is still `GET /api/v1/plan`. Nothing in this RFC assumes the default MILP.
+- The sidecar never takes part in price iteration. Its demands are inputs to the solve, not a
+  participant with a private cost.
+- If the core ever absorbs demand lifecycle itself (a registry endpoint, run-keyed demands,
+  or a participant interface that carries expiry and ownership), the sidecar shrinks to what
+  cannot live in the core: transport adapters for consumers that speak plain HTTP or MQTT, and
+  the conformance tests behind the acceptance criteria above. That outcome would be fine. The
+  acceptance criteria are written so that they survive the move.
+
+**`dry_run` is the core primitive this RFC depends on next.** In #931 on 2026-08-30, MMicieli
+proposed that a sidecar distinguish three registration kinds: a *demand* (an energy
+requirement to schedule), a *context* entry (temporary information that changes an input or a
+constraint: an empty house for three weeks, a smoke event depressing PV, a battery SOC floor
+by a given time), and a *query or scenario* (inspect or simulate without changing
+production). LesIT1 replied that demand and context share one lifecycle and need no new
+machinery, and that what-if is less free than it looks because a solve writes
+`opt_res_latest.csv`, feeds `continual_publish` and updates the plan store, so a scenario
+solve against the live instance replaces the live plan. Run-keyed or non-persisting results
+were named as the prerequisite.
+
+`dry_run` as specified in #1158 is exactly that prerequisite: the same request, a real solve,
+the plan returned in the HTTP response, and nothing written (no results CSV, no plan store, no
+last-run record, no publish, a private `Optimization` so the live cache and warm start are
+untouched). With it, the sidecar's roadmap becomes:
+
+1. **Demands** (today): folded into the live solve, result read from `GET /api/v1/plan`.
+2. **Context entries** (after the shadow run): same registry, same `expires_at` and
+   ownership, folded into validated runtime parameters (for example `soc_target` and
+   `soc_target_timestep` for the SOC-floor case) instead of a deferrable slot.
+3. **Queries and what-if** (needs `dry_run`): the sidecar submits the live payload plus the
+   hypothetical change with `dry_run: true` and returns the plan to the asker without touching
+   the live plan. "What if the car had to be at 80 % by 17:00" and "what does the import cap
+   cost me" are this kind of request.
+
+Two properties of `dry_run` matter to the sidecar specifically, both already raised in #1157
+by MMicieli and LesIT1: a release that does not know the flag must not silently run a live
+solve (so the sidecar gates on a version or capability signal before sending it), and
+actions that cannot honour it should reject it rather than ignore it. This RFC supports
+splitting `dry_run` out of #1158 into its own PR; the sidecar is a concrete user of it
+independent of the federated backend.
+
+## EMHASS-core change: N1, structured plan output (shipped)
 
 A read-only endpoint that returns the most recent optimization result as JSON.
 
-- `GET /api/v1/plan` — the latest `opt_res` as JSON records, carrying `emhass_schema_version`.
+- `GET /api/v1/plan` — the latest `opt_res` as JSON records, carrying `emhass_schema_version`
+  and `generated_at`. Shipped upstream as #995; the sidecar prototype builds against the
+  pinned release `v0.18.6`.
 - Columns follow the existing plan-output schema (`docs/plan_output_schema.md`, #835); the
   version follows `EMHASS_SCHEMA_VERSION`.
-- It mirrors `GET /api/v1/last-run` (#851), which already returns run metadata. `opt_res` is
-  computed and currently discarded (synthesis F11); this serializes what is already in hand.
+- It mirrors `GET /api/v1/last-run` (#851), which already returns run metadata.
 - Additive, read-only, non-breaking. The HA publish and CSV paths are untouched.
 
-The sidecar flow is: POST the aggregated demands to `/action/dayahead-optim` (or
-`naive-mpc-optim`) via runtime params, then `GET /api/v1/plan` to read the structured result.
-Because `/action` is awaited and EMHASS is a single writer, the plan returned by the GET is
-the one the POST just produced.
+### Binding a result to the request that produced it
+
+The June version of this RFC assumed that because `/action/*` is awaited and EMHASS is a
+single writer, the plan returned by a following `GET /api/v1/plan` is the one the POST just
+produced. That holds only when the sidecar is the sole caller of the instance. LesIT1's
+production setup (an external MPC loop every 15 minutes) and MMicieli's run-correlation point
+in #931 both show the assumption is not safe in general: a second caller, or a re-served
+previous plan after an infeasible solve, breaks it silently.
+
+The target is **request-bound results**: a solve that returns its own plan in its own
+response, or a plan store keyed by a run id that the response names. `dry_run` already
+returns the plan in the response for the non-persisting case; a run id on the persisting case
+would close the gap for live solves. Until one of those exists, the sidecar uses an interim
+guard: it adopts a plan only if `status` is `ok`, the schema version is known, and
+`generated_at` is strictly newer than the last adopted plan's. The guard rejects a re-served
+plan; it cannot tell two fresh plans from two callers apart, so the documented operating rule
+remains one caller per instance.
 
 ## The sidecar (external, not an EMHASS change)
 
@@ -99,12 +248,13 @@ Described here so the architecture is legible, but it is not part of the EMHASS 
 
 - **Consumer API.** `register` / `refresh` / `withdraw` / `list` for demands. A required
   `expires_at` plus idempotent refresh means a consumer that dies just ages out, with no
-  orphaned demand wedged in the plan. This API is internal to the sidecar; it never reaches
-  EMHASS.
+  orphaned demand wedged in the plan. Refresh never shortens a demand and never revives an
+  expired one. This API is internal to the sidecar; it never reaches EMHASS.
 - **Persistence.** The registry as JSON (no pickle), single-writer with atomic temp-file +
-  rename.
+  rename; the adopted plan and its demand-to-slot mapping persisted the same way.
 - **Aggregation.** Each cycle, fold the active demands into a standard deferrable-load
-  runtime-params payload for EMHASS.
+  runtime-params payload for EMHASS, aligned to the core's own timestep grid, with the
+  reduction reasons from acceptance criterion 5 recorded per demand.
 - **Recurrence.** A recurrence rule per registration for standing/seasonal loads (a pool pump
   whose hours shift monthly), rather than materialized instances.
 
@@ -119,11 +269,13 @@ the surface:
 
 - **EMHASS-core side: near-zero new surface.** The only addition is `GET /api/v1/plan`. It is
   read-only, takes no input, persists nothing, and returns the same data EMHASS already
-  publishes to HA. The injection-risk surface is unchanged from today.
+  publishes to HA. The injection-risk surface is unchanged from today. `dry_run`, when it
+  lands, removes writes rather than adding them.
 - **Sidecar side: owns the persistence risk, out of core.** JSON-only (no pickle, no
   deserialization of code), validated on load with hand-rolled checks, writes confined to the
   sidecar's own data directory, ids never used to build filesystem paths, single-writer atomic
-  write. A bad demand persists only until its `expires_at`. None of this touches EMHASS.
+  write, non-finite and out-of-range numbers rejected before persistence. A bad demand
+  persists only until its `expires_at`. None of this touches EMHASS.
 
 The pivot's headline security effect: the new EMHASS attack surface drops from "stateful
 persistence with a widened blast radius" to one read-only GET.
@@ -137,38 +289,61 @@ persistence with a widened blast radius" to one read-only GET.
 
 ## Roadmap and sequencing (coordination synthesis N1–N7)
 
-This RFC delivers **N1** only. The rest is sequenced, not bundled:
+This RFC delivered **N1**. The rest is sequenced, not bundled:
 
-- **EMHASS-core siblings** (separate RFCs/PRs, later): **N2** EV-as-flexible-load with an SoC
-  accumulator (closes the lossy EV→deferrable mapping; **L**; independent of multi-battery);
-  **load-priority MILP** (EMHASS has no inter-load ranking today; its own sibling RFC); **N5**
-  soft-constraint / never-infeasible behavior for drop-in fidelity.
-- **Sidecar features** (not EMHASS RFCs): template store, MQTT intake, recurrence/seasonal
-  enablement, the register/refresh/withdraw API, persistence.
-- **Minimal first slice:** the `GET /api/v1/plan` PR. It is independently useful (machine-
-  readable plan for any consumer, including the LLM-ready goal) regardless of the sidecar.
+- **EMHASS-core siblings** (separate RFCs/PRs, later): **N2** EV with a state of charge.
+  The June text called N2 "independent of multi-battery"; that was true of the deferrable-
+  load-plus-accumulator route (synthesis b-i) and is no longer the route of record. Since
+  then LesIT1's multi-battery programme (#610) shipped phase 1 (N stationary batteries,
+  #1032, in 0.18.0), has phase 3 (per-inverter modelling, #1150) in design, and names
+  phase 2, an intermittently connected battery with SOC re-anchoring on reconnection and a
+  per-battery SOC target at departure, as the home of V2G and the EV. N2 therefore becomes
+  the EV **requirements** input to phase 2, written now from the evcc side in
+  `docs/ev-requirements.md`, rather than a competing core model. Until phase 2 exists, the
+  sidecar maps an EV to a windowed deferrable load, charge-only, and says so in the
+  per-demand reasons. The **load-priority MILP** (EMHASS has no inter-load ranking today)
+  and **N5** soft-constraint / never-infeasible behaviour remain their own sibling items.
+- **Core primitives this RFC consumes:** `dry_run` (#1158, split requested), and a run id or
+  request-bound plan for live solves (see "Binding a result").
+- **Sidecar features** (not EMHASS RFCs): context entries as a second registration type,
+  what-if queries over `dry_run`, template store, MQTT intake, recurrence/seasonal
+  enablement, per-source identity, persistence. The shadow run against LesIT1's setup gates
+  the move from demands to context.
+- **Minimal first slice:** delivered (`GET /api/v1/plan`, #995) and consumed by the prototype.
 
 ## Known limitations (interim, with a closure path)
 
 - **EV is modeled as a deferrable load, lossy.** The sidecar maps an EV charge need to a
-  deferrable with an energy target and a window. It cannot express an SoC curve
-  ("40% → 80% by 07:00") until **N2** lands (synthesis F10). Until then the mapping is an
-  approximation, not a permanent ceiling.
+  deferrable with an energy target and a window. It cannot express an SOC curve
+  ("40% → 80% by 07:00"), several availability windows per horizon, or energy used while
+  away (synthesis F10). The closure path is multi-battery phase 2; the requirements are in
+  `docs/ev-requirements.md`. Until then the mapping is an approximation, not a permanent
+  ceiling, and the consumer sees it as such through the reduction reasons.
 - **No user-intent priority.** When not everything fits, conflicts fall to the existing cost
   objective rather than an explicit per-load priority, until the priority sibling lands.
+- **One caller per instance.** Until results are request-bound, a second caller of the same
+  EMHASS instance can make the sidecar adopt a plan it did not ask for. The `generated_at`
+  guard narrows but does not close this.
+- **No what-if without `dry_run`.** A scenario solve against the live instance would replace
+  the live plan; the sidecar does not offer queries until the flag exists upstream.
 
 ## Open questions
 
 - **Sidecar placement.** Standalone companion repo, a small community org, or something EMHASS
   references. This is the maintainer's call to steer; the only hard requirement is that it
   stays separate from and non-binding on EMHASS core.
+- **Run identity on live solves.** Whether the persisting actions should return a run id (or
+  the plan itself) in the response, so that request binding does not depend on `dry_run`.
+  Core question; raised by MMicieli and LesIT1 in #931.
+- **Reason vocabulary.** Whether the per-demand reduction reasons (`truncated`, `clamped`,
+  `timesteps`, `unschedulable`) should align with whatever machine-readable reasons the core
+  adopts under #1185, so a consumer reads one vocabulary end to end.
 - **Recurrence model.** The exact shape of the recurrence rule and seasonal enablement
   (sidecar concern).
-- **Per-source identity.** With multiple sources registering, whether a `source` owns its
-  entries so one can't overwrite another's. Sidecar concern; likely per-source namespacing or
-  a token.
-- **Outcome richness.** How detailed the per-demand result is (a feasibility flag vs
-  deferred/reduced/rejected detail). Sidecar concern.
+- **Per-source identity.** Ownership by `source` name is enforced; whether a token or
+  namespace should back it on an unauthenticated LAN is open. Sidecar concern.
+- **Outcome richness.** How far beyond the reduction reasons the per-demand result should go
+  (deferred, reduced, rejected). Sidecar concern.
 - **MQTT intake.** Whether demands are also submittable over MQTT. A sidecar transport
   feature, not an EMHASS change.
 
