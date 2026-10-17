@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -149,3 +150,83 @@ def test_shell_script_help_runs():
     )
     assert proc.returncode == 0, proc.stderr
     assert "--base" in proc.stdout and "--no-tests" in proc.stdout
+
+
+# -- Codex review 2026-10-17 finding 6: any non-zero exit of the param check is a
+#    FAIL, and "no new parameters" is distinguished from "check failed" -------------
+
+
+def _fake_emhass_checkout(tmp_path: Path, new_param_definitions: str) -> Path:
+    repo = tmp_path / "emhass"
+    repo.mkdir()
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init", "-q", "-b", "master")
+    git("config", "user.email", "ci@example.invalid")
+    git("config", "user.name", "ci")
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "emhass"\n', encoding="utf-8"
+    )
+    (repo / "src" / "emhass" / "static" / "data").mkdir(parents=True)
+    (repo / "src" / "emhass" / "__init__.py").write_text("", encoding="utf-8")
+    pd = repo / "src" / "emhass" / "static" / "data" / "param_definitions.json"
+    pd.write_text(json.dumps(OLD), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "chore: base")
+    git("checkout", "-q", "-b", "fix/thing")
+    pd.write_text(new_param_definitions, encoding="utf-8")
+    return repo
+
+
+def _run_readiness(repo: Path):
+    # a PATH holding only the shell's own tools, git and python: no ruff/uvx
+    # download, no gh, no network
+    dirs = (
+        Path(_bash()).resolve().parent,
+        Path(shutil.which("git")).resolve().parent,
+        Path(sys.executable).resolve().parent,
+    )
+    env = {
+        **{k: v for k, v in os.environ.items() if k.upper() not in ("PATH", "PYTHON")},
+        "PATH": os.pathsep.join(str(d) for d in dirs),
+        "PYTHON": Path(sys.executable).as_posix(),
+    }
+    return subprocess.run(
+        [_bash(), SH.as_posix(), "--no-tests", "--base", "master"],
+        cwd=repo,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+@pytest.mark.skipif(_bash() is None, reason="bash not available")
+def test_unreadable_param_definitions_is_a_fail(tmp_path):
+    proc = _run_readiness(_fake_emhass_checkout(tmp_path, "{not json"))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "[FAIL]" in proc.stdout and "param_definitions.json" in proc.stdout
+    assert "no new" not in proc.stdout.lower()
+
+
+@pytest.mark.skipif(_bash() is None, reason="bash not available")
+def test_added_param_without_companion_files_is_a_fail(tmp_path):
+    new = copy.deepcopy(OLD)
+    new["Battery"]["number_of_batteries"] = {"input": "int", "default_value": 1}
+    proc = _run_readiness(_fake_emhass_checkout(tmp_path, json.dumps(new)))
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "config_defaults.json" in proc.stdout
+    assert "associations.csv" in proc.stdout
+
+
+@pytest.mark.skipif(_bash() is None, reason="bash not available")
+def test_param_change_without_new_keys_is_reported_as_such(tmp_path):
+    new = copy.deepcopy(OLD)
+    new["Battery"]["set_use_battery"]["default_value"] = True
+    proc = _run_readiness(_fake_emhass_checkout(tmp_path, json.dumps(new)))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "no new" in proc.stdout.lower()

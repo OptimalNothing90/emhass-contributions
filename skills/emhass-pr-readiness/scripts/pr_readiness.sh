@@ -85,21 +85,37 @@ PD=src/emhass/static/data/param_definitions.json
 if changed "$PD"; then
   git show "$MERGE_BASE:$PD" >/tmp/pr_pd_old.$$ 2>/dev/null || echo '{}' >/tmp/pr_pd_old.$$
   "$PY" -I "$HERE/check_param_definitions.py" /tmp/pr_pd_old.$$ "$PD"; rc=$?
-  [ $rc -eq 1 ] && fail=1
   rm -f /tmp/pr_pd_old.$$
-  if "$PY" - "$MERGE_BASE" "$PD" <<'EOF'
+  # any non-zero exit is a FAIL: 1 = non-additive change, 2 = unreadable file, anything
+  # else = the check itself broke; none of them may read as "fine"
+  case $rc in
+    0) ;;
+    1) fail=1 ;;
+    *) bad "check_param_definitions.py could not run (exit $rc); fix the file or the environment before trusting this report" ;;
+  esac
+  # 0 = new keys, 1 = no new keys, anything else = comparison failed
+  "$PY" -I - "$MERGE_BASE" "$PD" <<'EOF'
 import json, subprocess, sys
 base, path = sys.argv[1:]
-old = json.loads(subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True, encoding="utf-8").stdout or "{}")
-new = json.load(open(path, encoding="utf-8"))
+try:
+    old = json.loads(subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True, encoding="utf-8").stdout or "{}")
+    new = json.load(open(path, encoding="utf-8"))
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        raise TypeError("param_definitions.json root must be an object")
+except Exception as exc:  # noqa: BLE001 - reported to the shell as exit 2
+    print(f"        (cannot compare param_definitions.json: {exc})")
+    sys.exit(2)
 flat = lambda d: {k for p in d.values() if isinstance(p, dict) for k in p}
 sys.exit(0 if flat(new) - flat(old) else 1)
 EOF
-  then
-    changed src/emhass/data/config_defaults.json || bad "param added but src/emhass/data/config_defaults.json unchanged (four-step workflow, docs/develop.md)"
-    changed src/emhass/data/associations.csv || bad "param added but src/emhass/data/associations.csv unchanged (four-step workflow, docs/develop.md)"
-    changed_match '^tests/' || warn "param added without a test (cache-key coverage: a value change must change the key)"
-  fi
+  case $? in
+    0)
+      changed src/emhass/data/config_defaults.json || bad "param added but src/emhass/data/config_defaults.json unchanged (four-step workflow, docs/develop.md)"
+      changed src/emhass/data/associations.csv || bad "param added but src/emhass/data/associations.csv unchanged (four-step workflow, docs/develop.md)"
+      changed_match '^tests/' || warn "param added without a test (cache-key coverage: a value change must change the key)" ;;
+    1) ok "param_definitions.json changed, no new parameters (companion files not required)" ;;
+    *) bad "could not compare param_definitions.json against $BASE (see above)" ;;
+  esac
 else
   ok "param_definitions.json untouched"
 fi
