@@ -1,0 +1,28 @@
+# CI for the public skill plugin (skills/). Mirrors flexd-tests.yml: the
+# helper scripts are stdlib-only and the suite runs from the repo root with
+# skills/tests as the test path.
+name: skills tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - ".github/workflows/skills-tests.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - ".github/workflows/skills-tests.yml"
+
+jobs:
+  skills-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test deps
+        run: python -m pip install pytest pyyaml
+      - name: Run skills test suite
+        run: python -m pytest skills/tests -q
