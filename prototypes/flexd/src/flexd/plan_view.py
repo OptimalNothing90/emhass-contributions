@@ -143,12 +143,20 @@ class PlanView:
 
     def _record_at(self, now: datetime) -> dict | None:
         current = None
-        for rec in self._records():
+        records = self._records()
+        for rec in records:
             if _parse(rec["timestamp"]) <= now:
                 current = rec
             else:
                 break
         if current is None:
+            # The plan is effective from adoption, not from its first timestamp: with
+            # ts_round nearest EMHASS rounds the start up to half a step ahead, and
+            # serving 0 until then would switch a running load off for up to half a
+            # slot (e2e v0.18.6 observation 3). The first record covers up to one step
+            # before its timestamp; a full step or more early is a real gap.
+            if records and _parse(records[0]["timestamp"]) - now < self._step():
+                return records[0]
             return None
         # a record only covers its own timestep; past plan end -> no coverage
         records = self._records()
@@ -202,9 +210,13 @@ class PlanView:
         nominal = float(entry.get("nominal_power_w") or 0.0)
         step = self._step()
         total_h = 0.0
-        for rec in self._records():
+        for i, rec in enumerate(self._records()):
             ts = _parse(rec["timestamp"])
-            lo, hi = max(ts, since), min(ts + step, until)
+            # the first record is also served up to one step early (_record_at); the
+            # ledger credits what consumers were told, so its coverage starts there too,
+            # but never before the plan was adopted (nothing was served before that)
+            covered_from = max(ts - step, self._adopted_at) if i == 0 else ts
+            lo, hi = max(covered_from, since), min(ts + step, until)
             if hi <= lo:
                 continue
             power = float(rec.get(f"P_deferrable{slot}", 0))

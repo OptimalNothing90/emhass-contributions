@@ -208,3 +208,39 @@ def test_adopt_fsyncs_before_replace(tmp_path, monkeypatch):
     )
     make_view(tmp_path).adopt(PLAN, MAPPING, now=T0)
     assert events == ["fsync", "replace"]
+
+
+# -- e2e v0.18.6 observation 3: a plan whose first record lies ahead (ts_round nearest
+#    rounds the start up to half a step) is effective from adoption, not from its first
+#    timestamp; serving 0 until the boundary would switch a running load off for up to
+#    half a slot. The first record is served up to one step early.
+def test_first_record_served_up_to_one_step_early(tmp_path):
+    v = make_view(tmp_path)
+    early = T0 - timedelta(minutes=14)
+    v.adopt(PLAN, MAPPING, now=early)
+    dv = v.demand_view("dishwasher", now=early)
+    assert dv.setpoint_w == 2000
+    assert dv.on is True
+
+
+def test_first_record_not_served_a_full_step_early(tmp_path):
+    v = make_view(tmp_path)
+    v.adopt(PLAN, MAPPING, now=T0 - timedelta(hours=1))
+    dv = v.demand_view("dishwasher", now=T0 - timedelta(minutes=30))
+    assert dv.setpoint_w == 0
+    assert dv.on is False
+
+
+def test_on_hours_elapsed_credits_the_early_served_first_record(tmp_path):
+    # the consumer ran at 2000 W from 11:46 because that is what it was told; the
+    # standing ledger must see those 14 minutes, like any served setpoint
+    v = make_view(tmp_path)
+    early = T0 - timedelta(minutes=14)
+    v.adopt(PLAN, MAPPING, now=early)
+    assert v.on_hours_elapsed("dishwasher", since=early, until=T0) == pytest.approx(
+        14 / 60
+    )
+    # and the partition still holds: early tail + own slot = 14 min + 30 min
+    assert v.on_hours_elapsed(
+        "dishwasher", since=early, until=T0 + timedelta(hours=1)
+    ) == pytest.approx(44 / 60)

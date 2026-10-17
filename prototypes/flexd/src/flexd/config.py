@@ -147,6 +147,8 @@ class FlexdConfig(BaseModel):
     save_debounce_s: float = Field(default=5.0, ge=0)
     # must equal EMHASS method_ts_round: flexd anchors its timestep grid on the same rule
     ts_round: Literal["nearest", "first", "last"] = "nearest"
+    # the timer cycle fires this many seconds after each grid boundary
+    cycle_offset_s: float = Field(default=5.0, ge=0)
     mqtt: MqttConfig = MqttConfig()
     extra_runtime_params: dict = {}
     standing_demands: list[StandingDefinition] = []
@@ -176,6 +178,7 @@ _ENV_MAP = {
     "FLEXD_MQTT_BASE_TOPIC": ("mqtt", "base_topic"),
     "FLEXD_DEFAULT_TTL_S": ("default_ttl_s",),
     "FLEXD_STALE_AFTER_CYCLES": ("stale_after_cycles",),
+    "FLEXD_CYCLE_OFFSET_S": ("cycle_offset_s",),
 }
 
 

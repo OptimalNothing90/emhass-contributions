@@ -564,3 +564,59 @@ async def test_pending_swept_keeps_only_the_last_1000_ids(registry):
     assert len(delivered[0]) == 1000
     assert delivered[0][-1] == "old"  # newest kept, oldest dropped
     assert delivered[0][0] == "ghost-501"
+
+
+# -- e2e v0.18.6 observation 3: cycles fire just after each grid boundary instead of
+#    drifting by the solve duration, so nearest/first/last all anchor the same step --
+def test_next_cycle_delay_targets_boundary_plus_offset(registry):
+    s = make_scheduler(registry, FakeDriver(result=PLAN), FakeView())
+    assert s.cycle_offset_s == 5.0
+    # mid-slot: wait for 12:30:05
+    assert s.next_cycle_delay(NOW + timedelta(minutes=17)) == 13 * 60 + 5
+    # on the boundary itself: 5 s into the slot
+    assert s.next_cycle_delay(NOW) == 5.0
+    # already past this boundary's offset: the next one
+    assert s.next_cycle_delay(NOW + timedelta(seconds=5)) == 30 * 60
+    assert s.next_cycle_delay(NOW + timedelta(seconds=6)) == 30 * 60 - 1
+
+
+def test_next_cycle_delay_honours_configured_offset_and_step(registry):
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(result=PLAN),
+        view=FakeView(),
+        standing=FakeStanding(),
+        timestep_min=15,
+        horizon_steps=96,
+        extra_runtime_params={},
+        cycle_offset_s=20,
+    )
+    assert s.next_cycle_delay(NOW + timedelta(minutes=7)) == 8 * 60 + 20
+
+
+async def test_run_forever_sleeps_until_the_next_boundary(registry, monkeypatch):
+    import flexd.scheduler as sched_mod
+
+    delays = []
+
+    async def fake_sleep(delay):
+        delays.append(delay)
+        raise asyncio.CancelledError  # one iteration is enough
+
+    monkeypatch.setattr(sched_mod.asyncio, "sleep", fake_sleep)
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(result=PLAN),
+        view=FakeView(),
+        standing=FakeStanding(),
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+        clock=lambda: NOW + timedelta(minutes=17),
+    )
+    try:
+        await s.run_forever()
+    except asyncio.CancelledError:
+        pass
+    assert delays == [13 * 60 + 5]
+    assert s.last_result == "skipped"  # the startup cycle still ran first

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from flexd.aggregator import build_runtimeparams
+from flexd.aggregator import build_runtimeparams, grid_anchor
 from flexd.emhass_driver import PlanRejected
 from flexd.models import utcnow
 from flexd.plan_view import verify_plan_structure
@@ -40,6 +40,7 @@ class Scheduler:
         on_demand_off=None,
         clock=None,
         ts_round: str = "nearest",
+        cycle_offset_s: float = 5.0,
     ):
         self._registry = registry
         self._driver = driver
@@ -59,6 +60,8 @@ class Scheduler:
         self._clock = clock or utcnow
         self._clock_injected = clock is not None
         self._ts_round = ts_round  # grid anchor rule, must equal EMHASS method_ts_round
+        # run_forever fires this many seconds after each grid boundary
+        self.cycle_offset_s = float(cycle_offset_s)
         self.debounce_s = 10.0
         self._debounce_task: asyncio.Task | None = None
         self._debounce_sleeping = False
@@ -238,14 +241,28 @@ class Scheduler:
         except Exception:
             log.exception("debounced cycle failed")
 
+    def next_cycle_delay(self, now: datetime) -> float:
+        """Seconds until the next grid boundary plus cycle_offset_s.
+
+        Cycles fire just after each boundary instead of every `timestep` seconds
+        after the previous run, so the cadence does not drift by the solve duration
+        and nearest/first/last all resolve to the same anchor at cycle time (e2e
+        v0.18.6 observation 3). The boundary whose offset has already passed is
+        skipped in favour of the next one.
+        """
+        step = timedelta(minutes=self._timestep_min)
+        target = grid_anchor(now, self._timestep_min, "last") + timedelta(
+            seconds=self.cycle_offset_s
+        )
+        if target <= now:
+            target += step
+        return (target - now).total_seconds()
+
     async def run_forever(self) -> None:
         self.bind_loop(asyncio.get_running_loop())
-        interval = self._timestep_min * 60
         while True:
             try:
                 await self.run_once()
             except Exception:
                 log.exception("cycle crashed; continuing")
-            # sleep AFTER work: cadence drifts by solve duration — accepted for MVP
-            # (payload is rebuilt from now each cycle)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(self.next_cycle_delay(self._clock()))

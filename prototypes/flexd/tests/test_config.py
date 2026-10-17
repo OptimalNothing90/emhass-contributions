@@ -163,3 +163,15 @@ def test_max_demands_and_save_debounce_defaults_and_validation(tmp_path):
     p.write_text(YAML + "max_demands: 0\n", encoding="utf-8")
     with pytest.raises(ValidationError):
         load_config(p)
+
+
+def test_cycle_offset_default_and_env(tmp_path, monkeypatch):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    assert load_config(p).cycle_offset_s == 5.0
+    monkeypatch.setenv("FLEXD_CYCLE_OFFSET_S", "12.5")
+    assert load_config(p).cycle_offset_s == 12.5
+    p.write_text(YAML + "cycle_offset_s: -1\n", encoding="utf-8")
+    monkeypatch.delenv("FLEXD_CYCLE_OFFSET_S")
+    with pytest.raises(ValidationError):
+        load_config(p)
