@@ -145,7 +145,7 @@ def test_micro_demand_never_rounds_to_zero():
     )
     payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     # non-modulating: at least one whole slot, never zero (silent vanish)
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [1]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
     assert payload["operating_hours_of_each_deferrable_load"] == [0.5]
 
 
@@ -171,7 +171,7 @@ def test_truncated_hours_never_exceed_capacity_odd_timestep():
         [d], now=NOW, extra={}, timestep_min=10, horizon_steps=48
     )
     # one full ten-minute slot: capacity is 1 step, never more than the window
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [1]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
     assert payload["operating_hours_of_each_deferrable_load"] == [
         pytest.approx(10 / 60)
     ]
@@ -195,8 +195,10 @@ def test_non_modulating_load_emits_whole_timesteps_and_semi_cont():
     )
     payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["treat_deferrable_load_as_semi_cont"] == [True]
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [2]
-    assert payload["operating_hours_of_each_deferrable_load"] == [1.0]  # 2 x 30 min
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
+    assert payload["operating_hours_of_each_deferrable_load"] == [
+        1.0
+    ]  # 2 x 30 min, whole slots
     assert mapping["dishwasher"]["modulating"] is False
     assert mapping["dishwasher"]["timesteps"] == 2
 
@@ -210,9 +212,9 @@ def test_modulating_load_keeps_fractional_hours_and_continuous():
     )
     payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["treat_deferrable_load_as_semi_cont"] == [False]
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [
-        0
-    ]  # 0 = use hours
+    assert (
+        "operating_timesteps_of_each_deferrable_load" not in payload
+    )  # upstream zeroes hours when present
     assert payload["operating_hours_of_each_deferrable_load"] == [0.6]
     assert mapping["dishwasher"]["modulating"] is True
     assert mapping["dishwasher"]["timesteps"] == 0
@@ -227,7 +229,8 @@ def test_timesteps_capped_to_window():
         expires_at=NOW + timedelta(hours=3),
     )
     payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [4]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
+    assert payload["operating_hours_of_each_deferrable_load"] == [2.0]  # 4 whole slots
     assert mapping["dishwasher"]["truncated"] is True
 
 
@@ -238,7 +241,7 @@ def test_unschedulable_load_emits_zero_timesteps_and_hours():
         expires_at=NOW + timedelta(hours=1),
     )
     payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [0]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
     assert payload["operating_hours_of_each_deferrable_load"] == [0.0]
     assert mapping["dishwasher"]["unschedulable"] is True
 
@@ -256,7 +259,10 @@ def test_extra_cannot_override_semi_cont_or_timesteps():
     }
     payload, _ = build_runtimeparams([d], now=NOW, extra=extra, **CFG)
     assert payload["treat_deferrable_load_as_semi_cont"] == [True]
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [2]
+    assert (
+        "operating_timesteps_of_each_deferrable_load" not in payload
+    )  # blocked, not forwarded
+    assert payload["operating_hours_of_each_deferrable_load"] == [1.0]
     assert "treat_def_as_semi_cont" not in payload
 
 
@@ -278,7 +284,7 @@ def test_mixed_loads_emit_consistent_per_load_arrays():
     )
     payload, mapping = build_runtimeparams([a, b], now=NOW, extra={}, **CFG)
     assert payload["treat_deferrable_load_as_semi_cont"] == [True, False]
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [2, 0]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
     assert payload["operating_hours_of_each_deferrable_load"] == [1.0, 0.6]
     assert all(
         len(payload[k]) == 2
@@ -301,7 +307,8 @@ def test_subnormal_power_does_not_crash_aggregation():
         expires_at=NOW + timedelta(hours=3),
     )
     payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [4]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
+    assert payload["operating_hours_of_each_deferrable_load"] == [2.0]  # 4 whole slots
     assert mapping["dishwasher"]["truncated"] is True
 
 
@@ -343,7 +350,7 @@ def test_deadline_just_past_a_boundary_never_overshoots():
         )
         end = payload["end_timesteps_of_each_deferrable_load"][0]
         assert NOW + timedelta(minutes=anchor_min + 30 * end) <= d.deadline
-        assert payload["operating_timesteps_of_each_deferrable_load"][0] <= end
+        assert payload["operating_hours_of_each_deferrable_load"][0] / 0.5 <= end
 
 
 def test_future_window_start_is_anchored():
@@ -368,7 +375,8 @@ def test_deadline_inside_first_timestep_plans_one_slot_now():
     assert mapping["dishwasher"]["unschedulable"] is False
     assert payload["end_timesteps_of_each_deferrable_load"] == [1]
     assert payload["start_timesteps_of_each_deferrable_load"] == [0]
-    assert payload["operating_timesteps_of_each_deferrable_load"] == [1]
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
+    assert payload["operating_hours_of_each_deferrable_load"] == [0.5]
 
 
 def test_deadline_at_or_before_anchor_stays_unschedulable():
@@ -376,3 +384,40 @@ def test_deadline_at_or_before_anchor_stays_unschedulable():
         d = make_demand(deadline=deadline, expires_at=NOW + timedelta(hours=1))
         _, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
         assert mapping["dishwasher"]["unschedulable"] is True
+
+
+def test_payload_never_carries_operating_timesteps_mixed_loads():
+    """EMHASS v0.18.6 zeroes operating_hours for EVERY load as soon as
+    operating_timesteps_of_each_deferrable_load is present (optimization.py, the
+    "Pad deferrable load lists" block), so a modulating load's fractional hours would
+    be lost. Hours carry both contracts; non-modulating hours are whole slots."""
+    a = make_demand(
+        id="dishwasher",
+        energy_target_wh=1200,
+        nominal_power_w=2000,
+        deadline=NOW + timedelta(hours=4),
+        window_start=None,
+        expires_at=NOW + timedelta(hours=5),
+    )
+    b = make_demand(
+        id="heatpump",
+        modulating=True,
+        energy_target_wh=1800,
+        nominal_power_w=3000,
+        deadline=NOW + timedelta(hours=4),
+        window_start=None,
+        expires_at=NOW + timedelta(hours=5),
+    )
+    payload, mapping = build_runtimeparams([a, b], now=NOW, extra={}, **CFG)
+    assert "operating_timesteps_of_each_deferrable_load" not in payload
+    assert payload["operating_hours_of_each_deferrable_load"] == [1.0, 0.6]
+    step_h = CFG["timestep_min"] / 60
+    for hours, semi in zip(
+        payload["operating_hours_of_each_deferrable_load"],
+        payload["treat_deferrable_load_as_semi_cont"],
+        strict=True,
+    ):
+        if semi:
+            assert hours / step_h == int(hours / step_h)  # whole slots
+    assert mapping["dishwasher"]["timesteps"] == 2  # read-back still knows the slots
+    assert mapping["heatpump"]["timesteps"] == 0

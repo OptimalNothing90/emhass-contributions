@@ -9,8 +9,17 @@ Deliberately-unmapped Demand fields (not expressible in the MVP
 runtimeparams mapping): interruptible, priority, p_min_w, flexibility.
 Phase-2 candidates: p_min_w -> min_power_of_deferrable_loads,
 interruptible=False -> set_deferrable_load_single_constant.
-modulating -> treat_deferrable_load_as_semi_cont (inverted) +
-operating_timesteps for non-modulating loads.
+modulating -> treat_deferrable_load_as_semi_cont (inverted).
+
+Energy is always expressed as operating_hours_of_each_deferrable_load.
+operating_timesteps_of_each_deferrable_load is NEVER sent: EMHASS v0.18.6
+(optimization.py, "Pad deferrable load lists") zeroes the hours of EVERY
+load as soon as that key is present, so a mixed payload would strip a
+modulating load of its fractional-hour energy (e2e against v0.18.6,
+2026-10-17). Non-modulating loads get hours that are whole multiples of the
+step, which with treat_deferrable_load_as_semi_cont=True is exactly the
+whole-slot energy EMHASS can satisfy. The key stays in
+FLEXD_CANONICAL_KEYS so extra_runtime_params cannot smuggle it in.
 
 Note: extra values are passed by reference into the payload; callers must
 not mutate the returned payload.
@@ -109,15 +118,7 @@ def build_runtimeparams(
         return math.ceil((dt - anchor).total_seconds() / 60 / timestep_min)
 
     mapping: dict = {}
-    nominal, op_hours, op_steps, semi_cont, starts, ends, currents = (
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-        [],
-    )
+    nominal, op_hours, semi_cont, starts, ends, currents = ([], [], [], [], [], [])
     for slot, d in enumerate(ordered):
         # END uses floor: never run past the deadline (ceil overshot by up to
         # one step). START keeps ceil (to_step): never start before window_start.
@@ -146,7 +147,7 @@ def build_runtimeparams(
             wanted_h = d.energy_target_wh / d.nominal_power_w  # inf for subnormal power
             truncated = wanted_h > capacity_h
             if d.modulating:
-                # continuous power: fractional hours are reachable; timesteps 0 = "use hours"
+                # continuous power: fractional hours are reachable
                 if not math.isfinite(wanted_h):
                     hours = math.floor(capacity_h * 100) / 100
                 else:
@@ -158,8 +159,10 @@ def build_runtimeparams(
                 steps = 0
             else:
                 # semi-continuous: energy is only reachable in whole slots at nominal power.
-                # Round UP (over-deliver by < 1 slot), cap to the window. Guard the quotient:
-                # a subnormal nominal_power_w makes wanted_h inf (plan review finding 4).
+                # Round UP (over-deliver by < 1 slot), cap to the window, express the
+                # result as hours (steps * step_h); the module docstring says why the
+                # timesteps key is never sent. Guard the quotient: a subnormal
+                # nominal_power_w makes wanted_h inf (plan review finding 4).
                 if not math.isfinite(wanted_h) or wanted_h / step_h >= capacity_steps:
                     steps = capacity_steps
                 else:
@@ -167,7 +170,6 @@ def build_runtimeparams(
                 hours = steps * step_h
         nominal.append(d.nominal_power_w)
         op_hours.append(hours)
-        op_steps.append(steps)
         semi_cont.append(not d.modulating)
         starts.append(start_step)
         ends.append(end_step)
@@ -182,6 +184,8 @@ def build_runtimeparams(
             # read-back accrual scales P_deferrable by this (nominal-equivalent hours)
             "nominal_power_w": d.nominal_power_w,
             "modulating": d.modulating,
+            # whole slots planned for a non-modulating load (0 for modulating ones);
+            # read-back only, not sent to EMHASS
             "timesteps": steps,
             "anchor": anchor.isoformat(),
         }
@@ -191,7 +195,6 @@ def build_runtimeparams(
             "number_of_deferrable_loads": len(ordered),
             "nominal_power_of_deferrable_loads": nominal,
             "operating_hours_of_each_deferrable_load": op_hours,
-            "operating_timesteps_of_each_deferrable_load": op_steps,
             "treat_deferrable_load_as_semi_cont": semi_cont,
             "start_timesteps_of_each_deferrable_load": starts,
             "end_timesteps_of_each_deferrable_load": ends,
