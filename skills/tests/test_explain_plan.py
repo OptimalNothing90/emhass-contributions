@@ -399,3 +399,33 @@ def test_constant_nominal_load_still_counts_slots(explain_plan_mod):
     ).deferrables[0]
     assert d.expected_steps == 4
     assert any("config asks for 4" in n for n in d.notes)
+
+
+# -- Codex review 2026-10-17 finding 9: malformed records are CLI errors ----------------
+
+
+def test_null_record_is_rejected_at_the_boundary(explain_plan_mod):
+    with pytest.raises((TypeError, ValueError)):
+        explain_plan_mod.load_plan({"plan": [None]})
+
+
+def test_non_object_record_is_rejected_at_the_boundary(explain_plan_mod):
+    with pytest.raises((TypeError, ValueError)):
+        explain_plan_mod.load_plan([{"timestamp": "2026-10-17T00:00:00Z"}, 42])
+
+
+def test_cli_null_record_exits_two_without_traceback(tmp_path):
+    p = tmp_path / "plan.json"
+    p.write_text(json.dumps({"plan": [None]}), encoding="utf-8")
+    proc = _run_cli(p)
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ERROR" in proc.stdout
+    assert "Traceback" not in proc.stderr
+
+
+def test_cli_scalar_root_exits_two(tmp_path):
+    p = tmp_path / "plan.json"
+    p.write_text("42", encoding="utf-8")
+    proc = _run_cli(p)
+    assert proc.returncode == 2
+    assert "Traceback" not in proc.stderr

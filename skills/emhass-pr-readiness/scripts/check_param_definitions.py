@@ -87,6 +87,13 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"[FAIL]  cannot read param_definitions.json: {exc}")
         return 2
+    for label, doc in (("old", old), ("new", new)):
+        if not isinstance(doc, dict):
+            print(
+                f"[FAIL]  {label} param_definitions.json root is "
+                f"{type(doc).__name__}, expected an object of sections"
+            )
+            return 2
     lines, failed = compare(old, new)
     print("\n".join(lines))
     return 1 if failed else 0

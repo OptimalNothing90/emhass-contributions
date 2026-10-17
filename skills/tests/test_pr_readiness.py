@@ -230,3 +230,22 @@ def test_param_change_without_new_keys_is_reported_as_such(tmp_path):
     proc = _run_readiness(_fake_emhass_checkout(tmp_path, json.dumps(new)))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "no new" in proc.stdout.lower()
+
+
+# -- Codex review 2026-10-17 finding 9: a non-object root is an input error -------------
+
+
+def test_non_object_root_exits_two_with_a_message(tmp_path):
+    a = tmp_path / "old.json"
+    b = tmp_path / "new.json"
+    a.write_text(json.dumps(OLD), encoding="utf-8")
+    b.write_text("[]", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, "-I", str(CHECK), str(a), str(b)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "object" in proc.stdout.lower()
+    assert "Traceback" not in proc.stderr

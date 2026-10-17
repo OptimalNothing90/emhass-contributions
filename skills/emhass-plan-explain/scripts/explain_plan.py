@@ -122,16 +122,27 @@ def load_plan(obj) -> Plan:
     if isinstance(obj, (str, Path)):
         obj = json.loads(_read_source(str(obj)))
     if isinstance(obj, list):
-        return Plan(records=obj)
+        return Plan(records=_records(obj))
     if isinstance(obj, dict):
         records = obj.get("plan")
         return Plan(
-            records=list(records) if isinstance(records, list) else [],
+            records=_records(records) if isinstance(records, list) else [],
             status=obj.get("status"),
             generated_at=obj.get("generated_at"),
             schema_version=obj.get("emhass_schema_version"),
         )
     raise TypeError("plan must be a JSON object or list")
+
+
+def _records(items: list) -> list[dict]:
+    """Every plan record must be an object; a null or scalar entry is an input
+    error here, not a traceback in the analysis."""
+    for i, rec in enumerate(items):
+        if not isinstance(rec, dict):
+            raise TypeError(
+                f"plan record {i} is {type(rec).__name__}, expected a JSON object"
+            )
+    return list(items)
 
 
 def load_json(source: str) -> dict:
