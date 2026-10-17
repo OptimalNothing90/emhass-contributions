@@ -51,16 +51,14 @@ def _lean_errors(errors: list[dict]) -> list[dict]:
     """Keep loc/msg/type only. FastAPI's stock body echoes `input` and `ctx`; the
     input may be non-finite (not JSON serialisable, #1 HIGH 3) or carry request
     content that has no business in an error response or in downstream logs."""
-    lean = []
-    for err in errors:
-        lean.append(
-            {
-                "loc": list(err.get("loc", ())),
-                "msg": str(err.get("msg", "")),
-                "type": str(err.get("type", "")),
-            }
-        )
-    return lean
+    return [
+        {
+            "loc": list(err.get("loc", ())),
+            "msg": str(err.get("msg", "")),
+            "type": str(err.get("type", "")),
+        }
+        for err in errors
+    ]
 
 
 def create_app(

@@ -94,8 +94,8 @@ def build_runtimeparams(
     """Returns (payload, mapping).
 
     mapping: demand id -> {slot, clamped, truncated, unschedulable, nominal_power_w,
-    modulating, timesteps, anchor, revision}. `anchor` is the ISO instant of step 0
-    (the same for every demand) so a plan can be checked against absolute times.
+    anchor, revision}. `anchor` is the ISO instant of step 0 (the same for every
+    demand) so a plan can be checked against absolute times.
     """
     ordered = sorted(demands, key=lambda d: d.id)
     payload: dict = {}
@@ -135,10 +135,10 @@ def build_runtimeparams(
         unschedulable = end_step <= start_step
         truncated = False
         if unschedulable:
-            # deadline expired or window degenerate: hours 0 and timesteps 0 deactivate the
-            # load upstream (no energy constraint, power pinned to zero); slot numbering
+            # deadline expired or window degenerate: hours 0 deactivates the load
+            # upstream (no energy constraint, power pinned to zero); slot numbering
             # stays stable.
-            hours, steps = 0.0, 0
+            hours = 0.0
         else:
             capacity_steps = end_step - start_step
             capacity_h = capacity_steps * step_h
@@ -154,7 +154,6 @@ def build_runtimeparams(
                     hours = min(round(wanted_h, 2), math.floor(capacity_h * 100) / 100)
                 if hours < 0.01:
                     hours = 0.01  # never round a real demand to zero (silent vanish)
-                steps = 0
             else:
                 # semi-continuous: energy is only reachable in whole slots at nominal power.
                 # Round UP (over-deliver by < 1 slot), cap to the window, express the
@@ -181,10 +180,6 @@ def build_runtimeparams(
             "unschedulable": unschedulable,
             # read-back accrual scales P_deferrable by this (nominal-equivalent hours)
             "nominal_power_w": d.nominal_power_w,
-            "modulating": d.modulating,
-            # whole slots planned for a non-modulating load (0 for modulating ones);
-            # read-back only, not sent to EMHASS
-            "timesteps": steps,
             "anchor": anchor.isoformat(),
             # the registry run this slot was solved for: a demand whose revision is
             # newer is a different run (deleted and registered again during the

@@ -58,25 +58,16 @@ def test_defaults_with_pv_and_battery_enabled_produce_no_errors(
 # ------------------------------------------------------------ unknown keys
 
 
-def test_unknown_key_is_reported(validate_config_mod, config_defaults, schema_dir):
+def test_unknown_key_is_a_warn_with_the_closest_known_name(
+    validate_config_mod, config_defaults, schema_dir
+):
     cfg = copy.deepcopy(config_defaults)
     cfg["numbr_of_deferrable_loads"] = 2
     findings = _findings(validate_config_mod, cfg, schema_dir=schema_dir)
     hits = _by_key(findings, "numbr_of_deferrable_loads")
     assert hits and hits[0].severity == "WARN"
     assert "unknown" in hits[0].message.lower()
-
-
-def test_unknown_key_suggests_close_match(
-    validate_config_mod, config_defaults, schema_dir
-):
-    cfg = copy.deepcopy(config_defaults)
-    cfg["numbr_of_deferrable_loads"] = 2
-    findings = _findings(validate_config_mod, cfg, schema_dir=schema_dir)
-    assert (
-        "number_of_deferrable_loads"
-        in _by_key(findings, "numbr_of_deferrable_loads")[0].message
-    )
+    assert "number_of_deferrable_loads" in hits[0].message
 
 
 def test_legacy_parameter_name_is_flagged_with_new_name(

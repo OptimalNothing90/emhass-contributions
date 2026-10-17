@@ -451,7 +451,8 @@ def _kwh(v: float) -> str:
 def _steps_to_hours(steps: list[int], step_minutes) -> str:
     if not steps:
         return "none"
-    runs = _runs([i in set(steps) for i in range(max(steps) + 1)])
+    on = set(steps)
+    runs = _runs([i in on for i in range(max(on) + 1)])
     parts = [f"{a}" if a == b else f"{a}-{b}" for a, b in runs]
     hours = f" ({len(steps) * step_minutes / 60:g} h)" if step_minutes else ""
     return "steps " + ", ".join(parts) + hours

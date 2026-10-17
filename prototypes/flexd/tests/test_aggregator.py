@@ -32,8 +32,6 @@ def test_single_demand_payload():
             "truncated": False,
             "unschedulable": False,
             "nominal_power_w": 2000,
-            "modulating": False,
-            "timesteps": 2,
             "anchor": NOW.isoformat(),
             # the registry run this slot was solved for: a newer revision is pending
             "revision": d.revision,
@@ -195,14 +193,12 @@ def test_non_modulating_load_emits_whole_timesteps_and_semi_cont():
         window_start=None,
         expires_at=NOW + timedelta(hours=5),
     )
-    payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["treat_deferrable_load_as_semi_cont"] == [True]
     assert "operating_timesteps_of_each_deferrable_load" not in payload
     assert payload["operating_hours_of_each_deferrable_load"] == [
         1.0
     ]  # 2 x 30 min, whole slots
-    assert mapping["dishwasher"]["modulating"] is False
-    assert mapping["dishwasher"]["timesteps"] == 2
 
 
 def test_modulating_load_keeps_fractional_hours_and_continuous():
@@ -212,14 +208,12 @@ def test_modulating_load_keeps_fractional_hours_and_continuous():
         window_start=None,
         expires_at=NOW + timedelta(hours=5),
     )
-    payload, mapping = build_runtimeparams([d], now=NOW, extra={}, **CFG)
+    payload, _ = build_runtimeparams([d], now=NOW, extra={}, **CFG)
     assert payload["treat_deferrable_load_as_semi_cont"] == [False]
     assert (
         "operating_timesteps_of_each_deferrable_load" not in payload
     )  # upstream zeroes hours when present
     assert payload["operating_hours_of_each_deferrable_load"] == [0.6]
-    assert mapping["dishwasher"]["modulating"] is True
-    assert mapping["dishwasher"]["timesteps"] == 0
 
 
 def test_timesteps_capped_to_window():
@@ -410,7 +404,7 @@ def test_payload_never_carries_operating_timesteps_mixed_loads():
         window_start=None,
         expires_at=NOW + timedelta(hours=5),
     )
-    payload, mapping = build_runtimeparams([a, b], now=NOW, extra={}, **CFG)
+    payload, _ = build_runtimeparams([a, b], now=NOW, extra={}, **CFG)
     assert "operating_timesteps_of_each_deferrable_load" not in payload
     assert payload["operating_hours_of_each_deferrable_load"] == [1.0, 0.6]
     step_h = CFG["timestep_min"] / 60
@@ -421,5 +415,3 @@ def test_payload_never_carries_operating_timesteps_mixed_loads():
     ):
         if semi:
             assert hours / step_h == int(hours / step_h)  # whole slots
-    assert mapping["dishwasher"]["timesteps"] == 2  # read-back still knows the slots
-    assert mapping["heatpump"]["timesteps"] == 0

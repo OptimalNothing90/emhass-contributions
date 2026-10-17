@@ -82,7 +82,7 @@ def test_same_now_does_not_double_accrue(tmp_path):
 def test_correction_rebases_target(tmp_path):
     reg, mgr = mk(tmp_path)
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 2.0)
-    mgr.correct("waterheater", remaining_hours=1.0, now=NOON_UTC)
+    mgr.correct("waterheater", remaining_wh=3000, now=NOON_UTC)
     # override = 1 + elapsed_h(2) = 3h day target; remaining = 3 - 2 = 1h
     mgr.materialize(
         now=NOON_UTC, elapsed_lookup=lambda i, s, u: 99.0
@@ -94,9 +94,7 @@ def test_correct_to_zero_removes_demand(tmp_path):
     reg, mgr = mk(tmp_path)
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg.get("waterheater") is not None
-    mgr.correct(
-        "waterheater", remaining_hours=0.0, now=NOON_UTC
-    )  # "nothing left today"
+    mgr.correct("waterheater", remaining_wh=0, now=NOON_UTC)  # "nothing left today"
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg.get("waterheater") is None  # override 0.0 must not be discarded as falsy
 
@@ -211,7 +209,7 @@ def test_past_day_ledger_keys_pruned(tmp_path):
 def test_unknown_id_correct_raises(tmp_path):
     reg, mgr = mk(tmp_path)
     with pytest.raises(KeyError):
-        mgr.correct("not-a-standing-id", remaining_hours=1.0, now=NOON_UTC)
+        mgr.correct("not-a-standing-id", remaining_wh=3000, now=NOON_UTC)
     with pytest.raises(KeyError):
         mgr.mark_done("not-a-standing-id", now=NOON_UTC)
 
@@ -344,7 +342,7 @@ def test_torn_ledger_falls_back_to_bak(tmp_path):
     reg, mgr = mk(tmp_path)
     mgr.mark_done("waterheater", now=NOON_UTC)  # first save
     mgr.correct(
-        "waterheater", remaining_hours=1.0, now=NOON_UTC
+        "waterheater", remaining_wh=3000, now=NOON_UTC
     )  # rotates done into .bak
     assert (tmp_path / "ledger.json.bak").exists()
     (tmp_path / "ledger.json").write_text(
@@ -361,7 +359,7 @@ def test_torn_ledger_falls_back_to_bak(tmp_path):
 def test_ledger_that_is_not_an_object_falls_back_to_bak(tmp_path):
     reg, mgr = mk(tmp_path)
     mgr.mark_done("waterheater", now=NOON_UTC)
-    mgr.correct("waterheater", remaining_hours=1.0, now=NOON_UTC)
+    mgr.correct("waterheater", remaining_wh=3000, now=NOON_UTC)
     (tmp_path / "ledger.json").write_text("[1, 2, 3]", encoding="utf-8")
     reg2 = Registry(tmp_path / "demands.json")
     mgr2 = StandingManager(
@@ -392,7 +390,7 @@ def test_correct_waits_for_materialize_to_finish(tmp_path):
     t_cor = threading.Thread(
         target=mgr.correct,
         args=("waterheater",),
-        kwargs=dict(remaining_hours=1.0, now=NOON_UTC),
+        kwargs=dict(remaining_wh=3000, now=NOON_UTC),
     )
     t_cor.start()
     t_cor.join(timeout=0.3)
@@ -414,7 +412,7 @@ def test_concurrent_ledger_writers_no_corruption(tmp_path):
     def worker():
         try:
             for k in range(30):
-                mgr.correct("waterheater", remaining_hours=float(k), now=NOON_UTC)
+                mgr.correct("waterheater", remaining_wh=float(k) * 3000, now=NOON_UTC)
                 mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
         except Exception as exc:  # noqa: BLE001 — any exception is the failure signal
             errors.append(exc)
@@ -482,6 +480,6 @@ def test_correction_with_matching_power_logs_no_warning(tmp_path, caplog):
     assert [r for r in caplog.records if "correction" in r.message] == []
 
 
-def test_correction_in_hours_still_accepted(tmp_path):
+def test_correction_returns_hours_at_the_definition_power(tmp_path):
     _, mgr = mk(tmp_path)
-    assert mgr.correct("waterheater", remaining_hours=1.5, now=NOON_UTC) == 1.5
+    assert mgr.correct("waterheater", remaining_wh=4500, now=NOON_UTC) == 1.5
