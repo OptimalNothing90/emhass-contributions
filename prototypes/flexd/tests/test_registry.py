@@ -346,3 +346,30 @@ def test_register_after_delete_gets_the_new_created_at(registry):
     registry.delete("dishwasher", source="loxone")
     saved = registry.upsert(make_demand(created_at=first + timedelta(hours=1)))
     assert saved.created_at == first + timedelta(hours=1)  # a new demand
+
+
+# -- #1 Lows: an expired-but-unswept id blocked another source for up to one cycle ---
+def test_expired_unswept_demand_does_not_block_another_source(registry):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    registry.upsert(
+        make_demand(
+            source="loxone",
+            created_at=now - timedelta(hours=2),
+            deadline=now - timedelta(hours=1),
+            expires_at=now - timedelta(seconds=1),  # expired, sweep has not run yet
+        )
+    )
+    saved = registry.upsert(make_demand(source="ha", created_at=now))
+    assert saved.source == "ha"
+    assert registry.get("dishwasher").source == "ha"
+    assert saved.created_at == now  # a new registration, not a re-declaration
+
+
+def test_live_demand_still_blocks_another_source(registry):
+    from flexd.registry import OwnershipError
+
+    registry.upsert(make_demand(source="loxone"))
+    with pytest.raises(OwnershipError):
+        registry.upsert(make_demand(source="ha"))

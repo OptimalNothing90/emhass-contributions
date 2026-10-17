@@ -158,16 +158,24 @@ class Registry:
         return existing
 
     # -- API ----------------------------------------------------------------
-    def upsert(self, demand: Demand) -> Demand:
+    def upsert(self, demand: Demand, now: datetime | None = None) -> Demand:
+        """Register or re-declare. `now` is injectable like refresh/list_active/sweep:
+        expiry of the existing entry is judged against it, so pinned-time callers
+        (materialize, templates) never see wall-clock expiry."""
         with self._lock:
             demand = demand.model_copy()
+            now = now or utcnow()
             existing = self._demands.get(demand.id)
+            if existing is not None and existing.expires_at <= now:
+                # expired but not swept yet: gone as far as the API is concerned (same
+                # rule as refresh). It owns nothing and is not the same run, so another
+                # source may take the id now instead of after the next sweep (#1 Lows).
+                existing = None
             if existing is not None and existing.source != demand.source:
                 raise OwnershipError(
                     f"{demand.id} is owned by {existing.source!r}, not {demand.source!r}"
                 )
             if existing is None:
-                now = utcnow()
                 active = sum(1 for d in self._demands.values() if d.expires_at > now)
                 if active >= self._max_demands:
                     raise RegistryFull(

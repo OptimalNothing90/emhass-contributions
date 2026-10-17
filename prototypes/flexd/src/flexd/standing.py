@@ -187,7 +187,8 @@ class StandingManager:
                             expires_at=win_end,
                             interruptible=defn.interruptible,
                             modulating=defn.modulating,
-                        )
+                        ),
+                        now=now,
                     )
                 except (OwnershipError, RegistryFull) as exc:
                     log.warning("standing %s skipped this cycle: %s", defn.id, exc)

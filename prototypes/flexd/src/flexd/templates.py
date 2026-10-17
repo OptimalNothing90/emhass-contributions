@@ -89,7 +89,7 @@ class TemplateManager:
             expires_at=deadline + timedelta(seconds=self._ttl),
             ttl_s=self._ttl,  # refresh bumps by exactly default_ttl_s, not by time-to-deadline
         )
-        return self._registry.upsert(demand)
+        return self._registry.upsert(demand, now=now)
 
     def _match_rule(self, defn: TemplateDefinition, t: time):
         for rule in defn.deadline_rules:
