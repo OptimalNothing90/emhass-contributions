@@ -373,3 +373,54 @@ def test_live_demand_still_blocks_another_source(registry):
     registry.upsert(make_demand(source="loxone"))
     with pytest.raises(OwnershipError):
         registry.upsert(make_demand(source="ha"))
+
+
+# -- Codex review 2026-10-17 finding 2: run identity is a registry-assigned revision, not
+#    a timestamp compared against the cycle instant ------------------------------------
+def test_new_registration_gets_a_fresh_revision(registry):
+    first = registry.upsert(make_demand(id="a"))
+    second = registry.upsert(make_demand(id="b"))
+    assert first.revision >= 1
+    assert second.revision > first.revision  # registry-wide, strictly increasing
+
+
+def test_redeclaration_keeps_the_revision(registry):
+    first = registry.upsert(make_demand())
+    again = registry.upsert(make_demand(energy_target_wh=4000))  # PUT / MQTT set
+    assert again.revision == first.revision  # the same run, re-declared
+    assert registry.get("dishwasher").revision == first.revision
+
+
+def test_register_after_delete_gets_a_newer_revision(registry):
+    first = registry.upsert(make_demand())
+    registry.delete("dishwasher", source="loxone")
+    second = registry.upsert(make_demand())
+    assert second.revision > first.revision
+
+
+def test_register_over_an_expired_unswept_demand_gets_a_newer_revision(registry):
+    now = datetime.now(timezone.utc)
+    first = registry.upsert(
+        make_demand(
+            deadline=now - timedelta(hours=1), expires_at=now - timedelta(seconds=1)
+        )
+    )
+    second = registry.upsert(make_demand(source="ha"))
+    assert second.revision > first.revision
+
+
+def test_revision_counter_survives_a_restart(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    first = reg.upsert(make_demand())
+    reg.delete("dishwasher", source="loxone")  # nothing left to read the counter from
+    reg2 = Registry(tmp_path / "demands.json")
+    assert reg2.upsert(make_demand()).revision > first.revision
+
+
+def test_legacy_file_without_counter_continues_above_the_stored_revisions(tmp_path):
+    path = tmp_path / "demands.json"
+    d = make_demand(id="old", revision=7).model_dump(mode="json")
+    path.write_text(json.dumps({"demands": [d]}), encoding="utf-8")
+    reg = Registry(path)
+    assert reg.get("old").revision == 7
+    assert reg.upsert(make_demand(id="new")).revision > 7

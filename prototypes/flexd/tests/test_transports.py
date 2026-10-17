@@ -94,3 +94,35 @@ def test_window_gate_runs_after_expiry_and_pending(registry, tmp_path):
         registry, view, "dishwasher", now=T0 + timedelta(hours=5)
     )
     assert status == "expired"
+
+
+# -- Codex review 2026-10-17 finding 2: run identity by registry revision ---------------
+def test_mapping_solved_for_an_older_revision_is_pending(registry, tmp_path):
+    view = PlanView(tmp_path / "adopted_plan.json", stale_after=timedelta(hours=2))
+    saved = registry.upsert(
+        make_demand(
+            deadline=T0 + timedelta(hours=4), expires_at=T0 + timedelta(hours=5)
+        )
+    )
+    view.adopt(
+        PLAN,
+        {"dishwasher": {**MAPPING["dishwasher"], "revision": saved.revision - 1}},
+        now=T0,
+    )
+    assert live_demand_view(registry, view, "dishwasher", now=T0) == (None, "pending")
+
+
+def test_mapping_solved_for_the_current_revision_is_served(registry, tmp_path):
+    view = PlanView(tmp_path / "adopted_plan.json", stale_after=timedelta(hours=2))
+    saved = registry.upsert(
+        make_demand(
+            deadline=T0 + timedelta(hours=4), expires_at=T0 + timedelta(hours=5)
+        )
+    )
+    view.adopt(
+        PLAN,
+        {"dishwasher": {**MAPPING["dishwasher"], "revision": saved.revision}},
+        now=T0,
+    )
+    dv, status = live_demand_view(registry, view, "dishwasher", now=T0)
+    assert status == "ok" and dv.setpoint_w == 2000

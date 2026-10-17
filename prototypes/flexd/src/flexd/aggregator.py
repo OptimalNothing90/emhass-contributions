@@ -94,8 +94,8 @@ def build_runtimeparams(
     """Returns (payload, mapping).
 
     mapping: demand id -> {slot, clamped, truncated, unschedulable, nominal_power_w,
-    modulating, timesteps, anchor}. `anchor` is the ISO instant of step 0 (the same
-    for every demand) so a plan can be checked against absolute times.
+    modulating, timesteps, anchor, revision}. `anchor` is the ISO instant of step 0
+    (the same for every demand) so a plan can be checked against absolute times.
     """
     ordered = sorted(demands, key=lambda d: d.id)
     payload: dict = {}
@@ -186,10 +186,11 @@ def build_runtimeparams(
             # read-back only, not sent to EMHASS
             "timesteps": steps,
             "anchor": anchor.isoformat(),
-            # the cycle instant this slot was solved for: a demand whose created_at is
-            # later is a different run (deleted and registered again during the
-            # solve) and must read as pending until the next adoption (#1 Lows)
-            "solved_at": now.isoformat(),
+            # the registry run this slot was solved for: a demand whose revision is
+            # newer is a different run (deleted and registered again during the
+            # solve) and must read as pending until the next adoption (#1 Lows,
+            # Codex 2026-10-17 finding 2)
+            "revision": d.revision,
         }
 
     payload.update(

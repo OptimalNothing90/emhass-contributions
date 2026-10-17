@@ -329,9 +329,8 @@ async def test_publish_plan_sends_zero_for_a_demand_re_registered_after_the_solv
         scheduler=make_scheduler(registry, FakeDriver(result=PLAN), view),
     )
     now = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)  # PLAN's first record
-    registry.upsert(
+    saved = registry.upsert(
         make_demand(
-            created_at=now + timedelta(minutes=1),
             deadline=now + timedelta(hours=4),
             expires_at=now + timedelta(hours=5),
         )
@@ -343,7 +342,7 @@ async def test_publish_plan_sends_zero_for_a_demand_re_registered_after_the_solv
                 "slot": 0,
                 "clamped": False,
                 "nominal_power_w": 2000,
-                "solved_at": now.isoformat(),
+                "revision": saved.revision - 1,  # solved for the withdrawn run
             }
         },
         now=now,

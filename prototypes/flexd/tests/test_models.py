@@ -30,6 +30,7 @@ def test_minimal_demand_defaults():
     assert d.p_min_w == 0
     assert d.current_power_w == 0
     assert d.ttl_s > 0  # derived from expires_at - created_at
+    assert d.revision == 0  # unassigned until the registry takes it
 
 
 def test_id_pattern_rejected():

@@ -38,8 +38,12 @@ def live_demand_view(registry, view, demand_id: str, now: datetime):
 
     A demand deleted and registered again while a solve was in flight keeps its id
     but is a different run: the mapped slot was solved for the old one, so until the
-    next adoption it is pending, not served (#1 Lows). created_at marks that: the
-    registry keeps it across re-declarations of a live demand (PUT, MQTT set).
+    next adoption it is pending, not served (#1 Lows). The registry-assigned
+    revision marks that: it stays across re-declarations of a live demand (PUT, MQTT
+    set) and the mapping records the one it was solved for. Comparing revisions
+    instead of created_at against the cycle instant keeps a demand materialised
+    during the cycle (wall-clock created_at, pinned cycle `now`) from reading as
+    pending after its own solve (Codex review 2026-10-17 finding 2).
     """
     demand = registry.get(demand_id)
     if demand is None:
@@ -49,7 +53,7 @@ def live_demand_view(registry, view, demand_id: str, now: datetime):
     dv = view.demand_view(demand_id, now=now)
     if dv is None:
         return None, "pending"
-    if dv.solved_at is not None and demand.created_at > dv.solved_at:
+    if dv.revision is not None and demand.revision > dv.revision:
         return None, "pending"
     if (demand.window_start is not None and now < demand.window_start) or (
         now >= demand.deadline

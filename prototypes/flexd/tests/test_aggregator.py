@@ -35,8 +35,8 @@ def test_single_demand_payload():
             "modulating": False,
             "timesteps": 2,
             "anchor": NOW.isoformat(),
-            # the cycle instant: a demand created after it is pending, not served
-            "solved_at": NOW.isoformat(),
+            # the registry run this slot was solved for: a newer revision is pending
+            "revision": d.revision,
         }
     }
 

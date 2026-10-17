@@ -56,6 +56,12 @@ class Demand(BaseModel):
     current_power_w: float = Field(default=0, ge=0, le=MAX_POWER_W, allow_inf_nan=False)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+    # Run identity, assigned by the registry from a registry-wide counter: a new
+    # registration (first, after delete, after expiry) gets a fresh, higher value; a
+    # re-declaration of a live demand keeps it. The aggregated mapping carries the
+    # revision it was solved for, so a slot solved for an older run reads as pending
+    # (Codex review 2026-10-17 finding 2). 0 means "not registered yet".
+    revision: int = Field(default=0, ge=0)
     ttl_s: float | None = Field(
         default=None, ge=0, allow_inf_nan=False
     )  # derived below; persisted for refresh semantics. Ceiling applies to explicit values only (see _finalize)

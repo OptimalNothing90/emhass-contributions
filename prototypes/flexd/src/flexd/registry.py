@@ -45,6 +45,10 @@ class Registry:
         self._path = Path(path)
         self._bak = self._path.with_suffix(self._path.suffix + ".bak")
         self._demands: dict[str, Demand] = {}
+        # next run identity to hand out (see Demand.revision); persisted with the
+        # demands so a delete + restart never reissues a revision an adopted
+        # mapping may still name
+        self._next_revision = 1
         # ids whose retained MQTT topics still need clearing: every delete path queues
         # here, the scheduler delivers at cycle end. Persisted when given a path (#1
         # Medium 11); memory-only otherwise.
@@ -83,6 +87,7 @@ class Registry:
                 )
                 continue
             loaded: dict[str, Demand] = {}
+            next_revision = raw.get("next_revision")
             for entry in entries:
                 try:
                     d = Demand.model_validate(entry, context={"persisted": True})
@@ -96,6 +101,12 @@ class Registry:
                     continue
                 loaded[d.id] = d
             self._demands = loaded
+            highest = max((d.revision for d in loaded.values()), default=0)
+            if not isinstance(next_revision, int) or next_revision <= highest:
+                # file written before the counter existed (or tampered): continue
+                # above every revision still on record
+                next_revision = highest + 1
+            self._next_revision = next_revision
             return
         log.warning("no readable registry file, starting empty")
         self._demands = {}
@@ -106,7 +117,10 @@ class Registry:
         # at least one readable file (tmp write fails -> path+bak untouched; crash between
         # replaces -> bak holds the previous state and _load falls back to it).
         payload = json.dumps(
-            {"demands": [d.model_dump(mode="json") for d in self._demands.values()]},
+            {
+                "demands": [d.model_dump(mode="json") for d in self._demands.values()],
+                "next_revision": self._next_revision,
+            },
             indent=2,
         )
         tmp = self._path.with_suffix(".tmp")
@@ -184,9 +198,14 @@ class Registry:
                     )
             if existing is not None:
                 # a re-declaration of a live demand (PUT, MQTT set) is the same run:
-                # created_at stays, so the adopted slot keeps serving it. Only a
-                # delete followed by a new register moves created_at (#1 Lows).
+                # created_at and revision stay, so the adopted slot keeps serving it.
+                # Only a delete (or expiry) followed by a new register starts a new
+                # run (#1 Lows, Codex 2026-10-17 finding 2).
                 demand.created_at = existing.created_at
+                demand.revision = existing.revision
+            else:
+                demand.revision = self._next_revision
+                self._next_revision += 1
             demand.updated_at = utcnow()
             self._demands[demand.id] = demand
             self._save()

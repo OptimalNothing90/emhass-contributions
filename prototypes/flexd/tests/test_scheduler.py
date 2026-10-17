@@ -791,7 +791,6 @@ async def test_demand_re_registered_after_the_solve_is_pending_until_next_adopti
     view = PlanView(tmp_path / "adopted_plan.json", stale_after=timedelta(hours=2))
     registry.upsert(
         make_demand(
-            created_at=NOW - timedelta(hours=1),
             deadline=NOW + timedelta(hours=4),
             expires_at=NOW + timedelta(hours=5),
         )
@@ -805,7 +804,6 @@ async def test_demand_re_registered_after_the_solve_is_pending_until_next_adopti
     registry.delete("dishwasher", source="loxone")
     registry.upsert(
         make_demand(
-            created_at=NOW + timedelta(minutes=1),
             deadline=NOW + timedelta(hours=4),
             expires_at=NOW + timedelta(hours=5),
         )
@@ -821,3 +819,45 @@ async def test_demand_re_registered_after_the_solve_is_pending_until_next_adopti
         registry, view, "dishwasher", now=NOW + timedelta(minutes=11)
     )
     assert status == "ok" and dv.setpoint_w == 2000
+
+
+# -- Codex review 2026-10-17 finding 2: a standing demand materialised for the first
+#    time in a cycle was "pending" after that cycle's successful solve, because its
+#    wall-clock created_at was later than the pinned cycle instant ----------------------
+async def test_first_time_standing_demand_is_served_after_its_first_solve(
+    registry, tmp_path
+):
+    from flexd.config import StandingDefinition
+    from flexd.plan_view import PlanView
+    from flexd.standing import StandingManager
+    from flexd.transports import live_demand_view
+
+    view = PlanView(tmp_path / "adopted_plan.json", stale_after=timedelta(hours=2))
+    standing = StandingManager(
+        [
+            StandingDefinition(
+                id="waterheater",
+                nominal_power_w=2000,
+                daily_hours=1,
+                window="06:00-22:00",
+            )
+        ],
+        ledger_path=tmp_path / "ledger.json",
+        tz="UTC",
+        registry=registry,
+    )
+    s = Scheduler(
+        registry=registry,
+        driver=FakeDriver(result=PLAN),
+        view=view,
+        standing=standing,
+        timestep_min=30,
+        horizon_steps=48,
+        extra_runtime_params={},
+    )
+    assert await s.run_once(now=NOW) == "ok"  # NOW is 12:00 UTC, inside the window
+    dv, status = live_demand_view(
+        registry, view, "waterheater", now=NOW + timedelta(minutes=1)
+    )
+    assert status == "ok"
+    assert dv.setpoint_w == 2000

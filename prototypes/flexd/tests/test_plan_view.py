@@ -316,15 +316,16 @@ def test_readers_never_see_plan_and_mapping_from_different_adoptions(
     assert mismatches == []
 
 
-# -- #1 Lows: delete-then-re-register during a solve served the old demand's slot ----
-def test_demand_view_exposes_solved_at_from_the_mapping(tmp_path):
+# -- #1 Lows / Codex 2026-10-17 finding 2: the mapping names the registry run it was
+#    solved for -----------------------------------------------------------------------
+def test_demand_view_exposes_revision_from_the_mapping(tmp_path):
     v = make_view(tmp_path)
-    mapping = {"dishwasher": {**MAPPING["dishwasher"], "solved_at": T0.isoformat()}}
+    mapping = {"dishwasher": {**MAPPING["dishwasher"], "revision": 3}}
     v.adopt(PLAN, mapping, now=T0)
-    assert v.demand_view("dishwasher", now=T0).solved_at == T0
+    assert v.demand_view("dishwasher", now=T0).revision == 3
 
 
-def test_demand_view_solved_at_is_none_for_legacy_mappings(tmp_path):
+def test_demand_view_revision_is_none_for_legacy_mappings(tmp_path):
     v = make_view(tmp_path)
-    v.adopt(PLAN, MAPPING, now=T0)  # adopted files written before solved_at existed
-    assert v.demand_view("dishwasher", now=T0).solved_at is None
+    v.adopt(PLAN, MAPPING, now=T0)  # adopted files written before revision existed
+    assert v.demand_view("dishwasher", now=T0).revision is None
