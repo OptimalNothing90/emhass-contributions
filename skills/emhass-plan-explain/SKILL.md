@@ -38,7 +38,9 @@ input cannot be read. `--json` gives the same facts as a machine-readable object
    many pieces. Tell the user that, then look for the constraint that broke.
 2. **Deferrable load k** = `P_deferrable{k}` column, 0-based, same order as
    `nominal_power_of_deferrable_loads`. The paragraph gives steps on, blocks, start/end
-   time (UTC unless `--tz`), energy, and with `--config` the expected steps and window.
+   time (UTC unless `--tz`), energy, and with `--config` the window plus the expected
+   steps (constant-nominal loads) or expected energy (modulating loads,
+   `treat_deferrable_load_as_semi_cont: false`). Equal-priced steps count as cheapest.
    - "never runs": window outside horizon, operating hours 0, `def_current_state`
      already done, or the horizon ends before the window opens (MPC with short
      `prediction_horizon`).

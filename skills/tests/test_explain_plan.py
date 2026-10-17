@@ -331,3 +331,71 @@ def test_cli_exit_one_when_status_not_optimal(tmp_path):
 
 def test_cli_missing_file_exits_two(tmp_path):
     assert _run_cli(tmp_path / "nope.json").returncode == 2
+
+
+# -- Codex review 2026-10-17 finding 7: price ties and modulating loads ----------------
+
+
+def test_equal_price_slots_count_as_cheapest(explain_plan_mod):
+    recs = _records()
+    # steps 1, 2 and 7 share the lowest price; the load runs in 2 and 7, which is as
+    # cheap as any other choice of two steps
+    for r in recs:
+        r["P_deferrable0"] = 0
+    recs[1]["unit_load_cost"] = 0.10
+    recs[2]["unit_load_cost"] = 0.10
+    recs[7]["unit_load_cost"] = 0.10
+    recs[2]["P_deferrable0"] = 3000
+    recs[7]["P_deferrable0"] = 3000
+    d = explain_plan_mod.analyze(explain_plan_mod.load_plan(recs)).deferrables[0]
+    assert d.in_cheapest_window is True
+    assert d.cheaper_unused_steps == []
+
+
+def _modulating_cfg(hours=1.0):
+    return {
+        "optimization_time_step": 30,
+        "number_of_deferrable_loads": 1,
+        "nominal_power_of_deferrable_loads": [1000],
+        "operating_hours_of_each_deferrable_load": [hours],
+        "treat_deferrable_load_as_semi_cont": [False],
+        "start_timesteps_of_each_deferrable_load": [0],
+        "end_timesteps_of_each_deferrable_load": [0],
+    }
+
+
+def test_modulating_load_is_judged_by_energy_not_slots(explain_plan_mod):
+    # 1000 W for 1 h asked; 500 W over four half-hour steps delivers exactly 1 kWh
+    recs = _records()
+    for r in recs:
+        r["P_deferrable0"] = 0
+    for i in (1, 2, 3, 4):
+        recs[i]["P_deferrable0"] = 500
+    d = explain_plan_mod.analyze(
+        explain_plan_mod.load_plan(recs), config=_modulating_cfg()
+    ).deferrables[0]
+    assert d.expected_kwh == pytest.approx(1.0)
+    assert d.expected_steps is None  # slot counting is for constant-nominal loads
+    assert not any("steps" in n and "config asks" in n for n in d.notes)
+
+
+def test_modulating_load_short_on_energy_is_noted(explain_plan_mod):
+    recs = _records()
+    for r in recs:
+        r["P_deferrable0"] = 0
+    recs[1]["P_deferrable0"] = 500
+    recs[2]["P_deferrable0"] = 500  # 0.5 kWh of the 1 kWh asked
+    d = explain_plan_mod.analyze(
+        explain_plan_mod.load_plan(recs), config=_modulating_cfg()
+    ).deferrables[0]
+    assert any("kWh" in n and "0.50" in n and "1.00" in n for n in d.notes)
+
+
+def test_constant_nominal_load_still_counts_slots(explain_plan_mod):
+    cfg = _modulating_cfg(hours=2.0)
+    cfg["treat_deferrable_load_as_semi_cont"] = [True]
+    d = explain_plan_mod.analyze(
+        explain_plan_mod.load_plan(_plan()), config=cfg
+    ).deferrables[0]
+    assert d.expected_steps == 4
+    assert any("config asks for 4" in n for n in d.notes)

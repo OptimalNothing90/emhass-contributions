@@ -57,7 +57,8 @@ class DeferrableSummary:
     avg_price_on: float | None = None
     avg_price_all: float | None = None
     cheaper_unused_steps: list[int] = field(default_factory=list)
-    expected_steps: int | None = None
+    expected_steps: int | None = None  # constant-nominal (semi-continuous) loads
+    expected_kwh: float | None = None  # modulating loads: energy, not slots
     window: tuple[int, int] | None = None
     window_clamped: bool | None = None
     notes: list[str] = field(default_factory=list)
@@ -275,9 +276,11 @@ def analyze(
             on_prices = [p for i, p in valid if on[i]]
             if on_prices:
                 d.avg_price_on = sum(on_prices) / len(on_prices)
-                cheapest = {
-                    i for i, _ in sorted(valid, key=lambda ip: ip[1])[: d.on_steps]
-                }
+                # price ties count: any step priced at or below the on_steps-th
+                # cheapest price is "cheapest", not only the first ones in plan order
+                ranked = sorted(p for _, p in valid)
+                kth = ranked[min(d.on_steps, len(ranked)) - 1]
+                cheapest = {i for i, p in valid if p <= kth}
                 on_set = {i for i in range(n) if on[i]}
                 d.in_cheapest_window = on_set <= cheapest
                 max_on = max(on_prices)
@@ -373,8 +376,19 @@ def _apply_config_to_deferrable(
     d: DeferrableSummary, config: dict, n: int, step_minutes
 ) -> None:
     hours = _num(_list_at(config, "operating_hours_of_each_deferrable_load", d.index))
-    if hours is not None and step_minutes:
-        d.expected_steps = math.ceil(hours / (step_minutes / 60.0)) if hours > 0 else 0
+    semi = _list_at(config, "treat_deferrable_load_as_semi_cont", d.index)
+    semi_cont = True if semi is None else bool(semi)  # EMHASS default: true
+    nominal = _num(_list_at(config, "nominal_power_of_deferrable_loads", d.index))
+    if semi_cont:
+        # constant-nominal load: energy arrives in whole slots at nominal power
+        if hours is not None and step_minutes:
+            d.expected_steps = (
+                math.ceil(hours / (step_minutes / 60.0)) if hours > 0 else 0
+            )
+    elif hours is not None and nominal is not None:
+        # modulating load: 1000 W for 2 h at 500 W is the right 1 kWh, so compare
+        # energy, not slot counts
+        d.expected_kwh = hours * nominal / 1000.0
     start = _num(_list_at(config, "start_timesteps_of_each_deferrable_load", d.index))
     end = _num(_list_at(config, "end_timesteps_of_each_deferrable_load", d.index))
     start_i = int(start) if start is not None else 0
@@ -393,6 +407,18 @@ def _apply_config_to_deferrable(
             + (
                 "; the load does not complete inside this horizon"
                 if d.on_steps < d.expected_steps
+                else ""
+            )
+        )
+    if d.expected_kwh is not None and abs(d.energy_kwh - d.expected_kwh) > max(
+        0.01, 0.01 * d.expected_kwh
+    ):
+        d.notes.append(
+            f"delivers {d.energy_kwh:.2f} kWh but config asks for {d.expected_kwh:.2f} kWh "
+            f"({hours:g} h at {nominal:g} W, modulating)"
+            + (
+                "; the load does not complete inside this horizon"
+                if d.energy_kwh < d.expected_kwh
                 else ""
             )
         )
@@ -499,6 +525,10 @@ def render(s: Summary) -> str:
         if d.expected_steps is not None:
             lines.append(
                 f"  config: {d.expected_steps} steps expected, window {d.window}"
+            )
+        elif d.expected_kwh is not None:
+            lines.append(
+                f"  config: {_kwh(d.expected_kwh)} expected (modulating), window {d.window}"
             )
         if d.in_cheapest_window is not None and d.on_steps:
             if d.in_cheapest_window:
