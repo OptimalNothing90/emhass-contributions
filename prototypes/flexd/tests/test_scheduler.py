@@ -620,3 +620,58 @@ async def test_run_forever_sleeps_until_the_next_boundary(registry, monkeypatch)
         pass
     assert delays == [13 * 60 + 5]
     assert s.last_result == "skipped"  # the startup cycle still ran first
+
+
+# -- e2e v0.18.6 observation 2: a 4xx from EMHASS means the payload or configuration
+#    was refused, not that EMHASS is unreachable --
+def _status_error(code: int, body: str):
+    import httpx
+
+    request = httpx.Request("POST", "http://emhass:5000/action/naive-mpc-optim")
+    response = httpx.Response(code, text=body, request=request)
+    return httpx.HTTPStatusError(f"HTTP {code}", request=request, response=response)
+
+
+async def test_emhass_4xx_is_rejected_and_logs_the_body(registry, caplog):
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
+        )
+    )
+    body = "<pre>ERROR: The passed data is either the wrong type</pre>" + "x" * 600
+    driver, view = FakeDriver(error=_status_error(400, body)), FakeView()
+    s = make_scheduler(registry, driver, view)
+    with caplog.at_level("ERROR", logger="flexd.scheduler"):
+        result = await s.run_once(now=NOW)
+    assert result == "rejected"
+    assert view.adopted == []
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert "400" in logged
+    assert "The passed data is either the wrong type" in logged
+    assert "x" * 500 not in logged  # body truncated to 500 chars
+    assert body[:500] in logged
+
+
+async def test_emhass_5xx_stays_down(registry):
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
+        )
+    )
+    driver, view = FakeDriver(error=_status_error(502, "bad gateway")), FakeView()
+    s = make_scheduler(registry, driver, view)
+    assert await s.run_once(now=NOW) == "down"
+    assert view.adopted == []
+
+
+async def test_emhass_timeout_stays_down(registry):
+    import httpx
+
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
+        )
+    )
+    driver, view = FakeDriver(error=httpx.ReadTimeout("slow solve")), FakeView()
+    s = make_scheduler(registry, driver, view)
+    assert await s.run_once(now=NOW) == "down"

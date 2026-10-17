@@ -135,6 +135,20 @@ class Scheduler:
                 except PlanRejected as exc:
                     log.error("plan rejected: %s", exc)
                     result = "rejected"
+                except httpx.HTTPStatusError as exc:
+                    if 400 <= exc.response.status_code < 500:
+                        # EMHASS answered and refused the payload or its own configuration
+                        # (e2e v0.18.6 observation 2): that is a rejection, not an outage.
+                        # The body is EMHASS's log tail and says why; keep it bounded.
+                        log.error(
+                            "emhass rejected the optim request (HTTP %d): %s",
+                            exc.response.status_code,
+                            exc.response.text[:500],
+                        )
+                        result = "rejected"
+                    else:
+                        log.error("emhass unreachable: %s", exc)
+                        result = "down"
                 except httpx.HTTPError as exc:
                     log.error("emhass unreachable: %s", exc)
                     result = "down"
