@@ -38,10 +38,16 @@ class MqttBridge:
 
     # -- intake ---------------------------------------------------------------
     async def handle_message(self, topic: str, payload: str) -> None:
-        parts = topic.split("/")
+        # Match by stripping the configured base, then split the remainder: a
+        # multi-segment base such as home/flexd must work (#1 Medium 10).
+        prefix = self._base + "/"
+        if not topic.startswith(prefix):
+            log.debug("ignoring non-intake topic %s", topic)
+            return
+        parts = topic[len(prefix) :].split("/")
         # {base}/templates/{source}/{id}/start
-        if len(parts) == 5 and parts[0] == self._base and parts[1] == "templates":
-            _, _, source, template_id, action = parts
+        if len(parts) == 4 and parts[0] == "templates":
+            _, source, template_id, action = parts
             if action != "start":
                 log.debug("unknown action %r on %s", action, topic)
                 return
@@ -59,10 +65,10 @@ class MqttBridge:
                 )
             return
         # {base}/demands/{source}/{id}/{set|delete|refresh}
-        if len(parts) != 5 or parts[0] != self._base or parts[1] != "demands":
+        if len(parts) != 4 or parts[0] != "demands":
             log.debug("ignoring non-intake topic %s", topic)
             return
-        _, _, source, demand_id, action = parts
+        _, source, demand_id, action = parts
         try:
             if action == "refresh":
                 self._registry.refresh(demand_id, source=source)

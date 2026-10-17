@@ -25,6 +25,20 @@ class MqttConfig(BaseModel):
     username: str | None = None
     password: str | None = None
 
+    @field_validator("base_topic")
+    @classmethod
+    def _topic_prefix(cls, v: str) -> str:
+        # a prefix the bridge strips verbatim: no empty segments, no wildcards
+        # (#1 Medium 10)
+        if not v or v.startswith("/") or v.endswith("/") or "//" in v:
+            raise ValueError(
+                f"mqtt.base_topic must be segments without leading, trailing or "
+                f"empty parts, got {v!r}"
+            )
+        if "+" in v or "#" in v:
+            raise ValueError(f"mqtt.base_topic must not contain wildcards, got {v!r}")
+        return v
+
 
 class StandingDefinition(BaseModel):
     id: str = Field(pattern=ID_PATTERN)
@@ -102,7 +116,7 @@ class TemplateDefinition(BaseModel):
             )
             if a < b:
                 return set(range(a, b))
-            return set(range(a, 24 * 60)) | set(range(0, b))  # wraps midnight
+            return set(range(a, 24 * 60)) | set(range(b))  # wraps midnight
 
         seen: set[int] = set()
         for rule in rules:

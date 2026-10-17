@@ -139,3 +139,13 @@ def test_ts_round_default_and_validation(tmp_path):
     p.write_text(YAML + "ts_round: round\n", encoding="utf-8")
     with pytest.raises(ValidationError):
         load_config(p)
+
+
+# -- #1 Medium 10: base_topic is a prefix; leading/trailing slashes would corrupt it --
+def test_mqtt_base_topic_rejects_leading_or_trailing_slash():
+    from flexd.config import MqttConfig
+
+    assert MqttConfig(base_topic="home/flexd").base_topic == "home/flexd"
+    for bad in ("/flexd", "flexd/", "", "home//flexd", "home/+/flexd", "flexd/#"):
+        with pytest.raises(ValidationError):
+            MqttConfig(base_topic=bad)

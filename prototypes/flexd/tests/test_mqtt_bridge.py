@@ -293,3 +293,52 @@ async def test_publish_plan_sends_off_for_mapped_but_expired_demand(bridge):
     await b.publish_plan(state="ok")
     assert ("flexd/plan/demands/dishwasher/on", "0", True) in pub.published
     assert ("flexd/plan/demands/dishwasher/setpoint", "0", True) in pub.published
+
+
+# -- #1 Medium 10: a multi-segment base_topic silently dropped every message --
+@pytest.fixture
+def nested_bridge(registry):
+    from flexd.templates import TemplateManager
+    from tests.test_templates import TPL
+
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    pub = FakePublisher()
+    templates = TemplateManager([TPL], tz="UTC", registry=registry, default_ttl_s=3600)
+    b = MqttBridge(
+        client=pub,
+        base_topic="home/flexd",
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        standing=FakeStandingRegistryLocal(),
+        templates=templates,
+    )
+    return b, pub, registry
+
+
+async def test_nested_base_demand_set_delete(nested_bridge):
+    b, pub, registry = nested_bridge
+    await b.handle_message("home/flexd/demands/loxone/dishwasher/set", demand_json())
+    assert registry.get("dishwasher").source == "loxone"
+    await b.handle_message("home/flexd/demands/loxone/dishwasher/delete", "")
+    assert registry.get("dishwasher") is None
+    assert ("home/flexd/plan/demands/dishwasher/on", "0", True) in pub.published
+
+
+async def test_nested_base_template_start_and_error(nested_bridge):
+    b, pub, registry = nested_bridge
+    await b.handle_message("home/flexd/templates/ha/dishwasher/start", "")
+    assert registry.get("dishwasher") is not None
+    await b.handle_message("home/flexd/templates/ha/ghost/start", "")
+    errors = [t for t, _, _ in pub.published if t.endswith("/error")]
+    assert "home/flexd/templates/ha/ghost/error" in errors
+
+
+async def test_nested_base_ignores_partial_prefix_and_own_topics(nested_bridge):
+    b, pub, registry = nested_bridge
+    await b.handle_message("flexd/demands/loxone/dishwasher/set", demand_json())
+    await b.handle_message("home/flexd/plan/state", "x")
+    await b.handle_message("home/flexdx/demands/loxone/dishwasher/set", demand_json())
+    assert registry.get("dishwasher") is None
+    assert pub.published == []
