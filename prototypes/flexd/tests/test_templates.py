@@ -210,3 +210,50 @@ def test_template_modulating_flag_reaches_demand(tmp_path):
         "heater", source="loxone", now=datetime(2026, 7, 5, 6, 0, tzinfo=timezone.utc)
     )
     assert reg.get("heater").modulating is True
+
+
+# -- #1 Medium 3: not_before on the far side of midnight was anchored to the trigger day --
+NIGHT_TPL = TemplateDefinition(
+    id="dryer",
+    nominal_power_w=2000,
+    energy_wh=1400,
+    deadline_rules=[
+        {
+            "if_started_between": "20:00-06:00",
+            "not_before": "01:00",
+            "finish_by": "06:30",
+        },
+    ],
+)
+
+
+def test_not_before_past_midnight_anchors_to_next_day(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    mgr = TemplateManager(
+        [NIGHT_TPL], tz="Europe/Berlin", registry=reg, default_ttl_s=3600
+    )
+    # 22:00 Berlin on 07-05 == 20:00 UTC; not_before 01:00 Berlin is 23:00 UTC the same day
+    mgr.start(
+        "dryer", source="loxone", now=datetime(2026, 7, 5, 20, 0, tzinfo=timezone.utc)
+    )
+    d = reg.get("dryer")
+    assert d.deadline == datetime(
+        2026, 7, 6, 4, 30, tzinfo=timezone.utc
+    )  # 06:30 Berlin
+    assert d.window_start == datetime(
+        2026, 7, 5, 23, 0, tzinfo=timezone.utc
+    )  # 01:00 Berlin
+
+
+def test_not_before_same_day_when_still_ahead(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    mgr = TemplateManager(
+        [NIGHT_TPL], tz="Europe/Berlin", registry=reg, default_ttl_s=3600
+    )
+    # 00:30 Berlin on 07-06 == 22:30 UTC on 07-05; not_before 01:00 Berlin is 30 min ahead
+    mgr.start(
+        "dryer", source="loxone", now=datetime(2026, 7, 5, 22, 30, tzinfo=timezone.utc)
+    )
+    d = reg.get("dryer")
+    assert d.deadline == datetime(2026, 7, 6, 4, 30, tzinfo=timezone.utc)
+    assert d.window_start == datetime(2026, 7, 5, 23, 0, tzinfo=timezone.utc)

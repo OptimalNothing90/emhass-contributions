@@ -1,7 +1,7 @@
 """Trigger templates: appliance recipes with start-time-dependent deadlines."""
 
 import logging
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from flexd.config import TemplateDefinition
@@ -55,14 +55,11 @@ class TemplateManager:
             deadline = self._next_occurrence(local, _to_time(rule.finish_by))
             window_start = None
             if rule.not_before is not None:
-                nb_local = local.replace(
-                    hour=_to_time(rule.not_before).hour,
-                    minute=_to_time(rule.not_before).minute,
-                    second=0,
-                    microsecond=0,
-                )
-                nb = nb_local.astimezone(timezone.utc)
-                if nb > now and nb < deadline:
+                # next occurrence, like finish_by: a rule 20:00-06:00 with not_before
+                # 01:00 triggered at 22:00 means 01:00 tomorrow, not 01:00 this morning
+                # (#1 Medium 3). An occurrence at or past the deadline is dropped.
+                nb = self._next_occurrence(local, _to_time(rule.not_before))
+                if nb < deadline:
                     window_start = nb
 
         demand = Demand(
@@ -102,4 +99,4 @@ class TemplateManager:
         )
         if candidate <= local_now:
             candidate += timedelta(days=1)
-        return candidate.astimezone(timezone.utc)
+        return candidate.astimezone(UTC)
