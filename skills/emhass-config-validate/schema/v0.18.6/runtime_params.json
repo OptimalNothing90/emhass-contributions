@@ -1,0 +1,172 @@
+{
+  "MPC": {
+    "prediction_horizon": {
+      "friendly_name": "Prediction horizon",
+      "Description": "Number of timesteps the naive-MPC optimization looks ahead. Defaults to 10. Only used by the naive-mpc-optim action. See passing_data.md / study_cases/mpc.md.",
+      "input": "int",
+      "default_value": 10,
+      "unit": "timesteps"
+    },
+    "soc_init": {
+      "friendly_name": "Initial battery state of charge",
+      "Description": "Battery state of charge at the start of the horizon, as a fraction in [0,1] (NOT percent). Defaults to battery_target_state_of_charge when omitted. If passed outside [battery_minimum_state_of_charge, battery_maximum_state_of_charge] a warning is logged and the real SOC is kept for optimization recovery. Only used by naive-mpc-optim. See passing_data.md.",
+      "input": "float",
+      "default_value": null,
+      "unit": "fraction"
+    },
+    "soc_final": {
+      "friendly_name": "Final battery state of charge",
+      "Description": "Target battery state of charge at the end of the horizon, as a fraction in [0,1] (NOT percent). Defaults to battery_target_state_of_charge when omitted; clamped to [battery_minimum_state_of_charge, battery_maximum_state_of_charge] if out of range. Independent of soc_init. Only used by naive-mpc-optim. See passing_data.md.",
+      "input": "float",
+      "default_value": null,
+      "unit": "fraction"
+    },
+    "soc_target": {
+      "friendly_name": "Intermediate battery state of charge target",
+      "Description": "Optional minimum battery state of charge, as a fraction in [0,1] (NOT percent), that must be reached by soc_target_timestep, after which the battery is free to discharge again. Defaults to no intermediate target (None) so behaviour is unchanged when omitted. Clamped to [battery_minimum_state_of_charge, battery_maximum_state_of_charge] if out of range. An unreachable target by its timestep makes the problem infeasible. Only used by naive-mpc-optim. See issue #553 and passing_data.md.",
+      "input": "float",
+      "default_value": null,
+      "unit": "fraction"
+    },
+    "soc_target_timestep": {
+      "friendly_name": "Intermediate SOC target timestep",
+      "Description": "The 0-based horizon timestep by which soc_target must be met. Defaults to the last timestep when soc_target is given but this is omitted; clamped to [0, prediction_horizon-1]. Ignored when soc_target is not set. Only used by naive-mpc-optim. See issue #553 and passing_data.md.",
+      "input": "int",
+      "default_value": null,
+      "unit": "timesteps"
+    },
+    "current_period_peak": {
+      "friendly_name": "Current billing-period peak grid import",
+      "Description": "Optional peak grid import already incurred during the current billing period, in Watts, used to floor the demand/capacity charge so the optimisation does not chase a new peak below one already locked in this period. Only the import above this value is worth shaving. Only effective when capacity_cost_per_kw > 0; ignored otherwise. Defaults to no floor (None -> 0.0) so behaviour is unchanged when omitted. A negative, non-finite (NaN/inf) or non-numeric value is ignored with a warning. Used by naive-mpc-optim and dayahead-optim. With capacity_charge_interval_timesteps=1 use the highest eligible positive-import timestep; with N>1 current_period_peak must be expressed in the same measurement basis as the epigraph - the highest eligible already-completed tariff measurement-interval average. The currently open interval is represented by capacity_charge_current_interval_history (naive-mpc-optim only), not current_period_peak. When capacity_cost_per_kw is a list of K rates (issue #540 Part B) this must be a list of exactly K entries (one incumbent per component, independently validated) rather than a single value; a non-list or wrong-length value is ignored for every component with one warning, never partially applied. See issue #623 and passing_data.md.",
+      "input": "array.float",
+      "default_value": null,
+      "unit": "W"
+    },
+    "capacity_charge_window": {
+      "friendly_name": "Capacity charge demand-window mask",
+      "Description": "Optional per-timestep mask restricting the demand/capacity charge to a tariff's demand window: a list of weights in [0, 1] of length prediction_horizon, aligned like load_cost_forecast. With N=1 the mask applies per native timestep (the peak_import epigraph only prices timesteps where the mask is non-zero); with N>1 the mask value at each completed tariff-interval endpoint determines that completed interval's eligibility/weight, so tariff demand-window boundaries should align with tariff measurement-interval boundaries. The caller owns the business-day / holiday / season calendar - EMHASS stays tariff-agnostic. Only effective when capacity_cost_per_kw > 0; ignored otherwise. Defaults to unset (None -> all timesteps priced), identical to behaviour without this key. An invalid mask (non-numeric, NaN/inf, shorter than the horizon) is ignored with a warning; a longer mask is truncated; values outside [0, 1] are clipped. When capacity_cost_per_kw is a list of K rates (issue #540 Part B) this must be a list of exactly K independent prediction_horizon-length masks (one per component, never shared or reused between components) rather than a single mask; a non-list or wrong-length outer value is ignored for every component with one warning. Only used by naive-mpc-optim. See issues #540 / #623 and passing_data.md.",
+      "input": "array.array.float",
+      "default_value": null,
+      "unit": "none"
+    },
+    "capacity_charge_consideration": {
+      "friendly_name": "Capacity charge MPC consideration weight",
+      "Description": "Optional per-timestep MPC capacity consideration weight, SEPARATE from capacity_charge_window: a list of weights in [0, 1] of length prediction_horizon, aligned like capacity_charge_window. capacity_charge_window says where the tariff allows a billed peak to be set (eligibility); capacity_charge_consideration says whether an otherwise tariff-eligible prospective timestep/interval participates in THIS solve's prospective capacity peak. It can only narrow what capacity_charge_window already allows, never widen it, and never scales or erases current_period_peak (realised billing history). An excluded timestep stays tariff-eligible and is only capacity-unpriced in this solve: removing its capacity contribution also makes it comparatively attractive for import/charging, so the internal capacity-peak term may remain low or 0 while the plan still schedules substantial import there. Ordinary usage is 0/1 (considered or not); this is not a fractional billing discount or a probability. With N=1 the weight applies per native timestep; with N>1 the weight at each completed tariff-interval endpoint determines that interval's consideration, so consideration boundaries should align with tariff measurement-interval boundaries. Only effective when capacity_cost_per_kw > 0; ignored otherwise. Defaults to unset (None -> every tariff-eligible timestep/interval considered), identical to behaviour without this key. An invalid vector (non-numeric, NaN/inf, shorter than the horizon) is ignored with a warning; a longer vector is truncated; values outside [0, 1] are clipped. When capacity_cost_per_kw is a list of K rates (issue #540 Part B) this must be a list of exactly K independent prediction_horizon-length weight vectors (one per component) rather than a single vector; a non-list or wrong-length outer value is ignored for every component with one warning. Only used by naive-mpc-optim. See issue #540 and passing_data.md.",
+      "input": "array.array.float",
+      "default_value": null,
+      "unit": "none"
+    },
+    "capacity_charge_current_interval_history": {
+      "friendly_name": "Realised import history for the open tariff interval",
+      "Description": "Optional average positive grid-import power in Watts for native timesteps already elapsed in the currently open tariff interval, oldest to newest. Length 0..capacity_charge_interval_timesteps-1 encodes the interval phase. Only used by naive-mpc-optim when capacity_cost_per_kw > 0 and N>1; invalid history is ignored with a warning and treated as empty. When capacity_cost_per_kw is a list of K rates (issue #540 Part B) this must be a list of exactly K independent histories (one per component, each against that component's own capacity_charge_interval_timesteps) rather than a single history; a non-list or wrong-length outer value is ignored for every component with one warning.",
+      "input": "array.array.float",
+      "default_value": null,
+      "unit": "W"
+    },
+    "operating_timesteps_of_each_deferrable_load": {
+      "friendly_name": "Operating timesteps of each deferrable load",
+      "Description": "Per-deferrable-load total number of operating timesteps over the horizon (the timestep-based alternative to operating_hours_of_each_deferrable_load, preferred for sub-hour steps). One int per deferrable load. Only used by naive-mpc-optim. See passing_data.md.",
+      "input": "array.int",
+      "default_value": null,
+      "unit": "timesteps"
+    }
+  },
+  "Cost function": {
+    "alpha": {
+      "friendly_name": "Alpha (forecast weight)",
+      "Description": "Weight applied to the forecast term when mixing forecast and measured load in the now/current model. Defaults to 0.5. Used together with beta. See forecasts.md.",
+      "input": "float",
+      "default_value": 0.5,
+      "unit": "fraction"
+    },
+    "beta": {
+      "friendly_name": "Beta (measured weight)",
+      "Description": "Weight applied to the measured/persistence term when mixing forecast and measured load in the now/current model. Defaults to 0.5. Complement to alpha. See forecasts.md.",
+      "input": "float",
+      "default_value": 0.5,
+      "unit": "fraction"
+    }
+  },
+  "Forecast cache": {
+    "weather_forecast_cache": {
+      "friendly_name": "Weather forecast cache (write)",
+      "Description": "If true, save the computed weather/PV forecast to a cache file for later reuse (e.g. Solcast) so subsequent calls avoid re-hitting the forecast API. Defaults to false. See forecasts.md.",
+      "input": "boolean",
+      "default_value": false,
+      "unit": "none"
+    },
+    "weather_forecast_cache_only": {
+      "friendly_name": "Weather forecast cache only",
+      "Description": "If true, only use cached weather/PV forecast data and raise an error if the cache is missing (prevents accidental API calls). Defaults to false. See forecasts.md.",
+      "input": "boolean",
+      "default_value": false,
+      "unit": "none"
+    }
+  },
+  "Deferrable runtime": {
+    "def_current_state": {
+      "friendly_name": "Deferrable current state",
+      "Description": "Per-deferrable-load boolean list indicating whether each load is currently running at t0, so the optimizer does not penalize a startup for a load that is already on. One boolean per deferrable load. See passing_data.md.",
+      "input": "array.boolean",
+      "default_value": null,
+      "unit": "none"
+    },
+    "def_current_on_timesteps": {
+      "friendly_name": "Deferrable elapsed ON timesteps",
+      "Description": "Per-load integer list: how many consecutive optimization timesteps each load has already been ON at the start of this horizon. Used together with minimum_on_time_of_each_deferrable_load (def_minimum_on_time) to force the remaining on-time from an in-progress minimum-ON window. Example: if N=3 and the load has already been on for 2 timesteps, remaining=1 step is forced ON from t=0. Only meaningful when def_current_state[k]=true and minimum_on_time_of_each_deferrable_load[k]>0. When absent, no initial-run forcing is applied (NOT assumed zero). Related to issue #605 (rolling-window tracking). One non-negative integer per deferrable load.",
+      "input": "array.int",
+      "default_value": null,
+      "unit": "timesteps"
+    },
+    "def_current_off_timesteps": {
+      "friendly_name": "Deferrable elapsed OFF timesteps",
+      "Description": "Per-load integer list: how many consecutive optimization timesteps each load has already been OFF at the start of this horizon. Used together with def_minimum_off_time to enforce the remaining off-time from an in-progress minimum-OFF window. Example: if N=3 and the load has already been off for 1 timestep, remaining=2 steps are forced OFF from t=0. Only meaningful when def_current_state[k]=false and def_minimum_off_time[k]>0. When absent, no initial-run forcing is applied (NOT assumed zero). One non-negative integer per deferrable load.",
+      "input": "array.int",
+      "default_value": null,
+      "unit": "timesteps"
+    },
+    "def_current_power": {
+      "friendly_name": "Current power of deferrable loads",
+      "Description": "Per-load actual power (watts) each deferrable load is drawing right now, at the start of the optimization horizon. When greater than 0, the optimizer pins P_deferrable[k] at the first timestep to this value, forces the load ON at that timestep, and suppresses the phantom startup penalty for it. One non-negative float per deferrable load, in the same order as nominal_power_of_deferrable_loads; default null (absent key) is an exact no-op so today's behaviour is preserved. This is a separate runtime input rather than an extension of def_current_state, so the binary on/off decision stays strict and fractional watt values cannot weaken it. For treat_deferrable_load_as_semi_cont loads the power is fixed at nominal, so the supplied wattage acts only as an on/off signal (the load is forced ON at nominal; the value pin is omitted). For loads with minimum_power_of_deferrable_loads > 0 the supplied value should be >= the configured minimum, and for all loads it should be <= nominal_power_of_deferrable_loads; values outside those bounds make the solve infeasible (the value is never silently clamped). Single-constant, sequence (list-valued nominal power) and thermal loads ignore this input; use def_current_state for a currently-running single-constant load. Runtime-overridable on every optimization tick without a cache rebuild. Related to issue #605.",
+      "input": "array.float",
+      "default_value": null,
+      "unit": "W"
+    },
+    "def_current_operating_timesteps": {
+      "friendly_name": "Completed operating timesteps of deferrable loads",
+      "Description": "Per-load integer list: how many operating timesteps each must-run deferrable load has already completed today at the start of this optimization horizon. The optimizer schedules only the REMAINDER: required_timesteps and target_energy are each decremented by the elapsed amount, clamped at 0. Applies to both standard and single_constant must-run loads. Default null (absent key) is an exact no-op -- today's plan is unchanged. Example: if a load requires 6 timesteps total and has already run for 2, only 4 remain for this solve. One non-negative integer per deferrable load, in the same order as nominal_power_of_deferrable_loads. The daily reset boundary is the caller's responsibility (EMHASS does not track wall-clock day rollover). Runtime-overridable on every optimization tick without a cache rebuild. Related to issue #983.",
+      "input": "array.int",
+      "default_value": null,
+      "unit": "timesteps"
+    },
+    "def_load_config": {
+      "friendly_name": "Deferrable load special config",
+      "Description": "Per-deferrable-load special configuration carrying the thermal_config / thermal_battery models. Deep, evolving nested schema; not inlined here. See the linked documentation for the full structure.",
+      "input": "object",
+      "default_value": null,
+      "unit": "none",
+      "externalDocs": {
+        "description": "Thermal load / thermal-battery configuration schema",
+        "url": "docs/thermal_battery.md"
+      }
+    },
+    "shared_thermal_tanks": {
+      "friendly_name": "Shared thermal tanks",
+      "Description": "Runtime list of shared thermal storage tanks (multi-source storage): the manual flat alternative to heat_topology (issue #539). Each tank object carries id, load_ids, volume, start_temperature, min/max_temperatures, and demand fields - the same schema the heat_topology compiler emits; each load in load_ids needs a def_load_config entry with a thermal_source block (efficiency, supply_temperature or heating_curve). Ignored with a warning if not a list of objects. When heat_topology is also set, the compiled topology replaces this list (unless extend_deferrable_loads is true, which keeps it and appends the topology's tanks).",
+      "input": "object",
+      "default_value": null,
+      "unit": "none",
+      "externalDocs": {
+        "description": "Shared-tank storage schema (heat_topology reference)",
+        "url": "docs/heat_topology.md"
+      }
+    },
+    "shared_tank_start_temperatures": {
+      "friendly_name": "Shared tank start temperatures",
+      "Description": "Per-tank start-temperature override keyed by tank id, e.g. {\"dhw\": 48.5}. Applied after the heat_topology compile, so it patches manual and compiled tanks alike - the per-run analog of soc_init / heater_start_temperatures for MPC loops feeding a live tank sensor. Unknown tank ids and non-numeric values are ignored with a warning.",
+      "input": "object",
+      "default_value": null,
+      "unit": "°C"
+    }
+  }
+}

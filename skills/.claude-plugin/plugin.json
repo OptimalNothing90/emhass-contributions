@@ -1,0 +1,22 @@
+{
+  "name": "emhass-skills",
+  "version": "0.1.0",
+  "description": "Claude Code skills for EMHASS users and contributors: validate config.json and runtime params against EMHASS's own schema, explain the optimizer's plan in plain language, classify failures in action_logs.txt, and run the pre-PR checklist for upstream davidusb-geek/emhass.",
+  "author": {
+    "name": "OptimalNothing90",
+    "url": "https://github.com/OptimalNothing90"
+  },
+  "homepage": "https://github.com/OptimalNothing90/emhass-contributions/tree/main/skills",
+  "repository": "https://github.com/OptimalNothing90/emhass-contributions",
+  "license": "GPL-3.0",
+  "keywords": [
+    "emhass",
+    "home-energy",
+    "energy-management",
+    "milp",
+    "home-assistant",
+    "config-validation",
+    "troubleshooting"
+  ],
+  "skills": ["./"]
+}
