@@ -11,9 +11,11 @@ NOW = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
 class FakeDriver:
     def __init__(self, result=None, error=None):
         self.result, self.error, self.calls = result, error, []
+        self.kwargs = []  # what the scheduler handed the driver besides the payload
 
-    async def run_cycle(self, payload, last_generated_at=None):
+    async def run_cycle(self, payload, last_generated_at=None, **kw):
         self.calls.append(payload)
+        self.kwargs.append({"last_generated_at": last_generated_at, **kw})
         if self.error:
             raise self.error
         return self.result
@@ -219,7 +221,7 @@ async def test_concurrent_run_once_serialized(registry):
         def __init__(self):
             self.calls = 0
 
-        async def run_cycle(self, payload, last_generated_at=None):
+        async def run_cycle(self, payload, last_generated_at=None, **kw):
             self.calls += 1
             order.append(f"start{self.calls}")
             if self.calls == 1:
@@ -414,3 +416,17 @@ async def test_scheduler_passes_ts_round_to_aggregation(registry):
         await s.run_once(now=NOW + timedelta(minutes=1))
         ends[ts_round] = driver.calls[0]["end_timesteps_of_each_deferrable_load"][0]
     assert ends == {"nearest": 2, "last": 1}
+
+
+# -- #1 Medium 7: the driver needs the cycle instant and the step for its first-boot guard --
+async def test_scheduler_hands_now_and_timestep_to_driver(registry):
+    registry.upsert(
+        make_demand(
+            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
+        )
+    )
+    driver = FakeDriver(result=PLAN)
+    s = make_scheduler(registry, driver, FakeView())
+    await s.run_once(now=NOW)
+    assert driver.kwargs[0]["now"] == NOW
+    assert driver.kwargs[0]["timestep_min"] == 30

@@ -99,7 +99,10 @@ class Scheduler:
                 )
                 try:
                     plan = await self._driver.run_cycle(
-                        payload, last_generated_at=self._view.generated_at
+                        payload,
+                        last_generated_at=self._view.generated_at,
+                        now=now,
+                        timestep_min=self._timestep_min,
                     )
                     # The old plan was served until this instant; credit it up to here,
                     # then make the new plan effective from here (Codex review finding 4).

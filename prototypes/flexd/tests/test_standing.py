@@ -291,7 +291,7 @@ async def test_energy_accounting_across_a_real_plan_switch(tmp_path):
     ]
 
     class TwoPlans:
-        async def run_cycle(self, payload, last_generated_at=None):
+        async def run_cycle(self, payload, last_generated_at=None, **kw):
             return plans.pop(0)
 
     ticks = iter(
