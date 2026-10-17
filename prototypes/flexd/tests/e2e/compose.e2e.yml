@@ -1,0 +1,23 @@
+# Compose override for the e2e run: EMHASS gets a minimal offline config (no Home
+# Assistant, no weather API; forecasts arrive as runtime lists from flexd.e2e.yaml) and
+# flexd mounts the e2e config instead of ./flexd.yaml.
+# Usage (from prototypes/flexd):
+#   docker compose -f docker-compose.yml -f tests/e2e/compose.e2e.yml up -d --build
+services:
+  flexd:
+    volumes:
+      - ./tests/e2e/flexd.e2e.yaml:/config/flexd.yaml:ro
+      - flexd-data:/data
+  emhass:
+    volumes:
+      - ./tests/e2e/emhass/config.json:/share/config.json
+      - emhass-data:/data
+    environment:
+      # secrets: only the location/timezone matter offline. An EMPTY SUPERVISOR_TOKEN
+      # overrides the placeholder token, so EMHASS skips the Home Assistant /api/config
+      # fetch at the start of every action instead of timing out against the example URL.
+      SUPERVISOR_TOKEN: ""
+      TIME_ZONE: Europe/Berlin
+      LAT: "48.1"
+      LON: "11.6"
+      ALT: "520"
