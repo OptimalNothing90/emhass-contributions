@@ -256,3 +256,23 @@ def test_render_orders_error_classes_by_first_appearance(scan_logs_mod):
         < text.index("ERROR solcast_quota:")
     )
     assert text.index("ERROR solcast_quota:") < text.index("WARN  relaxed:")
+
+
+# -- Codex review 2026-10-17 finding 8: a skipped mix-forecast blend is a WARNING
+#    upstream (forecast.get_mix_forecast returns the forecast unchanged), not a
+#    failed run -------------------------------------------------------------------------
+BLEND_SKIPPED = (
+    "WARNING - emhass.forecast - get_mix_forecast: the live value for column "
+    "'sensor.power_load_no_var_loads' is NaN; skipping the mix-forecast blend and "
+    "returning the forecast unchanged. Check the input data for gaps or unrepaired values."
+)
+
+
+def test_skipped_blend_is_a_warn_class_not_nan_forecast(scan_logs_mod):
+    report = scan_logs_mod.scan([BLEND_SKIPPED])
+    c = _classes(report)
+    assert "nan_forecast" not in c
+    assert c["forecast_blend_skipped"].severity == "WARN"
+    assert c["forecast_blend_skipped"].count == 1
+    assert report.has_error is False
+    assert "blend" in c["forecast_blend_skipped"].hint.lower()

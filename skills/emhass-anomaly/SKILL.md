@@ -38,6 +38,7 @@ it is ignored with a note. Exit 1 when an ERROR class fired, 0 otherwise, 2 unre
 | `infeasible` | ERROR | Constraint conflict. Run `emhass-config-validate`; compare SOC targets, operating hours vs window, hybrid inverter limits, grid limits. |
 | `relaxed` | WARN | MILP failed, LP fallback published as `Optimal (Relaxed)`. Treat as infeasible; the published plan is a best effort and worthless when the cause is bad input (`nan_forecast`, `missing_sensor`). |
 | `nan_forecast` | ERROR | Runtime forecast list has NaN/null/str or wrong length. Fix the producer (template, automation) not EMHASS. |
+| `forecast_blend_skipped` | WARN | Live sensor value NaN at run time: EMHASS skipped the mix-forecast blend and kept the forecast unchanged, the run succeeded. Repeated: fill the gaps in the sensor history. |
 | `missing_sensor` | ERROR | Entity id wrong, no numeric history, bad token/URL. Check config.json sensors and HA history. |
 | `solcast_quota` | ERROR | 402/429 or safety cap. Cache the forecast (`weather-forecast-cache` action + `weather_forecast_cache_only`), check key / rooftop id. |
 | `runtime_400` | ERROR | Payload not valid JSON (`False` vs `false`), unknown action, or no params.pkl (save config once). |

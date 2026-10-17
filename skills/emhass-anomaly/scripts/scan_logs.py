@@ -78,11 +78,19 @@ SIGNATURES: tuple[Signature, ...] = (
             r"Passed data from passed list is not long enough",
             r"Passed data from CSV is not long enough",
             r"ERROR: external PV P10 companion rejected: ",
-            r"get_mix_forecast: .* NaN; skipping the mix-forecast blend",
         ),
         "A runtime forecast list contains NaN/null/str or is shorter than the horizon; EMHASS fails "
         "closed (#1135). Fix the producer of pv_power_forecast / load_cost_forecast / etc.",
-        "utils.py, forecast.py",
+        "utils.py",
+    ),
+    Signature(
+        "forecast_blend_skipped",
+        "WARN",
+        (r"get_mix_forecast: .* NaN; skipping the mix-forecast blend",),
+        "The live sensor value (or the first forecast point) was NaN, so EMHASS skipped the "
+        "mix-forecast blend and used the forecast unchanged; the run went on. Repeated: check the "
+        "sensor history for gaps (load_negative, var_load power sensors).",
+        "forecast.py",
     ),
     Signature(
         "missing_sensor",
