@@ -54,7 +54,7 @@
         "Discussion-Only": "ebc27c4b"
       }
     },
-    "fetched_at": "2026-10-17T11:29:33+00:00"
+    "fetched_at": "2026-10-20T21:10:29+00:00"
   },
   "items": [
     {
@@ -818,7 +818,7 @@
       "title": "docs(cookbook): add Node-RED/MQTT/evcc EV charging recipe (no Home Assistant)",
       "type": "link",
       "content_id": "PR_kwDOGC8VbM8AAAABJArx6g",
-      "Status": "Review",
+      "Status": "Done / Wont Do",
       "Category": "B: End-User-Ops",
       "Phase": "Phase 4",
       "Priority": "P0",
