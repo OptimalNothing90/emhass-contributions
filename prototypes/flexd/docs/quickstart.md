@@ -82,6 +82,17 @@ docker compose --profile mqtt up -d
 
 That brings up a bundled Mosquitto broker too, using `mosquitto/mosquitto.conf`.
 
+The bundle publishes its ports on the host's loopback interface only (`127.0.0.1`), because
+EMHASS answers `/set-config` and `/action/*` without any authentication and flexd's API has none
+either; other machines on your LAN cannot reach them unless you put a reverse proxy with
+authentication in front or deliberately override the binding in a compose override file. The
+host port numbers are environment variables with the familiar defaults: `FLEXD_HOST_PORT`
+(8321, flexd), `FLEXD_EMHASS_HOST_PORT` (5000, EMHASS) and `FLEXD_MQTT_HOST_PORT` (1883,
+Mosquitto). Set them in the shell or in a `.env` file next to `docker-compose.yml` when one of
+the defaults is already taken, e.g. `FLEXD_EMHASS_HOST_PORT=5001 docker compose up -d`. They
+only affect the host side; flexd keeps talking to EMHASS over the compose network at
+`http://emhass:5000`.
+
 Verify flexd is up:
 
 ```bash
