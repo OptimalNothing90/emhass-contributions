@@ -104,12 +104,12 @@ other than `now` and `off`, which both columns have.
 | `off` | yes | yes (`api.ChargeModeString`) | not traced |
 | `now` | yes | yes | not traced |
 | `minpv` | separate mode | accepted, `SetMode` normalises it to `smart` with an always-charge flag | not traced |
-| `pv` | separate mode | accepted, normalised to `smart` | not traced; with the automatic mode the optimizer decides start and stop in `pv` and `minpv` |
+| `pv` | separate mode | accepted, normalised to `smart` | not traced; at automatic level `full` the optimizer also steers `pv` and `minpv` loadpoints |
 | `smart` | does not exist | exists | not traced |
-| Automatic mode (evcc PR #32881, merged 2026-10-11, release 0.318.0 of 2026-10-24) | does not exist | does not exist | new switch in the optimizer settings, off by default; per the PR text it gates charging in `pv` and `minpv`, leaves current and phase selection to the loadpoint, and also controls the home battery (normal, hold, charge, holdcharge). Read from the PR description only; the mode enum and the loadpoint state were not traced. |
+| Automatic mode (evcc PR #32881, merged 2026-10-11, release 0.318.0 of 2026-10-24) | does not exist | does not exist | A setting with three levels in the 0.318.0 code (`core/site.go`): `off` (default), `battery` (home battery only) and `full` (home battery and loadpoints); it also needs the experimental and optimizer settings and an authorised sponsor token. At `full`, a loadpoint in `pv`/`minpv` follows the forecast surplus where the plan matches it. Otherwise the optimizer's suggested power sets the charge: full power, a limited current, or minimum charging (`core/loadpoint_optimizer.go`, `optimizerCharging`), so current selection is no longer left to the pv loop. The PR text said "a switch, off by default"; the code is what was read for this row. The `smart` enum on 0.318.0 was not traced. |
 
 If a statement here depends on the mode name, it says which column it is true for. A deployment
-below 0.318 has no automatic mode; a deployment at 0.318 or later must keep it off for any
+below 0.318 has no automatic mode; a deployment at 0.318 or later must keep it at `off` for any
 loadpoint and any home battery the planner drives (R17).
 
 ## A. Scope
@@ -128,10 +128,13 @@ an opt-in per vehicle, never assumed.
 - Lifecycle layer: `type: "ev"` demands are charge-only; a `charge_only` flag, if added, must
   default to true.
 
-Acceptance: a vehicle registered with no discharge capability never appears with negative
-power in any plan slot, in any mode, including when export prices are higher than import
-prices. A bidirectional vehicle appears with negative power only when its registration says
-so.
+Acceptance: a vehicle registered with no discharge capability never returns energy in any plan
+slot, in any mode, including when export prices are higher than import prices. The sign
+depends on the representation: a deferrable load's `P_deferrable{n}` is never negative; a
+battery's `P_batt_{k}` is negative while charging and positive while discharging
+(`src/emhass/optimization.py`, `p_sto_neg` is non-positive), so for the phase 2 EV battery
+"never discharges" means `P_batt_{k}` is never positive. A bidirectional vehicle discharges
+only when its registration says so.
 
 ## B. Availability
 
@@ -244,13 +247,17 @@ opted in for that source.
 ### R7. Usable capacity, not nameplate
 
 The energy the planner may put into the vehicle is bounded by the usable capacity between the
-current SOC and the applicable upper limit, which is the lowest of the user limit, the vehicle
-limit and 100 %, where a limit of 0 is unset.
+current SOC and the applicable upper limit. The consumer takes the lowest of the user limit,
+the vehicle's API limit and 100 %, where a limit of 0 is unset. The executor does not do this
+for it (see `effectiveLimitSoc` below).
 
 - Executor: `vehicles.<name>.capacity` (kWh, "Usable battery capacity in kWh", `Vehicle`
   schema in `openapi.state.yaml`; vehicle `Capacity()` internally); `limitSoc` (loadpoint,
   percent) and `vehicleLimitSoc` (vehicle API limit, percent); `effectiveLimitSoc` is the
-  executor's resolution; `limitEnergy` (kWh) for vehicles without SOC. On evcc 0.315.2
+  loadpoint `limitSoc` if above 0, else the per-vehicle limit setting if above 0, else 100.
+  It does not look at `vehicleLimitSoc`: the source carries the comment "TODO take vehicle
+  api limits into account" on both 0.315.2 and 0.318.0 (`core/loadpoint_effective.go`).
+  `limitEnergy` (kWh) for vehicles without SOC. On evcc 0.315.2
   `limitSoc` is 0 for "no limit" and evcc sets it to 0 when the vehicle disconnects, so a 0
   has to be dropped from the minimum, not taken as the smallest limit.
 - Planner, phase 2: `battery_nominal_energy_capacity` (Wh) and
@@ -319,7 +326,9 @@ derived from its current bounds, the active phase count and the site voltage.
 
 Acceptance: with `effectiveMinCurrent` 5 A, `effectiveMaxCurrent` 16 A and `phasesActive` 3
 at 230 V (`Voltage`, default 230 V in `core/site.go`, used by `currentToPower` in
-`core/helper.go`), the planner sees p_min about 3.45 kW (the floor on LesIT1's charger) and
+`core/helper.go` at `daacfa7`; on 0.318.0 the constant and `CurrentToPower` / `PowerToCurrent`
+live in `util/grid/grid.go`, which also applies a factor of √3 instead of 3 for a three-wire
+grid without neutral), the planner sees p_min about 3.45 kW (the floor on LesIT1's charger) and
 p_max 11.0 kW. A plan slot between zero and p_min is never emitted; every slot is either zero
 or at least p_min. Re-deriving the bounds when the executor changes the phase count is an
 executor concern (RFC 0001).
@@ -400,8 +409,6 @@ is not `Infeasible`.
 
 ### R17. Split between planner, executor, lifecycle layer and the person
 
-Exactly one party decides each thing.
-
 | Decision | Owner | Field or mechanism |
 |---|---|---|
 | Which slots the EV charges in, at what power | Planner | `P_deferrable{n}` per slot in `GET /api/v1/plan` (today); `P_batt_{k}` per battery (phase 1 output naming) |
@@ -427,8 +434,8 @@ Rules that follow:
   see the mode table) are off for a loadpoint the planner drives, or the plan and the
   executor fight. The cookbook documents the `pv`/`minpv` variant as a deliberate trade-off
   that forfeits the deadline guarantee. From evcc 0.318 the optimizer's automatic mode
-  (#32881) acts on `pv`/`minpv` loadpoints and on the home battery when its switch is on; it
-  must be off for anything the planner drives.
+  (#32881) acts on the home battery at level `battery` and on `pv`/`minpv` loadpoints too at
+  level `full`; it must be `off` while the planner drives the home battery or a loadpoint.
 - The executor must not control the home battery when the planner does (cookbook
   prerequisite): the battery is excluded from the executor's meters.
 - Detecting that the person overrode a planned slot is an executor and lifecycle concern, in
@@ -445,8 +452,11 @@ limit can trim the EV's current below the plan without anyone deciding to.
 
 - Executor: `chargedEnergy` and `sessionEnergy` (kWh, session), `chargePower` (W, live),
   `chargeRemainingEnergy` (kWh, executor's estimate against its own plan), `vehicleSoc`.
-- Planner, today: `def_current_power` (W) pins slot 0 to the live power (cookbook step 5;
-  since the release after v0.17.7); `def_current_state` and `def_current_on_timesteps` carry
+- Planner, today: `def_current_power` (W) pins slot 0 to the live power for a continuous load
+  (cookbook step 5; since the release after v0.17.7). A semi-continuous load is not pinned:
+  a positive value forces it on at nominal power at slot 0. Single-constant, sequence and
+  thermal loads are excluded (`src/emhass/optimization.py`, around line 1217; use
+  `def_current_state` for those). `def_current_state` and `def_current_on_timesteps` carry
   the on/off state and elapsed on time.
 - Lifecycle layer: accrues from the adopted plan today (plan-slot overlap scaled by power
   ratio); a measured value must take precedence when present. Requirement: refresh accepts a
@@ -497,8 +507,8 @@ Conversions happen once, at the lifecycle layer, and are documented in the respo
 
 Acceptance: a registration of 11 kWh for an 11 kW charger produces
 `operating_hours_of_each_deferrable_load` of 1.0 h (or 2 timesteps of 30 min for a
-semi-continuous load); a `soc_init` of 0.6 is sent for a `vehicleSoc` of 60 (and of 60.4 for
-a `vehicleSoc` of 60.4, not rounded); the response echoes the derived values so a reviewer
+semi-continuous load); a `soc_init` of 0.6 is sent for a `vehicleSoc` of 60, and 0.604 for a
+`vehicleSoc` of 60.4 (a value of 60.4 is not a fraction and v0.18.6 rejects it); the response echoes the derived values so a reviewer
 can check the arithmetic without reading code.
 
 ## H. Added in the 2026-11-04 revision
@@ -530,15 +540,15 @@ grid allowed; tier 2 = target at the desired SOC, no deadline, grid not allowed.
   Repeating plans (`RepeatingPlan{weekdays 0 to 6, time "HH:MM", tz, soc, active}`) carry a
   different target per weekday, which is how a weekday commute and a weekend trip differ; this
   is read-only input here.
-- Evidence that grid eligibility per tier is a requirement and not decoration: evcc's own
-  optimizer (`evcc-io/optimizer`, schema `BatteryConfig` in `openapi.yaml`, field
+- Why a grid rule per tier has to be expressible: evcc's own optimizer (`evcc-io/optimizer`, schema `BatteryConfig` in `openapi.yaml`, field
   `charge_from_grid`, checked at `1205e7d`) knows the grid rule only as a boolean per battery:
   "can be charged from the grid, subject to the optimization" or "cannot be charged while power
   is drawn from the grid". A boolean per device cannot express "grid below X %, solar
   above". I did not check whether the optimizer models vehicles with an equivalent flag.
 - Planner, today: tier 1 is a windowed deferrable load with an exact energy; tier 2 has no
-  representation. A deferrable takes an exact energy and a window, not an upper bound and a
-  price condition. A deadline past the horizon is clamped to the horizon end by the lifecycle
+  representation. A deferrable takes an exact energy and a window. The nearest thing to an
+  optional load is `deferrable_load_max_cost`: the load runs in full or not at all, with a
+  reward equal to the maximum cost, so it still cannot say "any amount up to X". A deadline past the horizon is clamped to the horizon end by the lifecycle
   layer, so an open-ended top-up registered as a demand means "all of this energy by the end
   of the horizon", the opposite of the intent. flexd cannot express tier 2 today (stated in
   #1, reply of 2026-11-03).
@@ -609,7 +619,7 @@ or `12ce81c`, `0.315` = LesIT1 on tag 0.315.2 (see "evcc versions per field").
 | R14 no telemetry | `limitEnergy`, `planEnergy`, null `chargeRemainingEnergy`; `vehicleSoc` 0 = unknown | m, 0.315 for 0 | energy-based plan | SOC optional | unknown-SOC flag (RFC 0001) |
 | R15 late arrival | `connected`, `planOverrun` | m | `start_timesteps` moves | connected mask | truncation flag (RFC 0001) |
 | R16 never infeasible | `planOverrun` | m | lifecycle layer pre-shrinks | soft tier target with penalty (my proposal) | reason vocabulary in RFC 0001 |
-| R17 responsibilities | `mode/{now\|off}`, `maxcurrent`, `minsoc`; `smartCostLimit`, `batteryBoost`, automatic mode off; evcc plans read, never written | m; `minsoc` 0.315; automatic mode from PR text, 0.318.0 | `P_deferrable{n}`, `def_current_power` | `P_batt_{k}` | override detection in RFC 0001 |
+| R17 responsibilities | `mode/{now\|off}`, `maxcurrent`, `minsoc`; `smartCostLimit`, `batteryBoost`, automatic mode off; evcc plans read, never written | m; `minsoc` 0.315; automatic mode: 0.318.0 code | `P_deferrable{n}`, `def_current_power` | `P_batt_{k}` | override detection in RFC 0001 |
 | R18 feedback | `chargedEnergy`, `sessionEnergy`, `chargePower` | m | `def_current_power`, `def_current_state` | measured SOC re-anchor | measured delivered energy (RFC 0001) |
 | R19 time zones | RFC 3339, `RepeatingPlan.tz` | m | `time_zone`, slot indices | same | tz-aware, UTC internal |
 | R20 units | kWh, W, A, percent (`vehicleSoc` float) | m | Wh, W, fraction, slots | same as phase 1 | Wh, W, percent in, fraction out |
