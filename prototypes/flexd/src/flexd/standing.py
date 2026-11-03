@@ -20,20 +20,24 @@ log = logging.getLogger(__name__)
 
 CONFIG_SOURCE = "config"
 
-# A non-modulating standing demand is planned in whole slots; the aggregator rounds the
-# remaining hours UP (over-deliver by less than a slot rather than leave energy
-# unreachable). The ledger, however, credits what was served, and every contiguous ON
-# block is served from the adoption instant, not from the slot boundary: cycles fire
-# cycle_offset_s after the boundary and the solve takes a few seconds more. Each block
-# therefore leaves the day's elapsed hours a few tens of seconds short of a whole slot
-# count, and rounded up that residual became one more full slot (shadow pilot
-# 2026-10-21..27: heating 1137 Wh instead of 975 on 5 of 7 days, hot water 3500
-# instead of 3150 on 6 of 7). A residual below this fraction of a slot is accounting
-# noise, not a slot's worth of energy, and is dropped before materializing: the day
-# ends up to a quarter slot short instead of three quarters of a slot over. A quarter
-# absorbs several ON blocks even on a 15-min grid with slow solves (10 % = 90 s there
-# would not have covered the pilot's 92 s deficit after a single three-slot block).
-SLOT_RESIDUAL_TOLERANCE = 0.25
+# Non-modulating standing demands are planned in whole slots (the aggregator rounds
+# the remaining hours UP). The ledger credits what was served, and each contiguous ON
+# block is served from the plan's adoption instant, i.e. cycle_offset_s plus the solve
+# time after the slot boundary. That leaves the day's remaining hours some seconds per
+# block short of a whole slot count, which rounded up became one more full slot every
+# cycle (issue #4). The deficit is absolute time per block, not a share of the slot, so
+# the tolerance is in seconds: a residual below it is dropped, bounded at half a slot
+# so that no grid ever rounds up more than it rounds down.
+SLOT_RESIDUAL_TOLERANCE_S = 300.0
+
+
+def _drop_residual_noise(hours: float, slot_h: float) -> float:
+    """Whole slots when the part beyond them is below the tolerance; otherwise the
+    hours unchanged (the aggregator rounds them up to the next slot)."""
+    slots, residual = divmod(hours, slot_h)
+    if residual < min(SLOT_RESIDUAL_TOLERANCE_S / 3600, slot_h / 2):
+        return slots * slot_h
+    return hours
 
 
 class StandingManager:
@@ -141,14 +145,6 @@ class StandingManager:
             entry["last_accrual"] = accrual_end.isoformat()
         return entry, win_start, win_end
 
-    def _drop_sub_slot_residual(self, hours: float) -> float:
-        """Whole slots when the part beyond them is below SLOT_RESIDUAL_TOLERANCE of a
-        slot; otherwise the hours unchanged (the aggregator rounds them up)."""
-        slots, residual = divmod(hours, self._slot_h)
-        if residual < SLOT_RESIDUAL_TOLERANCE * self._slot_h:
-            return slots * self._slot_h
-        return hours
-
     def _prune_ledger(self, now: datetime) -> None:
         # day-keyed: past days are dead weight; prune so the file can't grow unbounded
         today = now.astimezone(self._tz).date().isoformat()
@@ -196,7 +192,7 @@ class StandingManager:
                     )
                     remaining_h = target_h - entry["elapsed_h"]
                     if not defn.modulating:
-                        remaining_h = self._drop_sub_slot_residual(remaining_h)
+                        remaining_h = _drop_residual_noise(remaining_h, self._slot_h)
                     if remaining_h <= 0:
                         # a previously-materialized instance must not keep soliciting energy
                         if self._registry.get(defn.id) is not None:
@@ -238,7 +234,11 @@ class StandingManager:
         at again. Converting at the client's `nominal_power_w` and back at the
         definition's mis-scaled the correction whenever the two differed (#1 Lows);
         a difference above 1 % is logged, because the client's idea of the device is
-        off. Returns the remaining hours at definition power."""
+        off. Returns the remaining hours at definition power.
+
+        For a non-modulating definition the corrected remainder is materialized like
+        any other: below SLOT_RESIDUAL_TOLERANCE_S beyond whole slots it counts as
+        delivered (a whole-slot device cannot run for a few seconds)."""
         defn = self._defs.get(demand_id)
         if defn is None:
             raise KeyError(demand_id)

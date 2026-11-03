@@ -4,10 +4,12 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from flexd.aggregator import grid_anchor
 from flexd.config import StandingDefinition
 from flexd.models import Demand
 from flexd.plan_view import PlanView
 from flexd.registry import Registry
+from flexd.scheduler import Scheduler
 from flexd.standing import StandingManager
 
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -18,18 +20,50 @@ NIGHT_UTC = datetime(2026, 7, 5, 22, 0, tzinfo=timezone.utc)  # 00:00 Berlin nex
 DEF = StandingDefinition(
     id="waterheater", nominal_power_w=3000, daily_hours=5, window="06:00-22:00"
 )
+PUMP = StandingDefinition(
+    id="pump", nominal_power_w=750, daily_hours=4, window="06:00-22:00", modulating=True
+)
 
 
-def mk(tmp_path):
+def mk(tmp_path, defs=(DEF,), timestep_min=30):
     reg = Registry(tmp_path / "demands.json")
     mgr = StandingManager(
-        [DEF],
+        list(defs),
         ledger_path=tmp_path / "ledger.json",
         tz="Europe/Berlin",
         registry=reg,
-        timestep_min=30,
+        timestep_min=timestep_min,
     )
     return reg, mgr
+
+
+def _plan(first: datetime, step_min: int, powers: list) -> dict:
+    """The plan EMHASS returns for one deferrable: records from `first` on the grid."""
+    return {
+        "status": "ok",
+        "generated_at": (first + timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "emhass_schema_version": "1.0",
+        "plan": [
+            {
+                "timestamp": (first + timedelta(minutes=step_min * i)).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ),
+                "P_deferrable0": power,
+            }
+            for i, power in enumerate(powers)
+        ],
+    }
+
+
+class FakeSolver:
+    """run_cycle fake: records each payload and answers with solve(now)."""
+
+    def __init__(self, solve):
+        self._solve, self.calls = solve, []
+
+    async def run_cycle(self, payload, last_generated_at=None, *, now, **kw):
+        self.calls.append(payload)
+        return self._solve(now)
 
 
 def test_materializes_inside_window(tmp_path):
@@ -266,41 +300,17 @@ def test_accrue_only_updates_ledger_without_materializing(tmp_path):
 
 
 async def test_energy_accounting_across_a_real_plan_switch(tmp_path):
-    from flexd.scheduler import Scheduler
-
     reg, mgr = mk(tmp_path)
     view = PlanView(
         tmp_path / "adopted.json",
         stale_after=timedelta(hours=2),
         timestep=timedelta(minutes=30),
     )
-
-    def plan(power, generated_at, first):
-        return {
-            "status": "ok",
-            "generated_at": generated_at,
-            "emhass_schema_version": "1.0",
-            "plan": [
-                {
-                    "timestamp": (first + timedelta(minutes=30 * i)).strftime(
-                        "%Y-%m-%dT%H:%M:%SZ"
-                    ),
-                    "P_deferrable0": power,
-                }
-                for i in range(3)
-            ],
-        }
-
     plans = [
-        plan(3000, "2026-07-05T12:00:05Z", NOON_UTC),
-        plan(1500, "2026-07-05T12:30:05Z", NOON_UTC + timedelta(minutes=30)),
-        plan(1500, "2026-07-05T13:00:05Z", NOON_UTC + timedelta(hours=1)),
+        _plan(NOON_UTC, 30, [3000] * 3),
+        _plan(NOON_UTC + timedelta(minutes=30), 30, [1500] * 3),
+        _plan(NOON_UTC + timedelta(hours=1), 30, [1500] * 3),
     ]
-
-    class TwoPlans:
-        async def run_cycle(self, payload, last_generated_at=None, **kw):
-            return plans.pop(0)
-
     ticks = iter(
         [
             NOON_UTC + timedelta(minutes=2),
@@ -310,7 +320,7 @@ async def test_energy_accounting_across_a_real_plan_switch(tmp_path):
     )
     s = Scheduler(
         registry=reg,
-        driver=TwoPlans(),
+        driver=FakeSolver(lambda now: plans.pop(0)),
         view=view,
         standing=mgr,
         timestep_min=30,
@@ -331,21 +341,7 @@ async def test_energy_accounting_across_a_real_plan_switch(tmp_path):
 
 
 def test_standing_modulating_flag_reaches_demand(tmp_path):
-    reg = Registry(tmp_path / "demands.json")
-    defn = StandingDefinition(
-        id="pump",
-        nominal_power_w=750,
-        daily_hours=4,
-        window="06:00-22:00",
-        modulating=True,
-    )
-    mgr = StandingManager(
-        [defn],
-        ledger_path=tmp_path / "ledger.json",
-        tz="Europe/Berlin",
-        registry=reg,
-        timestep_min=30,
-    )
+    reg, mgr = mk(tmp_path, defs=(PUMP,))
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg.get("pump").modulating is True
 
@@ -506,66 +502,31 @@ def test_correction_returns_hours_at_the_definition_power(tmp_path):
     assert mgr.correct("waterheater", remaining_wh=4500, now=NOON_UTC) == 1.5
 
 
-# -- shadow pilot 2026-10-21..27: one extra slot for non-modulating standing demands --
+# -- issue #4: one extra slot for non-modulating standing demands ---------------------
 async def test_served_whole_slots_do_not_round_up_to_an_extra_slot(tmp_path):
-    """Cycles fire cycle_offset_s after the grid boundary and the plan is adopted a
-    solve later, so a contiguous ON block is served (and credited) from the adoption
-    instant, not from the slot boundary. The ledger then sits a few tens of seconds
-    short of a whole slot count, and the semi-continuous rounding in the aggregator
-    turned that residual into one more full slot (heating 1137 Wh instead of 975 on 5
-    of 7 pilot days). Three 15-min slots at 650 W are the whole 0.75 h day target:
-    the payloads must ask for 3, 2, 1 slots and then nothing."""
-    from flexd.aggregator import grid_anchor
-    from flexd.scheduler import Scheduler
-
-    defn = StandingDefinition(
+    """Cycles 30 s after the boundary, adoption 5 s later, three 15-min ON slots at
+    650 W = the whole 0.75 h day target. The ledger ends a few seconds short of three
+    slots; the payloads must ask for 3, 2, 1 slots and then nothing, not 3, 3, 2, 1."""
+    heater = StandingDefinition(
         id="heater", nominal_power_w=650, daily_hours=0.75, window="06:00-22:00"
     )
-    reg = Registry(tmp_path / "demands.json")
-    mgr = StandingManager(
-        [defn],
-        ledger_path=tmp_path / "ledger.json",
-        tz="Europe/Berlin",
-        registry=reg,
-        timestep_min=15,
-    )
+    reg, mgr = mk(tmp_path, defs=(heater,), timestep_min=15)
     view = PlanView(
         tmp_path / "adopted.json",
         stale_after=timedelta(hours=2),
         timestep=timedelta(minutes=15),
     )
-    # ON 12:00, 12:15, 12:30; OFF from 12:45
-    on_until = NOON_UTC + timedelta(minutes=45)
+    on_until = NOON_UTC + timedelta(minutes=45)  # ON 12:00, 12:15, 12:30
 
-    class SolverOnTheGrid:
-        """Returns the plan EMHASS would: anchored on the cycle's grid boundary, the
-        heater at nominal power in every slot before `on_until`."""
+    def solve(now):
+        anchor = grid_anchor(now, 15, "nearest")
+        powers = [
+            650 if anchor + timedelta(minutes=15 * i) < on_until else 0
+            for i in range(8)
+        ]
+        return _plan(anchor, 15, powers)
 
-        def __init__(self):
-            self.calls = []
-
-        async def run_cycle(self, payload, last_generated_at=None, *, now, **kw):
-            self.calls.append(payload)
-            anchor = grid_anchor(now, 15, "nearest")
-            return {
-                "status": "ok",
-                "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "emhass_schema_version": "1.0",
-                "plan": [
-                    {
-                        "timestamp": (anchor + timedelta(minutes=15 * i)).strftime(
-                            "%Y-%m-%dT%H:%M:%SZ"
-                        ),
-                        "P_deferrable0": 650
-                        if anchor + timedelta(minutes=15 * i) < on_until
-                        else 0,
-                    }
-                    for i in range(8)
-                ],
-            }
-
-    driver = SolverOnTheGrid()
-    # each cycle starts 30 s after the boundary and adopts 5 s later (the solve)
+    driver = FakeSolver(solve)
     cycle_starts = [NOON_UTC + timedelta(minutes=15 * i, seconds=30) for i in range(4)]
     switches = iter(start + timedelta(seconds=5) for start in cycle_starts)
     s = Scheduler(
@@ -582,46 +543,31 @@ async def test_served_whole_slots_do_not_round_up_to_an_extra_slot(tmp_path):
 
     results = [await s.run_once(now=start) for start in cycle_starts]
 
-    requested_slots = [
-        p["operating_hours_of_each_deferrable_load"][0] / 0.25 for p in driver.calls
+    requested_h = [
+        p["operating_hours_of_each_deferrable_load"][0] for p in driver.calls
     ]
-    assert requested_slots == pytest.approx([3, 2, 1])
-    # 12:45:30: the three slots have been served, the residual under a slot is not a
-    # fourth one; the day target is satisfied and the heater is no longer solicited
+    assert requested_h == pytest.approx([0.75, 0.5, 0.25])
+    # 12:45:30: the residual under a slot is not a fourth one; target satisfied
     assert results[-1] == "skipped"
     assert reg.get("heater") is None
 
 
-def test_residual_at_or_above_tolerance_is_still_rounded_up(tmp_path):
-    # the tolerance absorbs accounting noise, not the aggregator's whole-slot policy:
-    # 2 slots + 0.25 slot on the 30-min grid stays 1.125 h (the aggregator makes it 3)
+@pytest.mark.parametrize(
+    "remaining_h, materialized_h",
+    [
+        (1.125, 1.125),  # 2 slots + 7.5 min on the 30-min grid: kept, aggregator ceils
+        (1.025, 1.0),  # 2 slots + 90 s: accounting noise, dropped
+    ],
+)
+def test_residual_tolerance_boundary(tmp_path, remaining_h, materialized_h):
     reg, mgr = mk(tmp_path)
-    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 5 - 1.125)
-    assert reg.get("waterheater").energy_target_wh == pytest.approx(1.125 * 3000)
-
-
-def test_residual_below_tolerance_is_dropped(tmp_path):
-    # 2 slots + 90 s on the 30-min grid (5 % of a slot) materializes as 2 whole slots
-    reg, mgr = mk(tmp_path)
-    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 5 - 1.025)
-    assert reg.get("waterheater").energy_target_wh == pytest.approx(1.0 * 3000)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 5 - remaining_h)
+    assert reg.get("waterheater").energy_target_wh == pytest.approx(
+        materialized_h * 3000
+    )
 
 
 def test_modulating_standing_demand_keeps_the_exact_residual(tmp_path):
-    reg = Registry(tmp_path / "demands.json")
-    defn = StandingDefinition(
-        id="pump",
-        nominal_power_w=750,
-        daily_hours=4,
-        window="06:00-22:00",
-        modulating=True,
-    )
-    mgr = StandingManager(
-        [defn],
-        ledger_path=tmp_path / "ledger.json",
-        tz="Europe/Berlin",
-        registry=reg,
-        timestep_min=30,
-    )
+    reg, mgr = mk(tmp_path, defs=(PUMP,))
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 4 - 0.01)
     assert reg.get("pump").energy_target_wh == pytest.approx(0.01 * 750)

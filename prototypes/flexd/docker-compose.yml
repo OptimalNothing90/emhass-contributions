@@ -1,10 +1,6 @@
 # Host ports bind to loopback only: EMHASS serves /set-config and /action/* without
-# any authentication, and flexd's own API has none either. Reaching them from another
-# machine is an explicit decision (a reverse proxy with auth, or a LAN-bound override
-# in a compose override file), not the default. The host port numbers are overridable
-# via FLEXD_HOST_PORT, FLEXD_EMHASS_HOST_PORT and FLEXD_MQTT_HOST_PORT (see
-# docs/quickstart.md); flexd itself reaches EMHASS over the compose network
-# (http://emhass:5000), untouched by these.
+# authentication, and so does flexd's own API. Port numbers are overridable via
+# FLEXD_HOST_PORT, FLEXD_EMHASS_HOST_PORT and FLEXD_MQTT_HOST_PORT (docs/quickstart.md).
 services:
   flexd:
     build: .
