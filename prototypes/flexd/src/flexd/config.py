@@ -135,7 +135,8 @@ class TemplateDefinition(BaseModel):
 
 class FlexdConfig(BaseModel):
     emhass_url: str = "http://localhost:5000"
-    timestep_min: int = 30
+    # must equal EMHASS optimization_time_step; every grid computation divides by it
+    timestep_min: int = Field(default=30, gt=0)
     horizon_steps: int = 48
     timezone: str = "UTC"
     data_dir: Path = Path("/data")
@@ -153,6 +154,15 @@ class FlexdConfig(BaseModel):
     extra_runtime_params: dict = {}
     standing_demands: list[StandingDefinition] = []
     templates: list[TemplateDefinition] = []
+
+    @field_validator("timestep_min")
+    @classmethod
+    def _divides_the_hour(cls, v: int) -> int:
+        # aggregator.grid_anchor aligns on the UTC clock, which equals EMHASS's wall-clock
+        # alignment only for steps that divide 60
+        if 60 % v:
+            raise ValueError(f"timestep_min must divide 60, got {v}")
+        return v
 
     @field_validator("timezone")
     @classmethod

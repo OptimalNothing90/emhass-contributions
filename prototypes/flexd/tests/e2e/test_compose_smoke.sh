@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 COMPOSE=(docker compose -f docker-compose.yml -f tests/e2e/compose.e2e.yml)
-# host ports as docker-compose.yml publishes them: loopback only, numbers overridable
+# host ports as docker-compose.yml publishes them on the loopback default (FLEXD_BIND_ADDR unset)
 FLEXD="http://127.0.0.1:${FLEXD_HOST_PORT:-8321}"
 EMHASS="http://127.0.0.1:${FLEXD_EMHASS_HOST_PORT:-5000}"
 "${COMPOSE[@]}" up -d --build

@@ -175,3 +175,17 @@ def test_cycle_offset_default_and_env(tmp_path, monkeypatch):
     monkeypatch.delenv("FLEXD_CYCLE_OFFSET_S")
     with pytest.raises(ValidationError):
         load_config(p)
+
+
+def test_timestep_min_must_be_a_positive_divisor_of_60(tmp_path):
+    # grid_anchor, the aggregator and the standing ledger all divide by it, and the
+    # UTC-offset alignment argument in aggregator.grid_anchor needs it to divide 60
+    p = tmp_path / "flexd.yaml"
+    for bad in ("0", "-15", "7", "45"):
+        p.write_text(
+            YAML.replace("timestep_min: 30", f"timestep_min: {bad}"), encoding="utf-8"
+        )
+        with pytest.raises(ValidationError):
+            load_config(p)
+    p.write_text(YAML.replace("timestep_min: 30", "timestep_min: 15"), encoding="utf-8")
+    assert load_config(p).timestep_min == 15

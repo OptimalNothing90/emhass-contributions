@@ -543,6 +543,9 @@ async def test_served_whole_slots_do_not_round_up_to_an_extra_slot(tmp_path):
 
     results = [await s.run_once(now=start) for start in cycle_starts]
 
+    # the premise: three served slots were credited from 12:00:35, not from 12:00:00
+    ledger = json.loads((tmp_path / "ledger.json").read_text(encoding="utf-8"))
+    assert ledger["heater:2026-07-05"]["elapsed_h"] == pytest.approx(0.75 - 35 / 3600)
     requested_h = [
         p["operating_hours_of_each_deferrable_load"][0] for p in driver.calls
     ]
