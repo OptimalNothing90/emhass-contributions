@@ -20,6 +20,25 @@ log = logging.getLogger(__name__)
 
 CONFIG_SOURCE = "config"
 
+# Non-modulating standing demands are planned in whole slots (the aggregator rounds
+# the remaining hours UP). The ledger credits what was served, and each contiguous ON
+# block is served from the plan's adoption instant, i.e. cycle_offset_s plus the solve
+# time after the slot boundary. That leaves the day's remaining hours some seconds per
+# block short of a whole slot count, which rounded up became one more full slot every
+# cycle (issue #4). The deficit is absolute time per block, not a share of the slot, so
+# the tolerance is in seconds: a residual below it is dropped, bounded at half a slot
+# so that no grid ever rounds up more than it rounds down.
+SLOT_RESIDUAL_TOLERANCE_S = 300.0
+
+
+def _drop_residual_noise(hours: float, slot_h: float) -> float:
+    """Whole slots when the part beyond them is below the tolerance; otherwise the
+    hours unchanged (the aggregator rounds them up to the next slot)."""
+    slots, residual = divmod(hours, slot_h)
+    if residual < min(SLOT_RESIDUAL_TOLERANCE_S / 3600, slot_h / 2):
+        return slots * slot_h
+    return hours
+
 
 class StandingManager:
     def __init__(
@@ -29,8 +48,10 @@ class StandingManager:
         ledger_path: Path,
         tz: str,
         registry: Registry,
+        timestep_min: int,
     ):
         self._defs = {d.id: d for d in definitions}
+        self._slot_h = timestep_min / 60
         self._ledger_path = Path(ledger_path)
         self._bak = self._ledger_path.with_suffix(self._ledger_path.suffix + ".bak")
         self._tz = ZoneInfo(tz)
@@ -170,6 +191,8 @@ class StandingManager:
                         override if override is not None else defn.effective_daily_hours
                     )
                     remaining_h = target_h - entry["elapsed_h"]
+                    if not defn.modulating:
+                        remaining_h = _drop_residual_noise(remaining_h, self._slot_h)
                     if remaining_h <= 0:
                         # a previously-materialized instance must not keep soliciting energy
                         if self._registry.get(defn.id) is not None:
@@ -211,7 +234,11 @@ class StandingManager:
         at again. Converting at the client's `nominal_power_w` and back at the
         definition's mis-scaled the correction whenever the two differed (#1 Lows);
         a difference above 1 % is logged, because the client's idea of the device is
-        off. Returns the remaining hours at definition power."""
+        off. Returns the remaining hours at definition power.
+
+        For a non-modulating definition the corrected remainder is materialized like
+        any other: below SLOT_RESIDUAL_TOLERANCE_S beyond whole slots it counts as
+        delivered (a whole-slot device cannot run for a few seconds)."""
         defn = self._defs.get(demand_id)
         if defn is None:
             raise KeyError(demand_id)

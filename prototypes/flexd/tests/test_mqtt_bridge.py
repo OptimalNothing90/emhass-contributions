@@ -490,6 +490,7 @@ async def test_mqtt_correction_energy_is_scaled_at_the_definition_power(
         ledger_path=tmp_path / "ledger.json",
         tz="UTC",
         registry=reg,
+        timestep_min=30,
     )
     view = FakeView()
     b = MqttBridge(

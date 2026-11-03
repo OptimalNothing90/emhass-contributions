@@ -119,6 +119,7 @@ async def run() -> None:
         ledger_path=cfg.data_dir / "standing_ledger.json",
         tz=cfg.timezone,
         registry=registry,
+        timestep_min=cfg.timestep_min,
     )
     templates = TemplateManager(
         cfg.templates,

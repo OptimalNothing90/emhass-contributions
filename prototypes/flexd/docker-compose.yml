@@ -1,7 +1,11 @@
+# Host ports bind to loopback only: EMHASS serves /set-config and /action/* without
+# authentication, and so does flexd's own API. Clients on other machines (the guides
+# under docs/clients) need FLEXD_BIND_ADDR=0.0.0.0 or the host's LAN address; port
+# numbers are FLEXD_HOST_PORT, FLEXD_EMHASS_HOST_PORT, FLEXD_MQTT_HOST_PORT (quickstart).
 services:
   flexd:
     build: .
-    ports: ["8321:8321"]
+    ports: ["${FLEXD_BIND_ADDR:-127.0.0.1}:${FLEXD_HOST_PORT:-8321}:8321"]
     volumes:
       - ./flexd.yaml:/config/flexd.yaml:ro
       - flexd-data:/data
@@ -12,7 +16,7 @@ services:
 
   emhass:
     image: ghcr.io/davidusb-geek/emhass:v0.18.6  # release tag of the upstream/ submodule pin; bump together
-    ports: ["5000:5000"]
+    ports: ["${FLEXD_BIND_ADDR:-127.0.0.1}:${FLEXD_EMHASS_HOST_PORT:-5000}:5000"]
     volumes:
       - emhass-data:/data
     # bring-your-own EMHASS: start flexd alone and point FLEXD_EMHASS_URL at your instance
@@ -20,7 +24,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     profiles: ["mqtt"]
-    ports: ["1883:1883"]
+    ports: ["${FLEXD_BIND_ADDR:-127.0.0.1}:${FLEXD_MQTT_HOST_PORT:-1883}:1883"]
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
 
