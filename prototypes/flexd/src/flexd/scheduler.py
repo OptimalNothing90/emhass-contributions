@@ -16,6 +16,7 @@ from flexd.aggregator import build_runtimeparams, grid_anchor
 from flexd.emhass_driver import PlanRejected
 from flexd.models import utcnow
 from flexd.plan_view import verify_plan_structure
+from flexd.runtime_params import StaleInputs
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class Scheduler:
         timestep_min: int,
         horizon_steps: int,
         extra_runtime_params: dict,
+        runtime_params_provider=None,
         crumb_path: Path | None = None,
         on_cycle_end=None,
         on_demand_off=None,
@@ -45,6 +47,9 @@ class Scheduler:
         self._timestep_min = timestep_min
         self._horizon = horizon_steps
         self._extra = extra_runtime_params
+        # fresh runtime params per solve (flexd.runtime_params.RuntimeParamsProvider);
+        # None keeps the static dict only
+        self._provider = runtime_params_provider
         self._crumb_path = crumb_path
         self._on_cycle_end = (
             on_cycle_end  # async callback(state, swept_ids) for mqtt publish
@@ -89,13 +94,19 @@ class Scheduler:
                 now=now, elapsed_lookup=self._view.on_hours_elapsed
             )
             demands = self._registry.list_active(now=now)
+            payload = None
             if not demands:
                 result = "skipped"
+            elif (extra := await self._fresh_extra(now)) is None:
+                # provider document stale, missing, unreachable or unparsable: no
+                # solve on old data; the adopted plan stays as it is (contract #1,
+                # 2026-11-03)
+                result = "stale_inputs"
             else:
                 payload, mapping = build_runtimeparams(
                     demands,
                     now=now,
-                    extra=self._extra,
+                    extra=extra,
                     timestep_min=self._timestep_min,
                     horizon_steps=self._horizon,
                     ts_round=self._ts_round,
@@ -147,7 +158,7 @@ class Scheduler:
                 except httpx.HTTPError as exc:
                     log.error("emhass unreachable: %s", exc)
                     result = "down"
-            self._write_crumb(now, payload if demands else None, result)
+            self._write_crumb(now, payload, result)
             self.last_result = result
             if self._on_cycle_end is not None:
                 to_deliver = self._registry.pending_clear_ids()
@@ -159,6 +170,20 @@ class Scheduler:
                 except Exception:
                     log.exception("on_cycle_end failed; swept ids kept for redelivery")
             return result
+
+    async def _fresh_extra(self, now: datetime) -> dict | None:
+        """Static extra_runtime_params under the provider document (provider wins).
+        None when the provider says the inputs are stale. Conflicts with flexd's
+        own keys are filtered (with a warning) by build_runtimeparams, as for the
+        static dict."""
+        if self._provider is None:
+            return self._extra
+        try:
+            fresh = await self._provider.fetch(now=now)
+        except StaleInputs as exc:
+            log.warning("runtime params stale; cycle skipped: %s", exc)
+            return None
+        return {**self._extra, **fresh}
 
     def _write_crumb(self, now: datetime, payload: dict | None, result: str) -> None:
         if self._crumb_path is None:

@@ -22,9 +22,21 @@ mqtt:
   host: mosquitto
   port: 1883
   base_topic: flexd
-# merged into every EMHASS optim call; flexd's own deferrable keys always win on conflict
+# merged into every EMHASS optim call; flexd's own deferrable keys always win on conflict.
+# Read once at boot: use it for scalars that never change. Forecasts and a live soc_init
+# belong in runtime_params_provider below (the provider wins on overlapping keys).
 extra_runtime_params:
   soc_init: 0.5
+# fresh runtime parameters for every solve: a JSON object of EMHASS runtime params
+# (pv_power_forecast, load_power_forecast, load_cost_forecast, prod_price_forecast,
+# soc_init, ...) plus "generated_at" (ISO 8601 with offset). Exactly one of path / url.
+# Older than max_age_s, missing, unreachable or unparsable: the cycle is skipped and
+# reported as `stale_inputs`, the adopted plan stays; flexd never solves on old data.
+# Keys flexd sets itself (deferrable lists, prediction_horizon) are dropped with a warning.
+# An external relay that rebuilds EMHASS payloads today can write this document instead.
+# runtime_params_provider:
+#   path: /data/runtime-params.json      # or: url: http://relay:8080/runtime-params.json
+#   max_age_s: 900
 # recurring daily loads owned by flexd config; daily_energy_wh wins over daily_hours when both given
 # non-modulating loads run in whole timesteps; a remainder of a few minutes counts as delivered
 standing_demands:

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -189,3 +191,84 @@ def test_timestep_min_must_be_a_positive_divisor_of_60(tmp_path):
             load_config(p)
     p.write_text(YAML.replace("timestep_min: 30", "timestep_min: 15"), encoding="utf-8")
     assert load_config(p).timestep_min == 15
+
+
+# -- runtime_params_provider: exactly one of path / url, env overrides like FLEXD_EMHASS_URL --
+PROVIDER_PATH_YAML = (
+    "runtime_params_provider:\n  path: /data/runtime-params.json\n  max_age_s: 900\n"
+)
+PROVIDER_URL_YAML = (
+    "runtime_params_provider:\n  url: http://relay:8080/params.json\n  max_age_s: 300\n"
+)
+
+
+def test_runtime_params_provider_absent_by_default(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    assert load_config(p).runtime_params_provider is None
+
+
+def test_runtime_params_provider_from_path(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML + PROVIDER_PATH_YAML, encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.runtime_params_provider.path == Path("/data/runtime-params.json")
+    assert cfg.runtime_params_provider.url is None
+    assert cfg.runtime_params_provider.max_age_s == 900
+
+
+def test_runtime_params_provider_from_url(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML + PROVIDER_URL_YAML, encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.runtime_params_provider.url == "http://relay:8080/params.json"
+    assert cfg.runtime_params_provider.path is None
+
+
+def test_runtime_params_provider_rejects_both_and_neither(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    both = (
+        "runtime_params_provider:\n  path: /x.json\n"
+        "  url: http://y/z.json\n  max_age_s: 60\n"
+    )
+    p.write_text(YAML + both, encoding="utf-8")
+    with pytest.raises(ValidationError, match="exactly one"):
+        load_config(p)
+    p.write_text(YAML + "runtime_params_provider:\n  max_age_s: 60\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="exactly one"):
+        load_config(p)
+
+
+def test_runtime_params_provider_max_age_must_be_positive(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(
+        YAML + "runtime_params_provider:\n  path: /x.json\n  max_age_s: 0\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError):
+        load_config(p)
+
+
+def test_runtime_params_provider_env_override(tmp_path, monkeypatch):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    monkeypatch.setenv("FLEXD_RUNTIME_PARAMS_URL", "http://relay:8080/params.json")
+    monkeypatch.setenv("FLEXD_RUNTIME_PARAMS_MAX_AGE_S", "120")
+    cfg = load_config(p)
+    assert cfg.runtime_params_provider.url == "http://relay:8080/params.json"
+    assert cfg.runtime_params_provider.max_age_s == 120
+    monkeypatch.delenv("FLEXD_RUNTIME_PARAMS_URL")
+    monkeypatch.setenv("FLEXD_RUNTIME_PARAMS_PATH", "/data/params.json")
+    cfg = load_config(p)
+    assert cfg.runtime_params_provider.path == Path("/data/params.json")
+    assert cfg.runtime_params_provider.url is None
+
+
+def test_runtime_params_provider_env_path_overrides_yaml_url(tmp_path, monkeypatch):
+    # env swaps the source: the yaml url must not linger next to the env path
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML + PROVIDER_URL_YAML, encoding="utf-8")
+    monkeypatch.setenv("FLEXD_RUNTIME_PARAMS_PATH", "/data/params.json")
+    cfg = load_config(p)
+    assert cfg.runtime_params_provider.path == Path("/data/params.json")
+    assert cfg.runtime_params_provider.url is None

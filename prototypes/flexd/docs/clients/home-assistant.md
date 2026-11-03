@@ -210,8 +210,10 @@ appliance to confirm the event type and attributes before wiring the automations
 
 - Actuate only when `state == "ok"` **and** `on == 1`.
 - `flexd/plan/state` carries the **result of the last cycle**, not a plan age: `ok`, `skipped`
-  (no demands were registered, nothing was solved), `rejected` (EMHASS answered but the plan
-  failed flexd's guards) or `down` (EMHASS unreachable). `stale` and `no-run` exist only on the
+  (no demands were registered, nothing was solved), `stale_inputs` (the configured
+  runtime-params provider document was too old, missing or unreadable, so flexd did not solve
+  and the previous plan stays adopted), `rejected` (EMHASS answered but the plan failed flexd's
+  guards) or `down` (EMHASS unreachable). `stale` and `no-run` exist only on the
   HTTP side (`/api/v1/plan`, `/simple/status`); this topic never carries them. The topic is
   retained, so after a flexd crash it keeps showing the last value — `flexd/availability`
   turning `offline` is the signal for that case.
