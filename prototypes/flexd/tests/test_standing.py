@@ -23,7 +23,11 @@ DEF = StandingDefinition(
 def mk(tmp_path):
     reg = Registry(tmp_path / "demands.json")
     mgr = StandingManager(
-        [DEF], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg
+        [DEF],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg,
+        timestep_min=30,
     )
     return reg, mgr
 
@@ -126,7 +130,11 @@ def test_ledger_survives_restart(tmp_path):
     mgr.mark_done("waterheater", now=NOON_UTC)
     reg2 = Registry(tmp_path / "demands.json")
     mgr2 = StandingManager(
-        [DEF], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg2
+        [DEF],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg2,
+        timestep_min=30,
     )
     mgr2.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg2.get("waterheater") is None
@@ -159,6 +167,7 @@ def test_squatted_id_degrades_one_demand_not_the_cycle(tmp_path):
         ledger_path=tmp_path / "ledger.json",
         tz="Europe/Berlin",
         registry=reg,
+        timestep_min=30,
     )
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)  # must not raise
     assert reg.get("bbb-heater") is not None  # sibling still materialized
@@ -331,7 +340,11 @@ def test_standing_modulating_flag_reaches_demand(tmp_path):
         modulating=True,
     )
     mgr = StandingManager(
-        [defn], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg
+        [defn],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg,
+        timestep_min=30,
     )
     mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg.get("pump").modulating is True
@@ -350,7 +363,11 @@ def test_torn_ledger_falls_back_to_bak(tmp_path):
     )  # torn write
     reg2 = Registry(tmp_path / "demands.json")
     mgr2 = StandingManager(
-        [DEF], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg2
+        [DEF],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg2,
+        timestep_min=30,
     )
     mgr2.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg2.get("waterheater") is None  # today's done flag recovered from .bak
@@ -363,7 +380,11 @@ def test_ledger_that_is_not_an_object_falls_back_to_bak(tmp_path):
     (tmp_path / "ledger.json").write_text("[1, 2, 3]", encoding="utf-8")
     reg2 = Registry(tmp_path / "demands.json")
     mgr2 = StandingManager(
-        [DEF], ledger_path=tmp_path / "ledger.json", tz="Europe/Berlin", registry=reg2
+        [DEF],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg2,
+        timestep_min=30,
     )
     mgr2.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 0.0)
     assert reg2.get("waterheater") is None
@@ -483,3 +504,124 @@ def test_correction_with_matching_power_logs_no_warning(tmp_path, caplog):
 def test_correction_returns_hours_at_the_definition_power(tmp_path):
     _, mgr = mk(tmp_path)
     assert mgr.correct("waterheater", remaining_wh=4500, now=NOON_UTC) == 1.5
+
+
+# -- shadow pilot 2026-10-21..27: one extra slot for non-modulating standing demands --
+async def test_served_whole_slots_do_not_round_up_to_an_extra_slot(tmp_path):
+    """Cycles fire cycle_offset_s after the grid boundary and the plan is adopted a
+    solve later, so a contiguous ON block is served (and credited) from the adoption
+    instant, not from the slot boundary. The ledger then sits a few tens of seconds
+    short of a whole slot count, and the semi-continuous rounding in the aggregator
+    turned that residual into one more full slot (heating 1137 Wh instead of 975 on 5
+    of 7 pilot days). Three 15-min slots at 650 W are the whole 0.75 h day target:
+    the payloads must ask for 3, 2, 1 slots and then nothing."""
+    from flexd.aggregator import grid_anchor
+    from flexd.scheduler import Scheduler
+
+    defn = StandingDefinition(
+        id="heater", nominal_power_w=650, daily_hours=0.75, window="06:00-22:00"
+    )
+    reg = Registry(tmp_path / "demands.json")
+    mgr = StandingManager(
+        [defn],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg,
+        timestep_min=15,
+    )
+    view = PlanView(
+        tmp_path / "adopted.json",
+        stale_after=timedelta(hours=2),
+        timestep=timedelta(minutes=15),
+    )
+    # ON 12:00, 12:15, 12:30; OFF from 12:45
+    on_until = NOON_UTC + timedelta(minutes=45)
+
+    class SolverOnTheGrid:
+        """Returns the plan EMHASS would: anchored on the cycle's grid boundary, the
+        heater at nominal power in every slot before `on_until`."""
+
+        def __init__(self):
+            self.calls = []
+
+        async def run_cycle(self, payload, last_generated_at=None, *, now, **kw):
+            self.calls.append(payload)
+            anchor = grid_anchor(now, 15, "nearest")
+            return {
+                "status": "ok",
+                "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "emhass_schema_version": "1.0",
+                "plan": [
+                    {
+                        "timestamp": (anchor + timedelta(minutes=15 * i)).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        ),
+                        "P_deferrable0": 650
+                        if anchor + timedelta(minutes=15 * i) < on_until
+                        else 0,
+                    }
+                    for i in range(8)
+                ],
+            }
+
+    driver = SolverOnTheGrid()
+    # each cycle starts 30 s after the boundary and adopts 5 s later (the solve)
+    cycle_starts = [NOON_UTC + timedelta(minutes=15 * i, seconds=30) for i in range(4)]
+    switches = iter(start + timedelta(seconds=5) for start in cycle_starts)
+    s = Scheduler(
+        registry=reg,
+        driver=driver,
+        view=view,
+        standing=mgr,
+        timestep_min=15,
+        horizon_steps=8,
+        extra_runtime_params={},
+        clock=lambda: next(switches),
+        cycle_offset_s=30,
+    )
+
+    results = [await s.run_once(now=start) for start in cycle_starts]
+
+    requested_slots = [
+        p["operating_hours_of_each_deferrable_load"][0] / 0.25 for p in driver.calls
+    ]
+    assert requested_slots == pytest.approx([3, 2, 1])
+    # 12:45:30: the three slots have been served, the residual under a slot is not a
+    # fourth one; the day target is satisfied and the heater is no longer solicited
+    assert results[-1] == "skipped"
+    assert reg.get("heater") is None
+
+
+def test_residual_at_or_above_tolerance_is_still_rounded_up(tmp_path):
+    # the tolerance absorbs accounting noise, not the aggregator's whole-slot policy:
+    # 2 slots + 0.25 slot on the 30-min grid stays 1.125 h (the aggregator makes it 3)
+    reg, mgr = mk(tmp_path)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 5 - 1.125)
+    assert reg.get("waterheater").energy_target_wh == pytest.approx(1.125 * 3000)
+
+
+def test_residual_below_tolerance_is_dropped(tmp_path):
+    # 2 slots + 90 s on the 30-min grid (5 % of a slot) materializes as 2 whole slots
+    reg, mgr = mk(tmp_path)
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 5 - 1.025)
+    assert reg.get("waterheater").energy_target_wh == pytest.approx(1.0 * 3000)
+
+
+def test_modulating_standing_demand_keeps_the_exact_residual(tmp_path):
+    reg = Registry(tmp_path / "demands.json")
+    defn = StandingDefinition(
+        id="pump",
+        nominal_power_w=750,
+        daily_hours=4,
+        window="06:00-22:00",
+        modulating=True,
+    )
+    mgr = StandingManager(
+        [defn],
+        ledger_path=tmp_path / "ledger.json",
+        tz="Europe/Berlin",
+        registry=reg,
+        timestep_min=30,
+    )
+    mgr.materialize(now=NOON_UTC, elapsed_lookup=lambda i, s, u: 4 - 0.01)
+    assert reg.get("pump").energy_target_wh == pytest.approx(0.01 * 750)

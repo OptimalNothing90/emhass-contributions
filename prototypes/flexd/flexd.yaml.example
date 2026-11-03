@@ -26,6 +26,8 @@ mqtt:
 extra_runtime_params:
   soc_init: 0.5
 # recurring daily loads owned by flexd config; daily_energy_wh wins over daily_hours when both given
+# non-modulating loads run in whole timesteps: a day's remaining energy below a quarter
+# timestep counts as delivered instead of being rounded up to one more full timestep
 standing_demands:
   - id: waterheater
     type: generic

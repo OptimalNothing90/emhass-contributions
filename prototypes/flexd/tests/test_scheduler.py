@@ -936,6 +936,7 @@ async def test_first_time_standing_demand_is_served_after_its_first_solve(
         ledger_path=tmp_path / "ledger.json",
         tz="UTC",
         registry=registry,
+        timestep_min=30,
     )
     s = Scheduler(
         registry=registry,

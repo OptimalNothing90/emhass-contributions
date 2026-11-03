@@ -20,6 +20,21 @@ log = logging.getLogger(__name__)
 
 CONFIG_SOURCE = "config"
 
+# A non-modulating standing demand is planned in whole slots; the aggregator rounds the
+# remaining hours UP (over-deliver by less than a slot rather than leave energy
+# unreachable). The ledger, however, credits what was served, and every contiguous ON
+# block is served from the adoption instant, not from the slot boundary: cycles fire
+# cycle_offset_s after the boundary and the solve takes a few seconds more. Each block
+# therefore leaves the day's elapsed hours a few tens of seconds short of a whole slot
+# count, and rounded up that residual became one more full slot (shadow pilot
+# 2026-10-21..27: heating 1137 Wh instead of 975 on 5 of 7 days, hot water 3500
+# instead of 3150 on 6 of 7). A residual below this fraction of a slot is accounting
+# noise, not a slot's worth of energy, and is dropped before materializing: the day
+# ends up to a quarter slot short instead of three quarters of a slot over. A quarter
+# absorbs several ON blocks even on a 15-min grid with slow solves (10 % = 90 s there
+# would not have covered the pilot's 92 s deficit after a single three-slot block).
+SLOT_RESIDUAL_TOLERANCE = 0.25
+
 
 class StandingManager:
     def __init__(
@@ -29,8 +44,10 @@ class StandingManager:
         ledger_path: Path,
         tz: str,
         registry: Registry,
+        timestep_min: int,
     ):
         self._defs = {d.id: d for d in definitions}
+        self._slot_h = timestep_min / 60
         self._ledger_path = Path(ledger_path)
         self._bak = self._ledger_path.with_suffix(self._ledger_path.suffix + ".bak")
         self._tz = ZoneInfo(tz)
@@ -124,6 +141,14 @@ class StandingManager:
             entry["last_accrual"] = accrual_end.isoformat()
         return entry, win_start, win_end
 
+    def _drop_sub_slot_residual(self, hours: float) -> float:
+        """Whole slots when the part beyond them is below SLOT_RESIDUAL_TOLERANCE of a
+        slot; otherwise the hours unchanged (the aggregator rounds them up)."""
+        slots, residual = divmod(hours, self._slot_h)
+        if residual < SLOT_RESIDUAL_TOLERANCE * self._slot_h:
+            return slots * self._slot_h
+        return hours
+
     def _prune_ledger(self, now: datetime) -> None:
         # day-keyed: past days are dead weight; prune so the file can't grow unbounded
         today = now.astimezone(self._tz).date().isoformat()
@@ -170,6 +195,8 @@ class StandingManager:
                         override if override is not None else defn.effective_daily_hours
                     )
                     remaining_h = target_h - entry["elapsed_h"]
+                    if not defn.modulating:
+                        remaining_h = self._drop_sub_slot_residual(remaining_h)
                     if remaining_h <= 0:
                         # a previously-materialized instance must not keep soliciting energy
                         if self._registry.get(defn.id) is not None:
