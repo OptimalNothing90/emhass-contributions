@@ -230,6 +230,14 @@ def load_config(path: Path | str) -> FlexdConfig:
         raise SystemExit(
             f"flexd: config root must be a mapping, got {type(raw).__name__}"
         )
+    for keys in _ENV_EXCLUSIVE.values():
+        clashing = sorted(
+            env
+            for env, keypath in _ENV_MAP.items()
+            if keypath[-1] in keys and os.environ.get(env) is not None
+        )
+        if len(clashing) > 1:
+            raise SystemExit(f"flexd: set only one of {', '.join(clashing)}")
     for env, keypath in _ENV_MAP.items():
         val = os.environ.get(env)
         if val is None:
@@ -243,6 +251,10 @@ def load_config(path: Path | str) -> FlexdConfig:
             for sibling in group - {keypath[-1]}:
                 node.pop(sibling, None)
     cfg = FlexdConfig(**raw)
+    provider = cfg.runtime_params_provider
+    if provider is not None and provider.path is not None:
+        # a relative document path means "under data_dir", not the process cwd
+        provider.path = cfg.data_dir / provider.path
     seen_ids: set[str] = set()
     for sd in cfg.standing_demands:
         if sd.id in seen_ids:

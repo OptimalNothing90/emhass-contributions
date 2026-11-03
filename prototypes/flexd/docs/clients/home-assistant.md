@@ -214,7 +214,8 @@ appliance to confirm the event type and attributes before wiring the automations
   runtime-params provider document was too old, missing or unreadable, so flexd did not solve
   and the previous plan stays adopted), `rejected` (EMHASS answered but the plan failed flexd's
   guards) or `down` (EMHASS unreachable). `stale` and `no-run` exist only on the
-  HTTP side (`/api/v1/plan`, `/simple/status`); this topic never carries them. The topic is
+  HTTP side (`/api/v1/plan`, `/simple/status`); this topic never carries them. `/simple/status`
+  also answers `down` and `stale_inputs` while they are the last cycle's result. The topic is
   retained, so after a flexd crash it keeps showing the last value — `flexd/availability`
   turning `offline` is the signal for that case.
 - On anything other than `ok`, on `offline`, or when the `generated_at` in the state payload is

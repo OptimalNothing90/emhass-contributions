@@ -35,7 +35,7 @@ extra_runtime_params:
 # Keys flexd sets itself (deferrable lists, prediction_horizon) are dropped with a warning.
 # An external relay that rebuilds EMHASS payloads today can write this document instead.
 # runtime_params_provider:
-#   path: /data/runtime-params.json      # or: url: http://relay:8080/runtime-params.json
+#   path: /data/runtime-params.json      # relative = under data_dir; or: url: http://relay:8080/runtime-params.json
 #   max_age_s: 900
 # recurring daily loads owned by flexd config; daily_energy_wh wins over daily_hours when both given
 # non-modulating loads run in whole timesteps; a remainder of a few minutes counts as delivered

@@ -56,13 +56,13 @@ Open `flexd.yaml` and work through it top to bottom:
   reads the document before every solve and merges it over `extra_runtime_params` (the provider
   wins). Keys flexd sets itself (the deferrable lists, `prediction_horizon`) are dropped with a
   warning. If the document is older than `max_age_s` (default 900 s), missing, unreachable or
-  not parsable, the cycle is skipped and reported as `stale_inputs` (in `last_cycle.json` and
-  on `flexd/plan/state`); the previously adopted plan stays in place and nothing is published
+  not parsable, the cycle is skipped and reported as `stale_inputs` (in `last_cycle.json`, on
+  `flexd/plan/state` and from `/simple/status`); the previously adopted plan stays in place and nothing is published
   as fresh. flexd never solves on old data. An external relay that today rebuilds the whole
   EMHASS payload around flexd can be replaced by having it write this one document instead.
   Example document: [`tests/fixtures/runtime_params_provider.json`](../tests/fixtures/runtime_params_provider.json).
   Env overrides: `FLEXD_RUNTIME_PARAMS_PATH`, `FLEXD_RUNTIME_PARAMS_URL`,
-  `FLEXD_RUNTIME_PARAMS_MAX_AGE_S`.
+  `FLEXD_RUNTIME_PARAMS_MAX_AGE_S`. A relative `path` is taken under `data_dir`.
 - `standing_demands:` / `templates:` — both optional and commented out by default. They cover
   recurring daily loads (water heater) and event-triggered appliances (dishwasher) respectively.
   Skip these for the first run; see the [Home Assistant guide](clients/home-assistant.md) for a

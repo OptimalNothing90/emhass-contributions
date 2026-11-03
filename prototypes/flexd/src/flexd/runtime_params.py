@@ -9,15 +9,12 @@ StaleInputs and the scheduler skips the cycle instead of solving on old data.
 """
 
 import json
-import logging
 from datetime import datetime
 
 import httpx
 
 from flexd.config import RuntimeParamsProviderConfig
 from flexd.models import parse_generated_at
-
-log = logging.getLogger(__name__)
 
 FETCH_TIMEOUT_S = 10.0
 
@@ -52,6 +49,13 @@ class RuntimeParamsProvider:
         except ValueError as exc:
             raise StaleInputs(f"{self.source}: {exc}") from exc
         age_s = (now - generated_at).total_seconds()
+        if age_s < -self.max_age_s:
+            # a relay clock far ahead would otherwise produce a document that
+            # never ages out; small skew (within max_age_s) is tolerated
+            raise StaleInputs(
+                f"{self.source}: generated_at is {-age_s:.0f}s in the future, "
+                f"max_age_s is {self.max_age_s:.0f}"
+            )
         if age_s > self.max_age_s:
             raise StaleInputs(
                 f"{self.source}: generated_at is {age_s:.0f}s old, "
@@ -63,7 +67,7 @@ class RuntimeParamsProvider:
         if self._path is not None:
             try:
                 return self._path.read_text(encoding="utf-8")
-            except OSError as exc:
+            except (OSError, UnicodeDecodeError) as exc:
                 raise StaleInputs(f"{self._path}: unreadable ({exc})") from exc
         try:
             async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S) as client:
@@ -72,5 +76,5 @@ class RuntimeParamsProvider:
                 return resp.text
         except httpx.HTTPStatusError as exc:
             raise StaleInputs(f"{self._url}: HTTP {exc.response.status_code}") from exc
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, httpx.InvalidURL) as exc:
             raise StaleInputs(f"{self._url}: unreachable ({exc})") from exc

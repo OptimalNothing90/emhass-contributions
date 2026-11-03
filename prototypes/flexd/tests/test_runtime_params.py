@@ -122,3 +122,37 @@ async def test_url_unparsable_body_is_stale():
     respx.get(URL).respond(200, text="<html>oops</html>")
     with pytest.raises(StaleInputs, match="JSON"):
         await url_provider(URL).fetch(now=T0)
+
+
+# -- review round: failure modes that must read as stale, not crash the cycle --
+
+
+async def test_future_generated_at_beyond_max_age_is_stale(tmp_path):
+    # a relay clock far ahead must not produce a document that never ages out
+    provider = file_provider(
+        write_provider_doc(tmp_path, generated_at="2030-01-01T00:00:00+00:00")
+    )
+    with pytest.raises(StaleInputs, match="future"):
+        await provider.fetch(now=T0)
+
+
+async def test_future_generated_at_within_max_age_is_fresh(tmp_path):
+    # small clock skew between relay and flexd is tolerated
+    provider = file_provider(
+        write_provider_doc(
+            tmp_path, generated_at=(T0 + timedelta(seconds=30)).isoformat()
+        )
+    )
+    assert "soc_init" in await provider.fetch(now=T0)
+
+
+async def test_non_utf8_file_is_stale(tmp_path):
+    p = tmp_path / "utf16.json"
+    p.write_bytes('{"generated_at": "x"}'.encode("utf-16"))
+    with pytest.raises(StaleInputs, match="unreadable"):
+        await file_provider(p).fetch(now=T0)
+
+
+async def test_malformed_url_is_stale():
+    with pytest.raises(StaleInputs, match="unreachable"):
+        await url_provider("relay:8080/params.json").fetch(now=T0)

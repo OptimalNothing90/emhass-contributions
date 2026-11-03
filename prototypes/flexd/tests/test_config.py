@@ -272,3 +272,24 @@ def test_runtime_params_provider_env_path_overrides_yaml_url(tmp_path, monkeypat
     cfg = load_config(p)
     assert cfg.runtime_params_provider.path == Path("/data/params.json")
     assert cfg.runtime_params_provider.url is None
+
+
+def test_runtime_params_provider_both_env_sources_is_a_boot_error(
+    tmp_path, monkeypatch
+):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(YAML, encoding="utf-8")
+    monkeypatch.setenv("FLEXD_RUNTIME_PARAMS_PATH", "/data/params.json")
+    monkeypatch.setenv("FLEXD_RUNTIME_PARAMS_URL", "http://relay:8080/params.json")
+    with pytest.raises(SystemExit, match="FLEXD_RUNTIME_PARAMS_PATH"):
+        load_config(p)
+
+
+def test_runtime_params_provider_relative_path_is_under_data_dir(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(
+        YAML + "runtime_params_provider:\n  path: runtime-params.json\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.runtime_params_provider.path == Path("/data") / "runtime-params.json"
