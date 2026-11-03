@@ -134,13 +134,8 @@ class TemplateDefinition(BaseModel):
 
 
 class RuntimeParamsProviderConfig(BaseModel):
-    """Where fresh EMHASS runtime parameters come from before every solve.
-
-    Exactly one of `path` / `url`. The document is a JSON object of runtime
-    parameters plus `generated_at` (ISO 8601 with offset); older than
-    `max_age_s` means the cycle is skipped as `stale_inputs`. See
-    flexd.runtime_params.
-    """
+    """Source of fresh EMHASS runtime parameters, read before every solve (see
+    flexd.runtime_params). Exactly one of `path` / `url`."""
 
     path: Path | None = None
     url: str | None = None
@@ -220,11 +215,9 @@ _ENV_MAP = {
     "FLEXD_RUNTIME_PARAMS_MAX_AGE_S": ("runtime_params_provider", "max_age_s"),
 }
 
-# an env source replaces the yaml one: path and url are exclusive
-_ENV_DISPLACES = {
-    "FLEXD_RUNTIME_PARAMS_PATH": ("runtime_params_provider", "url"),
-    "FLEXD_RUNTIME_PARAMS_URL": ("runtime_params_provider", "path"),
-}
+# keys that are mutually exclusive within one node: an env value for one member
+# drops the yaml value of the others, so env can swap the source
+_ENV_EXCLUSIVE = {("runtime_params_provider",): {"path", "url"}}
 
 
 def load_config(path: Path | str) -> FlexdConfig:
@@ -245,9 +238,10 @@ def load_config(path: Path | str) -> FlexdConfig:
         for key in keypath[:-1]:
             node = node.setdefault(key, {})
         node[keypath[-1]] = val
-        displaced = _ENV_DISPLACES.get(env)
-        if displaced is not None:
-            node.pop(displaced[-1], None)
+        group = _ENV_EXCLUSIVE.get(keypath[:-1], set())
+        if keypath[-1] in group:
+            for sibling in group - {keypath[-1]}:
+                node.pop(sibling, None)
     cfg = FlexdConfig(**raw)
     seen_ids: set[str] = set()
     for sd in cfg.standing_demands:

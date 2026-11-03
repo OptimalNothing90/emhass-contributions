@@ -101,12 +101,10 @@ def build_runtimeparams(
     payload: dict = {}
     for key, value in extra.items():
         if key in FLEXD_CANONICAL_KEYS:
-            log.warning(
-                "extra_runtime_params key %r conflicts with flexd; flexd wins", key
-            )
+            log.warning("runtime param %r conflicts with flexd; flexd wins", key)
             continue
         if key in FLEXD_LEGACY_ALIASES:
-            log.warning("extra_runtime_params key %r is a legacy alias; blocked", key)
+            log.warning("runtime param %r is a legacy alias; blocked", key)
             continue
         payload[key] = value
 

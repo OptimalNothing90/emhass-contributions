@@ -47,9 +47,7 @@ class Scheduler:
         self._timestep_min = timestep_min
         self._horizon = horizon_steps
         self._extra = extra_runtime_params
-        # fresh runtime params per solve (flexd.runtime_params.RuntimeParamsProvider);
-        # None keeps the static dict only
-        self._provider = runtime_params_provider
+        self._provider = runtime_params_provider  # None: static dict only
         self._crumb_path = crumb_path
         self._on_cycle_end = (
             on_cycle_end  # async callback(state, swept_ids) for mqtt publish
@@ -97,21 +95,16 @@ class Scheduler:
             payload = None
             if not demands:
                 result = "skipped"
-            elif (extra := await self._fresh_extra(now)) is None:
-                # provider document stale, missing, unreachable or unparsable: no
-                # solve on old data; the adopted plan stays as it is (contract #1,
-                # 2026-11-03)
-                result = "stale_inputs"
             else:
-                payload, mapping = build_runtimeparams(
-                    demands,
-                    now=now,
-                    extra=extra,
-                    timestep_min=self._timestep_min,
-                    horizon_steps=self._horizon,
-                    ts_round=self._ts_round,
-                )
                 try:
+                    payload, mapping = build_runtimeparams(
+                        demands,
+                        now=now,
+                        extra=await self._fresh_extra(now),
+                        timestep_min=self._timestep_min,
+                        horizon_steps=self._horizon,
+                        ts_round=self._ts_round,
+                    )
                     plan = await self._driver.run_cycle(
                         payload,
                         last_generated_at=self._view.generated_at,
@@ -138,6 +131,10 @@ class Scheduler:
                     )
                     self._view.adopt(plan, mapping, now=switch_at)
                     result = "ok"
+                except StaleInputs as exc:
+                    # no solve on old inputs; the adopted plan stays as it is
+                    log.warning("runtime params stale; cycle skipped: %s", exc)
+                    result = "stale_inputs"
                 except PlanRejected as exc:
                     log.error("plan rejected: %s", exc)
                     result = "rejected"
@@ -171,19 +168,12 @@ class Scheduler:
                     log.exception("on_cycle_end failed; swept ids kept for redelivery")
             return result
 
-    async def _fresh_extra(self, now: datetime) -> dict | None:
-        """Static extra_runtime_params under the provider document (provider wins).
-        None when the provider says the inputs are stale. Conflicts with flexd's
-        own keys are filtered (with a warning) by build_runtimeparams, as for the
-        static dict."""
+    async def _fresh_extra(self, now: datetime) -> dict:
+        """Static extra_runtime_params under the provider document (provider wins);
+        raises StaleInputs. flexd's own keys are filtered by build_runtimeparams."""
         if self._provider is None:
             return self._extra
-        try:
-            fresh = await self._provider.fetch(now=now)
-        except StaleInputs as exc:
-            log.warning("runtime params stale; cycle skipped: %s", exc)
-            return None
-        return {**self._extra, **fresh}
+        return {**self._extra, **await self._provider.fetch(now=now)}
 
     def _write_crumb(self, now: datetime, payload: dict | None, result: str) -> None:
         if self._crumb_path is None:

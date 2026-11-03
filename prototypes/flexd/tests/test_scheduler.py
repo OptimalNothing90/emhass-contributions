@@ -1,11 +1,10 @@
 import asyncio
 import json
-from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from flexd.emhass_driver import PlanRejected
 from flexd.scheduler import Scheduler
-from tests.conftest import make_demand
+from tests.conftest import file_provider, make_demand, write_provider_doc
 
 NOW = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
 
@@ -66,15 +65,18 @@ PLAN = {
 }
 
 
-def make_scheduler(registry, driver, view):
+def make_scheduler(registry, driver, view, **kw):
     return Scheduler(
-        registry=registry,
-        driver=driver,
-        view=view,
-        standing=FakeStanding(),
-        timestep_min=30,
-        horizon_steps=48,
-        extra_runtime_params={},
+        **{
+            "registry": registry,
+            "driver": driver,
+            "view": view,
+            "standing": FakeStanding(),
+            "timestep_min": 30,
+            "horizon_steps": 48,
+            "extra_runtime_params": {},
+            **kw,
+        }
     )
 
 
@@ -959,47 +961,29 @@ async def test_first_time_standing_demand_is_served_after_its_first_solve(
 
 # -- runtime-params provider: fresh forecasts on every solve, no solve on stale data --
 
-_PROVIDER_FIXTURE = Path(__file__).parent / "fixtures" / "runtime_params_provider.json"
 
-
-def _provider_doc(tmp_path, **overrides) -> Path:
-    doc = json.loads(_PROVIDER_FIXTURE.read_text(encoding="utf-8"))
-    doc.update(overrides)
-    p = tmp_path / "runtime-params.json"
-    p.write_text(json.dumps(doc), encoding="utf-8")
-    return p
-
-
-def _provider_scheduler(registry, driver, view, provider, extra=None, **kw):
-    return Scheduler(
-        registry=registry,
-        driver=driver,
-        view=view,
-        standing=FakeStanding(),
-        timestep_min=30,
-        horizon_steps=48,
-        extra_runtime_params=extra or {},
-        runtime_params_provider=provider,
-        **kw,
-    )
-
-
-async def test_provider_params_are_sent_with_every_solve(registry, tmp_path):
-    from flexd.runtime_params import RuntimeParamsProvider
-
+def _seed(registry) -> None:
     registry.upsert(
         make_demand(
             deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
         )
     )
-    provider = RuntimeParamsProvider(path=_provider_doc(tmp_path), max_age_s=600)
+
+
+async def test_provider_params_are_sent_with_every_solve(registry, tmp_path):
+    _seed(registry)
     driver, view = FakeDriver(result=PLAN), FakeView()
-    s = _provider_scheduler(registry, driver, view, provider)
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(write_provider_doc(tmp_path)),
+    )
     assert await s.run_once(now=NOW) == "ok"
     assert driver.calls[0]["pv_power_forecast"][3] == 850
     assert "generated_at" not in driver.calls[0]
     # a rewritten document is picked up by the next solve, not cached from boot
-    _provider_doc(
+    write_provider_doc(
         tmp_path,
         generated_at=(NOW + timedelta(minutes=29)).isoformat(),
         pv_power_forecast=[1] * 12,
@@ -1009,17 +993,14 @@ async def test_provider_params_are_sent_with_every_solve(registry, tmp_path):
 
 
 async def test_provider_overrides_static_extra_runtime_params(registry, tmp_path):
-    from flexd.runtime_params import RuntimeParamsProvider
-
-    registry.upsert(
-        make_demand(
-            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
-        )
-    )
-    provider = RuntimeParamsProvider(path=_provider_doc(tmp_path), max_age_s=600)
+    _seed(registry)
     driver, view = FakeDriver(result=PLAN), FakeView()
-    s = _provider_scheduler(
-        registry, driver, view, provider, extra={"soc_init": 0.5, "soc_final": 0.3}
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        extra_runtime_params={"soc_init": 0.5, "soc_final": 0.3},
+        runtime_params_provider=file_provider(write_provider_doc(tmp_path)),
     )
     assert await s.run_once(now=NOW) == "ok"
     assert driver.calls[0]["soc_init"] == 0.62  # provider wins
@@ -1029,21 +1010,14 @@ async def test_provider_overrides_static_extra_runtime_params(registry, tmp_path
 async def test_provider_conflict_key_is_discarded_with_warning(
     registry, tmp_path, caplog
 ):
-    from flexd.runtime_params import RuntimeParamsProvider
-
-    registry.upsert(
-        make_demand(
-            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
-        )
-    )
-    provider = RuntimeParamsProvider(
-        path=_provider_doc(
-            tmp_path, prediction_horizon=12, def_total_hours=[9], soc_init=0.7
-        ),
-        max_age_s=600,
+    _seed(registry)
+    doc = write_provider_doc(
+        tmp_path, prediction_horizon=12, def_total_hours=[9], soc_init=0.7
     )
     driver, view = FakeDriver(result=PLAN), FakeView()
-    s = _provider_scheduler(registry, driver, view, provider)
+    s = make_scheduler(
+        registry, driver, view, runtime_params_provider=file_provider(doc)
+    )
     with caplog.at_level("WARNING"):
         assert await s.run_once(now=NOW) == "ok"
     payload = driver.calls[0]
@@ -1059,25 +1033,18 @@ async def test_provider_conflict_key_is_discarded_with_warning(
 async def test_stale_provider_skips_the_solve_and_keeps_the_adopted_plan(
     registry, tmp_path
 ):
-    from flexd.runtime_params import RuntimeParamsProvider
-
-    registry.upsert(
-        make_demand(
-            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
-        )
-    )
-    provider = RuntimeParamsProvider(path=_provider_doc(tmp_path), max_age_s=600)
+    _seed(registry)
     driver, view = FakeDriver(result=PLAN), FakeView()
     seen = []
 
     async def on_end(state, swept_ids):
         seen.append((state, swept_ids))
 
-    s = _provider_scheduler(
+    s = make_scheduler(
         registry,
         driver,
         view,
-        provider,
+        runtime_params_provider=file_provider(write_provider_doc(tmp_path)),
         on_cycle_end=on_end,
         crumb_path=tmp_path / "last_cycle.json",
     )
@@ -1095,24 +1062,24 @@ async def test_stale_provider_skips_the_solve_and_keeps_the_adopted_plan(
 
 
 async def test_missing_provider_document_reports_stale_inputs(registry, tmp_path):
-    from flexd.runtime_params import RuntimeParamsProvider
-
-    registry.upsert(
-        make_demand(
-            deadline=NOW + timedelta(hours=4), expires_at=NOW + timedelta(hours=5)
-        )
-    )
-    provider = RuntimeParamsProvider(path=tmp_path / "absent.json", max_age_s=600)
+    _seed(registry)
     driver, view = FakeDriver(result=PLAN), FakeView()
-    s = _provider_scheduler(registry, driver, view, provider)
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(tmp_path / "absent.json"),
+    )
     assert await s.run_once(now=NOW) == "stale_inputs"
     assert driver.calls == [] and view.adopted == []
 
 
 async def test_provider_is_not_read_when_there_is_nothing_to_solve(registry, tmp_path):
-    from flexd.runtime_params import RuntimeParamsProvider
-
-    provider = RuntimeParamsProvider(path=tmp_path / "absent.json", max_age_s=600)
     driver, view = FakeDriver(result=PLAN), FakeView()
-    s = _provider_scheduler(registry, driver, view, provider)
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(tmp_path / "absent.json"),
+    )
     assert await s.run_once(now=NOW) == "skipped"

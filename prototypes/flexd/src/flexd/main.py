@@ -131,15 +131,11 @@ async def run() -> None:
 
     provider = None
     if cfg.runtime_params_provider is not None:
-        provider = RuntimeParamsProvider(
-            path=cfg.runtime_params_provider.path,
-            url=cfg.runtime_params_provider.url,
-            max_age_s=cfg.runtime_params_provider.max_age_s,
-        )
+        provider = RuntimeParamsProvider(cfg.runtime_params_provider)
         log.info(
             "runtime params provider: %s (max_age_s=%s)",
             provider.source,
-            cfg.runtime_params_provider.max_age_s,
+            provider.max_age_s,
         )
 
     bridge_holder: dict = {"bridge": None}

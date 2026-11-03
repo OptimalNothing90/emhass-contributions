@@ -27,6 +27,15 @@ MAX_ENERGY_WH = 1_000_000_000.0  # 1 GWh
 MAX_TTL_S = 366 * 24 * 3600.0  # one year
 
 
+def parse_generated_at(value: str) -> datetime:
+    """ISO 8601 with Z or an explicit offset; naive values are rejected because their
+    instant is ambiguous."""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.utcoffset() is None:
+        raise ValueError(f"generated_at {value!r} carries no timezone")
+    return parsed
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
