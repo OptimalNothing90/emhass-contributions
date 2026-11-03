@@ -6,10 +6,15 @@
 **Verification basis:** `audits/2026-05-31-emhass-evcc-coordination-synthesis.md` (facts F1–F16, build menu N1–N7); `prototypes/flexd/` against upstream `v0.18.6`
 **Companion document:** `docs/ev-requirements.md` (EV charging requirements from the evcc side)
 **Author:** OptimalNothing90
-**Date:** 2026-06-02 · **Revised:** 2026-06-16, 2026-10-17
+**Date:** 2026-06-02 · **Revised:** 2026-06-16, 2026-10-17, 2026-11-04
 
 ## Changelog
 
+- **2026-11-04.** New section "Executor concerns moved from ev-requirements.md": phase
+  switching, current steps, interruptibility and wakes, override detection, and the transport
+  and reason vocabulary left `docs/ev-requirements.md`, which is now the modelling contract
+  (emhass-contributions#1). Bullets only, carried over, with two corrections (3.9 kW phase-gap
+  example, the evcc wake-up timer).
 - **2026-10-17.** flexd is positioned as the demand-lifecycle layer in front of a stateless
   core, with explicit acceptance criteria (new section "What the sidecar is accountable for").
   The relation to the federated backend RFC (#1157) and to the `dry_run` runtime flag from
@@ -159,7 +164,80 @@ criteria are stated here so the design, not the prototype, is what gets held to 
    bad entry would otherwise poison every solve until its expiry.
 
 The companion document `docs/ev-requirements.md` applies the same discipline to one demand
-type, the EV, and lists the acceptance scenarios an EV demand has to pass.
+type, the EV, and lists the acceptance scenarios an EV demand has to pass. Since 2026-11-04
+that document is the modelling contract only; the executor concerns it used to carry are in
+the next section.
+
+## Executor concerns moved from ev-requirements.md (2026-11-04)
+
+Moved out of `docs/ev-requirements.md` after LesIT1's review in
+[emhass-contributions#1](https://github.com/OptimalNothing90/emhass-contributions/issues/1)
+(optimiser needs a small slice; the rest is executor and lifecycle work). Stichpunkte, carried
+over from the earlier text; the old R-numbers stay in `ev-requirements.md` as stubs so reports
+that cite them still resolve. evcc facts were checked on master at `daacfa7` unless marked.
+
+- **R11, phase switching is a step in power, not a continuum.**
+  - A 1p/3p charger has a gap between the single-phase maximum and the three-phase minimum.
+    The planner plans on a fixed phase count or knows about the gap.
+  - evcc: `phasesConfigured` (0 = automatic, 1, 3; `POST /api/loadpoints/{id}/phases/{n}`;
+    automatic needs a charger implementing `api.PhaseSwitcher`, value capped by the physically
+    connected phases); `chargerPhases1p3p`; `phasesActive`.
+  - Planner (today and phase 2): no notion of phases, the EV is one power range.
+  - Sidecar: fixed phase count per demand (`phases` 1 or 3, proposed), `phasesConfigured` set
+    before the first slot, or `phases_auto` and accept that the executor may land in the gap.
+    Reason `phase_gap` (proposed) with which phase count was realised.
+  - Acceptance example, corrected (LesIT1, #1): 5 kW is not in the gap (three phases at about
+    7.2 A give 5 kW). The gap runs from 3.68 kW (16 A, one phase) to 4.14 kW (6 A, three
+    phases), so a plan asking for 3.9 kW on a 1p/3p charger is realised as 3.7 kW on one phase
+    or 4.1 kW on three, and the result records which. A demand registered with `phases: 3`
+    never causes a switch to one phase while it is active.
+  - Re-deriving the power bounds when `phasesActive` changes (3 phases at 6 to 16 A: 4.1 to
+    11.0 kW; one phase: 1.4 to 3.7 kW) belongs here; the planner side of p_min and p_max is
+    R10 in `ev-requirements.md`.
+- **R12, discrete current steps.**
+  - Most chargers take whole amperes: `api.CurrentController.MaxCurrent(int64)`;
+    `api.ChargerEx.MaxCurrentMillis(float64)` for milliampere precision; `chargeCurrents` and
+    `offeredCurrent` report what was applied. The executor validates min ≤ max only, not a
+    step size.
+  - Sidecar: for a `modulating` EV demand round the setpoint down to the nearest integer
+    current at the active phase count before publishing, expose `setpoint_w` as published
+    versus `plan_w` as solved (both proposed).
+  - Acceptance: a planned 5.0 kW slot on three phases becomes 7 A (4.8 kW), the result shows
+    both, and the shortfall is added to the remaining energy for the next cycle.
+- **R13, interruptibility, session behaviour, wakes.**
+  - Corrected statement (LesIT1, #1; master `12ce81c`): evcc has a vehicle wake-up timer
+    (`core/timer.go`, `wakeupTimeout` 30 s, `wakeupAttempts` 6). evcc#28652 (closed
+    2026-07-02) is narrower than "the executor does not auto-wake": a vehicle-API-only charger
+    whose status returns `ErrAsleep` never triggered the wakeup.
+  - evcc: `enabled`, `charging`; `enableDelay` and `disableDelay` (seconds) debounce evcc's
+    own PV logic, not the planner's slots.
+  - Planner (today): `set_deferrable_load_single_constant`, `def_minimum_on_time`,
+    `def_minimum_off_time`, `set_deferrable_max_startups`, `set_deferrable_startup_penalty`;
+    `def_current_state` and `def_current_on_timesteps` carry running state into the next solve.
+  - Sidecar: `interruptible` (bool, default true; not yet mapped to a runtime parameter in the
+    prototype, a documented gap). A demand with `interruptible: false` yields one contiguous
+    block or is reported `unschedulable`; one that needs a wake-up gets at most the configured
+    number of starts per horizon.
+- **Override detection (was in R17).**
+  - Detected as a divergence between the published setpoint and the executor's `mode`,
+    `chargePower` or `charging`; reason `overridden` (proposed); the demand is marked, not
+    fought.
+  - Acceptance: person switches the loadpoint to `now` during a planned OFF slot; the next
+    cycle sees `chargePower` above zero against a zero setpoint, marks `overridden`, passes
+    the real power as `def_current_power`, and sends no `mode/off` on top until the demand is
+    refreshed or withdrawn.
+- **Transport and reason vocabulary (was in R6, R7, R14, R15, R16, R18).**
+  - Reasons emitted today: `truncated`, `clamped` (deadline beyond the horizon),
+    `unschedulable` (window closed or degenerate), whole-slot rounding (`timesteps` versus
+    requested hours).
+  - Proposed for the EV type: `soc_stale` (over the per-source maximum age of R6),
+    `soc_unknown`, `exceeds_usable_capacity`, `phase_gap`, `shortfall_wh`, `overridden`.
+  - Refresh fields: `delivered_wh` (proposed), `current_power_w` (exists).
+  - Whether these align with the machine-readable reasons the core adopts under #1185 is the
+    open question "Reason vocabulary" below.
+  - Executor feedback transport: LesIT1 reads evcc's REST `/api/state` directly (one
+    installation, evcc 0.315.2), not the Home Assistant integration; the cookbook's sensor
+    names stay placeholders.
 
 ## Relation to the federated backend (#1157) and to `dry_run` (#1158)
 
