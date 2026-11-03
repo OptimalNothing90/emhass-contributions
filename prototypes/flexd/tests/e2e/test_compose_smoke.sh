@@ -7,13 +7,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 COMPOSE=(docker compose -f docker-compose.yml -f tests/e2e/compose.e2e.yml)
-# host ports as docker-compose.yml publishes them on the loopback default (FLEXD_BIND_ADDR unset)
-FLEXD="http://127.0.0.1:${FLEXD_HOST_PORT:-8321}"
-EMHASS="http://127.0.0.1:${FLEXD_EMHASS_HOST_PORT:-5000}"
 "${COMPOSE[@]}" up -d --build
 if [ "${KEEP:-0}" != "1" ]; then
   trap '"${COMPOSE[@]}" down -v' EXIT
 fi
+# host endpoints as compose actually published them (FLEXD_*_HOST_PORT from the shell or
+# .env, FLEXD_BIND_ADDR); a wildcard bind is reached via loopback
+published() {
+  "${COMPOSE[@]}" port "$1" "$2" | sed -e 's/^0\.0\.0\.0:/127.0.0.1:/' -e 's/^\[::\]:/127.0.0.1:/'
+}
+FLEXD="http://$(published flexd 8321)"
+EMHASS="http://$(published emhass 5000)"
 for i in $(seq 1 30); do
   curl -fsS "$FLEXD"/healthz >/dev/null 2>&1 && break
   sleep 2
