@@ -8,6 +8,7 @@ a URL right before each solve. Anything that makes the document unusable
 StaleInputs and the scheduler skips the cycle instead of solving on old data.
 """
 
+import asyncio
 import json
 from datetime import datetime
 
@@ -16,7 +17,16 @@ import httpx
 from flexd.config import RuntimeParamsProviderConfig
 from flexd.models import parse_generated_at
 
+# bounds the whole fetch, not httpx's per-read timeout: a trickling server must
+# not hold the cycle lock open
 FETCH_TIMEOUT_S = 10.0
+# forecasts are a few KB; anything bigger is not a provider document
+MAX_DOC_BYTES = 1_000_000
+
+
+def _reject_constant(name: str):
+    # NaN / Infinity are not JSON; EMHASS would choke on them later
+    raise ValueError(f"{name} is not valid JSON")
 
 
 class StaleInputs(Exception):
@@ -33,9 +43,14 @@ class RuntimeParamsProvider:
     async def fetch(self, *, now: datetime) -> dict:
         """Return the runtime parameters (without `generated_at`) or raise StaleInputs."""
         text = await self._read()
+        if len(text) > MAX_DOC_BYTES:
+            raise StaleInputs(
+                f"{self.source}: document too large ({len(text)} chars, "
+                f"max {MAX_DOC_BYTES})"
+            )
         try:
-            doc = json.loads(text)
-        except ValueError as exc:
+            doc = json.loads(text, parse_constant=_reject_constant)
+        except (ValueError, RecursionError) as exc:
             raise StaleInputs(f"{self.source}: not valid JSON ({exc})") from exc
         if not isinstance(doc, dict):
             raise StaleInputs(
@@ -70,10 +85,15 @@ class RuntimeParamsProvider:
             except (OSError, UnicodeDecodeError) as exc:
                 raise StaleInputs(f"{self._path}: unreadable ({exc})") from exc
         try:
-            async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S) as client:
-                resp = await client.get(self._url)
-                resp.raise_for_status()
-                return resp.text
+            async with asyncio.timeout(FETCH_TIMEOUT_S):
+                async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S) as client:
+                    resp = await client.get(self._url)
+                    resp.raise_for_status()
+                    return resp.text
+        except TimeoutError as exc:
+            raise StaleInputs(
+                f"{self._url}: fetch timed out after {FETCH_TIMEOUT_S}s"
+            ) from exc
         except httpx.HTTPStatusError as exc:
             raise StaleInputs(f"{self._url}: HTTP {exc.response.status_code}") from exc
         except (httpx.HTTPError, httpx.InvalidURL) as exc:

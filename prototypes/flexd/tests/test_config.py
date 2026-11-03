@@ -293,3 +293,13 @@ def test_runtime_params_provider_relative_path_is_under_data_dir(tmp_path):
     )
     cfg = load_config(p)
     assert cfg.runtime_params_provider.path == Path("/data") / "runtime-params.json"
+
+
+def test_runtime_params_provider_max_age_must_be_finite(tmp_path):
+    p = tmp_path / "flexd.yaml"
+    p.write_text(
+        YAML + "runtime_params_provider:\n  path: /x.json\n  max_age_s: .inf\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError):
+        load_config(p)

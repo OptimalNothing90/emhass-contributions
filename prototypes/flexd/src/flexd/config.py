@@ -141,7 +141,7 @@ class RuntimeParamsProviderConfig(BaseModel):
     url: str | None = None
     # the document must be younger than this at solve time; two cycles at the
     # default timestep is a sane starting point
-    max_age_s: float = Field(default=900.0, gt=0)
+    max_age_s: float = Field(default=900.0, gt=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def _exactly_one_source(self):

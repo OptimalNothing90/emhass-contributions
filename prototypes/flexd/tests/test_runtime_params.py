@@ -156,3 +156,63 @@ async def test_non_utf8_file_is_stale(tmp_path):
 async def test_malformed_url_is_stale():
     with pytest.raises(StaleInputs, match="unreachable"):
         await url_provider("relay:8080/params.json").fetch(now=T0)
+
+
+# -- Codex review round: bounded fetch, bounded document, strict JSON --
+
+
+@respx.mock
+async def test_url_trickling_response_times_out_as_stale(monkeypatch):
+    import asyncio
+
+    from flexd import runtime_params
+
+    monkeypatch.setattr(runtime_params, "FETCH_TIMEOUT_S", 0.05)
+
+    async def slow(request):
+        await asyncio.sleep(0.5)
+        return httpx.Response(200, json=PROVIDER_DOC)
+
+    respx.get(URL).mock(side_effect=slow)
+    with pytest.raises(StaleInputs, match="timed out"):
+        await url_provider(URL).fetch(now=T0)
+
+
+async def test_oversized_file_is_stale(tmp_path):
+    from flexd import runtime_params
+
+    p = tmp_path / "big.json"
+    p.write_text(
+        '{"generated_at": "2026-07-05T11:58:30+00:00", "pad": "'
+        + "x" * (runtime_params.MAX_DOC_BYTES + 1)
+        + '"}',
+        encoding="utf-8",
+    )
+    with pytest.raises(StaleInputs, match="too large"):
+        await file_provider(p).fetch(now=T0)
+
+
+@respx.mock
+async def test_oversized_url_body_is_stale():
+    from flexd import runtime_params
+
+    respx.get(URL).respond(200, text="x" * (runtime_params.MAX_DOC_BYTES + 1))
+    with pytest.raises(StaleInputs, match="too large"):
+        await url_provider(URL).fetch(now=T0)
+
+
+async def test_nan_in_document_is_stale(tmp_path):
+    p = tmp_path / "nan.json"
+    p.write_text(
+        '{"generated_at": "2026-07-05T11:58:30+00:00", "soc_init": NaN}',
+        encoding="utf-8",
+    )
+    with pytest.raises(StaleInputs, match="JSON"):
+        await file_provider(p).fetch(now=T0)
+
+
+async def test_deeply_nested_document_is_stale(tmp_path):
+    p = tmp_path / "deep.json"
+    p.write_text("[" * 100_000, encoding="utf-8")
+    with pytest.raises(StaleInputs, match="JSON"):
+        await file_provider(p).fetch(now=T0)
