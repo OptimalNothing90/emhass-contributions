@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 
 import httpx
 
+from flexd.models import parse_generated_at
+
 log = logging.getLogger(__name__)
 
 OPTIM_TIMEOUT_S = 300.0
@@ -17,15 +19,6 @@ OPTIM_TIMEOUT_S = 300.0
 # /api/v1/plan re-serves after an infeasible first solve would be adopted as current
 # (#1 Medium 7). A plan generated within one cycle plus this slack is fresh enough.
 FIRST_BOOT_SLACK = timedelta(minutes=5)
-
-
-def _parse_generated_at(value: str) -> datetime:
-    """ISO 8601 with Z or an explicit offset; naive values are rejected because their
-    instant is ambiguous."""
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        raise ValueError(f"generated_at {value!r} carries no timezone")
-    return parsed
 
 
 class PlanRejected(Exception):
@@ -79,7 +72,7 @@ class EmhassDriver:
         # offsets) inverts lexicographic order, and the rejection would persist with the
         # adopted plan across restarts (#1 Medium 8).
         try:
-            generated = _parse_generated_at(str(plan["generated_at"]))
+            generated = parse_generated_at(str(plan["generated_at"]))
         except ValueError:
             msg = f"plan generated_at {plan['generated_at']!r} is unparseable"
             log.warning(msg)
@@ -87,7 +80,7 @@ class EmhassDriver:
         last = None
         if last_generated_at is not None:
             try:
-                last = _parse_generated_at(last_generated_at)
+                last = parse_generated_at(last_generated_at)
             except ValueError:
                 log.warning(
                     "persisted last_generated_at %r is unparseable; falling back to "

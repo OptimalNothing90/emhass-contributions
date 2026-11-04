@@ -1,0 +1,100 @@
+"""Runtime-params provider: fresh EMHASS runtime parameters for every solve.
+
+`extra_runtime_params` is read once at boot, so forecasts and `soc_init` in it
+are frozen for the life of the process. The provider reads a JSON object of
+runtime parameters plus `generated_at` (ISO 8601 with offset) from a file or
+a URL right before each solve. Anything that makes the document unusable
+(too old, missing, unreachable, not JSON, no usable `generated_at`) raises
+StaleInputs and the scheduler skips the cycle instead of solving on old data.
+"""
+
+import asyncio
+import json
+from datetime import datetime
+
+import httpx
+
+from flexd.config import RuntimeParamsProviderConfig
+from flexd.models import parse_generated_at
+
+# bounds the whole fetch, not httpx's per-read timeout: a trickling server must
+# not hold the cycle lock open
+FETCH_TIMEOUT_S = 10.0
+# forecasts are a few KB; anything bigger is not a provider document
+MAX_DOC_BYTES = 1_000_000
+
+
+def _reject_constant(name: str):
+    # NaN / Infinity are not JSON; EMHASS would choke on them later
+    raise ValueError(f"{name} is not valid JSON")
+
+
+class StaleInputs(Exception):
+    """The provider document is unusable for this cycle; the message says why."""
+
+
+class RuntimeParamsProvider:
+    def __init__(self, cfg: RuntimeParamsProviderConfig):
+        self._path = cfg.path
+        self._url = cfg.url
+        self.max_age_s = cfg.max_age_s
+        self.source = str(cfg.path if cfg.path is not None else cfg.url)
+
+    async def fetch(self, *, now: datetime) -> dict:
+        """Return the runtime parameters (without `generated_at`) or raise StaleInputs."""
+        text = await self._read()
+        if len(text) > MAX_DOC_BYTES:
+            raise StaleInputs(
+                f"{self.source}: document too large ({len(text)} chars, "
+                f"max {MAX_DOC_BYTES})"
+            )
+        try:
+            doc = json.loads(text, parse_constant=_reject_constant)
+        except (ValueError, RecursionError) as exc:
+            raise StaleInputs(f"{self.source}: not valid JSON ({exc})") from exc
+        if not isinstance(doc, dict):
+            raise StaleInputs(
+                f"{self.source}: document must be a JSON object, got {type(doc).__name__}"
+            )
+        raw = doc.pop("generated_at", None)
+        if not isinstance(raw, str) or not raw:
+            raise StaleInputs(f"{self.source}: generated_at missing")
+        try:
+            generated_at = parse_generated_at(raw)
+        except ValueError as exc:
+            raise StaleInputs(f"{self.source}: {exc}") from exc
+        age_s = (now - generated_at).total_seconds()
+        if age_s < -self.max_age_s:
+            # a relay clock far ahead would otherwise produce a document that
+            # never ages out; small skew (within max_age_s) is tolerated
+            raise StaleInputs(
+                f"{self.source}: generated_at is {-age_s:.0f}s in the future, "
+                f"max_age_s is {self.max_age_s:.0f}"
+            )
+        if age_s > self.max_age_s:
+            raise StaleInputs(
+                f"{self.source}: generated_at is {age_s:.0f}s old, "
+                f"max_age_s is {self.max_age_s:.0f}"
+            )
+        return doc
+
+    async def _read(self) -> str:
+        if self._path is not None:
+            try:
+                return self._path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                raise StaleInputs(f"{self._path}: unreadable ({exc})") from exc
+        try:
+            async with asyncio.timeout(FETCH_TIMEOUT_S):
+                async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S) as client:
+                    resp = await client.get(self._url)
+                    resp.raise_for_status()
+                    return resp.text
+        except TimeoutError as exc:
+            raise StaleInputs(
+                f"{self._url}: fetch timed out after {FETCH_TIMEOUT_S}s"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise StaleInputs(f"{self._url}: HTTP {exc.response.status_code}") from exc
+        except (httpx.HTTPError, httpx.InvalidURL) as exc:
+            raise StaleInputs(f"{self._url}: unreachable ({exc})") from exc

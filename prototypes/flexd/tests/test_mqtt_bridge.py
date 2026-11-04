@@ -510,3 +510,10 @@ async def test_mqtt_correction_energy_is_scaled_at_the_definition_power(
     (entry,) = ledger.values()
     assert entry["day_target_override_h"] == 1.0  # 3000 Wh at 3000 W, not 1.5 h
     assert any("2000" in r.message and "3000" in r.message for r in caplog.records)
+
+
+async def test_publish_plan_state_stale_inputs(bridge):
+    b, pub, _ = bridge
+    await b.publish_plan(state="stale_inputs")
+    state = next(p for t, p, _ in pub.published if t == "flexd/plan/state")
+    assert json.loads(state)["state"] == "stale_inputs"

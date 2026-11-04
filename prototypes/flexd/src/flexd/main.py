@@ -19,6 +19,7 @@ from flexd.config import load_config
 from flexd.emhass_driver import EmhassDriver
 from flexd.plan_view import PlanView
 from flexd.registry import Registry
+from flexd.runtime_params import RuntimeParamsProvider
 from flexd.scheduler import Scheduler
 from flexd.standing import StandingManager
 from flexd.templates import TemplateManager
@@ -128,6 +129,15 @@ async def run() -> None:
         default_ttl_s=cfg.default_ttl_s,
     )
 
+    provider = None
+    if cfg.runtime_params_provider is not None:
+        provider = RuntimeParamsProvider(cfg.runtime_params_provider)
+        log.info(
+            "runtime params provider: %s (max_age_s=%s)",
+            provider.source,
+            provider.max_age_s,
+        )
+
     bridge_holder: dict = {"bridge": None}
 
     async def on_cycle_end(state: str, swept_ids: list[str]) -> None:
@@ -159,6 +169,7 @@ async def run() -> None:
         timestep_min=cfg.timestep_min,
         horizon_steps=cfg.horizon_steps,
         extra_runtime_params=cfg.extra_runtime_params,
+        runtime_params_provider=provider,
         crumb_path=cfg.data_dir / "last_cycle.json",
         ts_round=cfg.ts_round,
         cycle_offset_s=cfg.cycle_offset_s,

@@ -8,7 +8,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from flexd.models import ID_PATTERN
 
@@ -133,6 +133,23 @@ class TemplateDefinition(BaseModel):
         return rules
 
 
+class RuntimeParamsProviderConfig(BaseModel):
+    """Source of fresh EMHASS runtime parameters, read before every solve (see
+    flexd.runtime_params). Exactly one of `path` / `url`."""
+
+    path: Path | None = None
+    url: str | None = None
+    # the document must be younger than this at solve time; two cycles at the
+    # default timestep is a sane starting point
+    max_age_s: float = Field(default=900.0, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self):
+        if (self.path is None) == (self.url is None):
+            raise ValueError("runtime_params_provider needs exactly one of path or url")
+        return self
+
+
 class FlexdConfig(BaseModel):
     emhass_url: str = "http://localhost:5000"
     # must equal EMHASS optimization_time_step; every grid computation divides by it
@@ -151,7 +168,11 @@ class FlexdConfig(BaseModel):
     # the timer cycle fires this many seconds after each grid boundary
     cycle_offset_s: float = Field(default=5.0, ge=0)
     mqtt: MqttConfig = MqttConfig()
+    # merged into every optim call, below the provider (provider wins); flexd's
+    # own deferrable keys always win over both
     extra_runtime_params: dict = {}
+    # fresh forecasts / soc_init per solve; None keeps the static dict only
+    runtime_params_provider: RuntimeParamsProviderConfig | None = None
     standing_demands: list[StandingDefinition] = []
     templates: list[TemplateDefinition] = []
 
@@ -189,7 +210,14 @@ _ENV_MAP = {
     "FLEXD_DEFAULT_TTL_S": ("default_ttl_s",),
     "FLEXD_STALE_AFTER_CYCLES": ("stale_after_cycles",),
     "FLEXD_CYCLE_OFFSET_S": ("cycle_offset_s",),
+    "FLEXD_RUNTIME_PARAMS_PATH": ("runtime_params_provider", "path"),
+    "FLEXD_RUNTIME_PARAMS_URL": ("runtime_params_provider", "url"),
+    "FLEXD_RUNTIME_PARAMS_MAX_AGE_S": ("runtime_params_provider", "max_age_s"),
 }
+
+# keys that are mutually exclusive within one node: an env value for one member
+# drops the yaml value of the others, so env can swap the source
+_ENV_EXCLUSIVE = {("runtime_params_provider",): {"path", "url"}}
 
 
 def load_config(path: Path | str) -> FlexdConfig:
@@ -202,6 +230,14 @@ def load_config(path: Path | str) -> FlexdConfig:
         raise SystemExit(
             f"flexd: config root must be a mapping, got {type(raw).__name__}"
         )
+    for keys in _ENV_EXCLUSIVE.values():
+        clashing = sorted(
+            env
+            for env, keypath in _ENV_MAP.items()
+            if keypath[-1] in keys and os.environ.get(env) is not None
+        )
+        if len(clashing) > 1:
+            raise SystemExit(f"flexd: set only one of {', '.join(clashing)}")
     for env, keypath in _ENV_MAP.items():
         val = os.environ.get(env)
         if val is None:
@@ -210,7 +246,15 @@ def load_config(path: Path | str) -> FlexdConfig:
         for key in keypath[:-1]:
             node = node.setdefault(key, {})
         node[keypath[-1]] = val
+        group = _ENV_EXCLUSIVE.get(keypath[:-1], set())
+        if keypath[-1] in group:
+            for sibling in group - {keypath[-1]}:
+                node.pop(sibling, None)
     cfg = FlexdConfig(**raw)
+    provider = cfg.runtime_params_provider
+    if provider is not None and provider.path is not None:
+        # a relative document path means "under data_dir", not the process cwd
+        provider.path = cfg.data_dir / provider.path
     seen_ids: set[str] = set()
     for sd in cfg.standing_demands:
         if sd.id in seen_ids:

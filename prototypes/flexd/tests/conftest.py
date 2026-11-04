@@ -1,14 +1,42 @@
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from flexd.config import RuntimeParamsProviderConfig
 from flexd.models import Demand
 from flexd.registry import Registry
+from flexd.runtime_params import RuntimeParamsProvider
 from flexd.transports.rest_api import create_app
 
 NOW_REAL = datetime.now(timezone.utc)
+
+# runtime-params provider document (what an external relay would write)
+PROVIDER_FIXTURE = Path(__file__).parent / "fixtures" / "runtime_params_provider.json"
+PROVIDER_DOC = json.loads(PROVIDER_FIXTURE.read_text(encoding="utf-8"))
+PROVIDER_GENERATED_AT = datetime(2026, 7, 5, 11, 58, 30, tzinfo=timezone.utc)
+
+
+def write_provider_doc(tmp_path: Path, **overrides) -> Path:
+    """Fixture document with overrides applied (None removes a key) in tmp_path."""
+    doc = {k: v for k, v in {**PROVIDER_DOC, **overrides}.items() if v is not None}
+    p = tmp_path / "runtime-params.json"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    return p
+
+
+def file_provider(path: Path, max_age_s: float = 600) -> RuntimeParamsProvider:
+    return RuntimeParamsProvider(
+        RuntimeParamsProviderConfig(path=path, max_age_s=max_age_s)
+    )
+
+
+def url_provider(url: str, max_age_s: float = 600) -> RuntimeParamsProvider:
+    return RuntimeParamsProvider(
+        RuntimeParamsProviderConfig(url=url, max_age_s=max_age_s)
+    )
 
 
 def make_demand(**kw) -> Demand:

@@ -61,9 +61,10 @@ instead — the URL and query parameters are unchanged.
 ## Fail-safe contract
 
 - Actuate only when `state == "ok"` **and** `on == 1`.
-- `flexd/plan/state` carries the result of the last cycle: `ok`, `skipped`, `rejected` or
-  `down` (see the [Home Assistant guide](home-assistant.md#fail-safe-contract) for what each
-  means). `stale` and `no-run` are HTTP-side values (`/simple/status`) and never appear on this
+- `flexd/plan/state` carries the result of the last cycle: `ok`, `skipped`, `stale_inputs`,
+  `rejected` or `down` (see the [Home Assistant guide](home-assistant.md#fail-safe-contract) for what each
+  means). `stale` and `no-run` are HTTP-side values (`/simple/status`, which also answers
+  `down` and `stale_inputs` while they are the last cycle's result) and never appear on this
   topic.
 - On anything other than `ok`, on `flexd/availability` = `offline`, or when the state payload's
   `generated_at` is older than two cycles: fall back to the device's own native logic rather

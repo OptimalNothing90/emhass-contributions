@@ -356,3 +356,20 @@ def test_simple_template_retrigger_racing_withdraw_is_409_not_404(tmp_path):
     assert r.status_code == 409
     assert "withdrawn" in r.text
     assert client.post("/simple/templates/ghost/start?source=loxone").status_code == 404
+
+
+def test_simple_status_stale_inputs(registry):
+    from tests.test_scheduler import PLAN, FakeDriver, FakeView, make_scheduler
+    from flexd.transports.rest_api import create_app
+    from fastapi.testclient import TestClient
+
+    view = FakeView()
+    scheduler = make_scheduler(registry, FakeDriver(result=PLAN), view)
+    scheduler.last_result = "stale_inputs"
+    app = create_app(
+        registry=registry,
+        view=view,
+        scheduler=scheduler,
+        driver=FakeDriver(result=PLAN),
+    )
+    assert TestClient(app).get("/simple/status").text == "stale_inputs"

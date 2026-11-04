@@ -149,8 +149,11 @@ def create_simple_router(
 
     @router.get("/status")
     def status():
-        if scheduler.last_result == "down":
-            return "down"
+        # cycle outcomes a consumer must not actuate on, even while the adopted
+        # plan is still young: EMHASS unreachable, or inputs flexd refused to
+        # solve with (runtime-params provider document stale or unreadable)
+        if scheduler.last_result in ("down", "stale_inputs"):
+            return scheduler.last_result
         return view.state(now=utcnow())
 
     return router
