@@ -32,6 +32,10 @@ extra_runtime_params:
 # soc_init, ...) plus "generated_at" (ISO 8601 with offset). Exactly one of path / url.
 # Older than max_age_s, missing, unreachable or unparsable: the cycle is skipped and
 # reported as `stale_inputs`, the adopted plan stays; flexd never solves on old data.
+# Every list must have exactly horizon_steps entries. An optional "first_step_start"
+# (ISO 8601 with offset) names the grid boundary the document was built for; when
+# present it must equal step 0 of the solve, so a mid-slot re-solve cannot read the
+# lists one step shifted. The reason for a stale_inputs cycle is in last_cycle.json.
 # Keys flexd sets itself (deferrable lists, prediction_horizon) are dropped with a warning.
 # An external relay that rebuilds EMHASS payloads today can write this document instead.
 # runtime_params_provider:

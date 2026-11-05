@@ -23,6 +23,9 @@ the end rather than stated as fact.
 
 ## Changelog
 
+- **2026-11-05.** Q9 answered by one installation (LesIT1's comment of 2026-11-04 in #1): the
+  grid rule of a tier reads the SOC the plan reaches, not the SOC at solve time; R21 item 3 now
+  points to that answer. No number was changed or reused.
 - **2026-11-04.** Revision after LesIT1's review in
   [OptimalNothing90/emhass-contributions#1](https://github.com/OptimalNothing90/emhass-contributions/issues/1)
   (comment of 2026-10-19) and the point-by-point reply of 2026-11-03. The document is now the
@@ -522,7 +525,8 @@ each with:
 1. **a target**: an SOC (fraction) or an energy, soft (R16);
 2. **an optional deadline**: an instant by which the target should be met, or none;
 3. **a grid eligibility**: whether energy for this tier may come from the grid, and where the
-   limit lies (Q9).
+   limit lies (Q9; on one installation the limit reads the SOC the plan reaches, not the SOC
+   at solve time).
 
 **"Open-ended, no departure" is a first-class tier**, not an absence of R3. Its target is an
 upper bound ("up to this much if it is cheap or free"), not an amount that must be delivered.
@@ -629,9 +633,9 @@ or `12ce81c`, `0.315` = LesIT1 on tag 0.315.2 (see "evcc versions per field").
 ## Open questions
 
 Items I could not verify in the sources listed at the top. None is assumed true anywhere
-above. Answers marked "answered by one installation" come from LesIT1's comment of 2026-10-19
-in #1, from a single installation on evcc 0.315.2; they say how that installation behaves, not
-what evcc does in general, and I did not re-verify them.
+above. Answers marked "answered by one installation" come from LesIT1's comments of 2026-10-19
+and 2026-11-04 in #1, from a single installation on evcc 0.315.2; they say how that installation
+behaves, not what evcc does in general, and I did not re-verify them.
 
 - **Q1. SOC observation time.** evcc keeps `socUpdated` in `core/loadpoint.go` but I found no
   state key or REST field that publishes it. *Answered by one installation (evcc 0.315.2):*
@@ -681,5 +685,12 @@ what evcc does in general, and I did not re-verify them.
   R21 needs a definition of "grid allowed only below X %". Either the rule reads the SOC at
   solve time (grid energy is allowed while the car starts the night below X %), or it reads
   the SOC the plan reaches (the plan may take grid energy up to X % and solar beyond it
-  within one night). They give different constraints. Asked of LesIT1 in #1 on 2026-11-03;
-  not answered yet, and the document does not choose.
+  within one night). They give different constraints. Asked of LesIT1 in #1 on 2026-11-03.
+  *Answered by one installation (evcc 0.315.2, comment of 2026-11-04):* the second reading.
+  Grid energy is allowed up to X % on the SOC the plan reaches. The floor tier's energy is
+  measured per cycle from the gap between the vehicle SOC at solve time and X, so it shrinks
+  towards zero while the car charges; the house battery is drawn on first and the grid covers
+  only the remainder by the deadline. X goes to evcc as vehicle `minSoc`, so grid charging
+  stops at the live SOC X. Everything above X is the solar tier, in `pv` mode, with no grid.
+  That is one installation's definition; R21 item 3 points to it and the document does not
+  claim it for evcc in general.

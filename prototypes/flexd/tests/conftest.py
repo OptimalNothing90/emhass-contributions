@@ -17,6 +17,9 @@ NOW_REAL = datetime.now(timezone.utc)
 PROVIDER_FIXTURE = Path(__file__).parent / "fixtures" / "runtime_params_provider.json"
 PROVIDER_DOC = json.loads(PROVIDER_FIXTURE.read_text(encoding="utf-8"))
 PROVIDER_GENERATED_AT = datetime(2026, 7, 5, 11, 58, 30, tzinfo=timezone.utc)
+# the fixture's first_step_start: the 30-min grid boundary the document was built for
+PROVIDER_FIRST_STEP = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
+PROVIDER_HORIZON_STEPS = len(PROVIDER_DOC["pv_power_forecast"])
 
 
 def write_provider_doc(tmp_path: Path, **overrides) -> Path:
@@ -27,15 +30,25 @@ def write_provider_doc(tmp_path: Path, **overrides) -> Path:
     return p
 
 
-def file_provider(path: Path, max_age_s: float = 600) -> RuntimeParamsProvider:
+def read_crumb(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+
+
+def file_provider(
+    path: Path, max_age_s: float = 600, horizon_steps: int = PROVIDER_HORIZON_STEPS
+) -> RuntimeParamsProvider:
     return RuntimeParamsProvider(
-        RuntimeParamsProviderConfig(path=path, max_age_s=max_age_s)
+        RuntimeParamsProviderConfig(path=path, max_age_s=max_age_s),
+        horizon_steps=horizon_steps,
     )
 
 
-def url_provider(url: str, max_age_s: float = 600) -> RuntimeParamsProvider:
+def url_provider(
+    url: str, max_age_s: float = 600, horizon_steps: int = PROVIDER_HORIZON_STEPS
+) -> RuntimeParamsProvider:
     return RuntimeParamsProvider(
-        RuntimeParamsProviderConfig(url=url, max_age_s=max_age_s)
+        RuntimeParamsProviderConfig(url=url, max_age_s=max_age_s),
+        horizon_steps=horizon_steps,
     )
 
 
