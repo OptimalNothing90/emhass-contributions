@@ -149,11 +149,20 @@ class MqttBridge:
             )
 
     # -- publish ----------------------------------------------------------------
-    async def publish_plan(self, state: str, now: datetime | None = None) -> None:
+    async def publish_plan(
+        self, state: str, now: datetime | None = None, reason: str | None = None
+    ) -> None:
         now = now or utcnow()
         await self._client.publish(
             f"{self._base}/plan/state",
-            json.dumps({"state": state, "generated_at": self._view.generated_at}),
+            json.dumps(
+                {
+                    "state": state,
+                    "generated_at": self._view.generated_at,
+                    # why a stale_inputs cycle did not solve; null otherwise
+                    "reason": reason,
+                }
+            ),
             retain=True,
         )
         for demand in self._registry.list_active(now=now):

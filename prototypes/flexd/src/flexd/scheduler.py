@@ -50,7 +50,7 @@ class Scheduler:
         self._provider = runtime_params_provider  # None: static dict only
         self._crumb_path = crumb_path
         self._on_cycle_end = (
-            on_cycle_end  # async callback(state, swept_ids) for mqtt publish
+            on_cycle_end  # async callback(state, swept_ids, reason) for mqtt publish
         )
         self._on_demand_off = (
             on_demand_off  # async callback(demand_id) -> publish OFF now
@@ -65,6 +65,8 @@ class Scheduler:
         self._debounce_task: asyncio.Task | None = None
         self._debounce_sleeping = False
         self.last_result: str = "no-run"
+        # why the last cycle did not solve (stale_inputs); None on every other result
+        self.last_reason: str | None = None
         self._cycle_lock = asyncio.Lock()
         # Event loop captured for threadsafe notify_change: FastAPI runs sync `def`
         # handlers in a worker thread, where asyncio.get_event_loop() would fail.
@@ -93,6 +95,7 @@ class Scheduler:
             )
             demands = self._registry.list_active(now=now)
             payload = None
+            reason = None
             if not demands:
                 result = "skipped"
             else:
@@ -132,9 +135,11 @@ class Scheduler:
                     self._view.adopt(plan, mapping, now=switch_at)
                     result = "ok"
                 except StaleInputs as exc:
-                    # no solve on old inputs; the adopted plan stays as it is
+                    # no solve on old inputs; the adopted plan stays as it is. The
+                    # text is the reason a reader of last_cycle.json / plan/state sees.
                     log.warning("runtime params stale; cycle skipped: %s", exc)
                     result = "stale_inputs"
+                    reason = str(exc)
                 except PlanRejected as exc:
                     log.error("plan rejected: %s", exc)
                     result = "rejected"
@@ -155,12 +160,13 @@ class Scheduler:
                 except httpx.HTTPError as exc:
                     log.error("emhass unreachable: %s", exc)
                     result = "down"
-            self._write_crumb(now, payload, result)
+            self._write_crumb(now, payload, result, reason)
             self.last_result = result
+            self.last_reason = reason
             if self._on_cycle_end is not None:
                 to_deliver = self._registry.pending_clear_ids()
                 try:
-                    await self._on_cycle_end(result, to_deliver)
+                    await self._on_cycle_end(result, to_deliver, reason)
                     # only what was delivered: an id withdrawn during the await stays;
                     # the drain is persisted only after the clear succeeded
                     self._registry.clear_delivered(to_deliver)
@@ -173,9 +179,15 @@ class Scheduler:
         raises StaleInputs. flexd's own keys are filtered by build_runtimeparams."""
         if self._provider is None:
             return self._extra
-        return {**self._extra, **await self._provider.fetch(now=now)}
+        # the same step 0 build_runtimeparams will anchor on: a document stamped
+        # for another boundary would be read one step shifted
+        first_step = grid_anchor(now, self._timestep_min, self._ts_round)
+        fresh = await self._provider.fetch(now=now, first_step_start=first_step)
+        return {**self._extra, **fresh}
 
-    def _write_crumb(self, now: datetime, payload: dict | None, result: str) -> None:
+    def _write_crumb(
+        self, now: datetime, payload: dict | None, result: str, reason: str | None
+    ) -> None:
         if self._crumb_path is None:
             return
         try:
@@ -187,6 +199,7 @@ class Scheduler:
                     json.dumps(payload, sort_keys=True, default=str).encode()
                 ).hexdigest(),
                 "result": result,
+                "reason": reason,
             }
             self._crumb_path.write_text(
                 json.dumps(crumb, indent=2, default=str), encoding="utf-8"

@@ -131,7 +131,9 @@ async def run() -> None:
 
     provider = None
     if cfg.runtime_params_provider is not None:
-        provider = RuntimeParamsProvider(cfg.runtime_params_provider)
+        provider = RuntimeParamsProvider(
+            cfg.runtime_params_provider, horizon_steps=cfg.horizon_steps
+        )
         log.info(
             "runtime params provider: %s (max_age_s=%s)",
             provider.source,
@@ -140,7 +142,9 @@ async def run() -> None:
 
     bridge_holder: dict = {"bridge": None}
 
-    async def on_cycle_end(state: str, swept_ids: list[str]) -> None:
+    async def on_cycle_end(
+        state: str, swept_ids: list[str], reason: str | None
+    ) -> None:
         bridge = bridge_holder["bridge"]
         if bridge is None:
             if swept_ids:
@@ -151,7 +155,7 @@ async def run() -> None:
                 )
             return
         await bridge.clear_expired(swept_ids)  # spec: no ghost retained setpoints
-        await bridge.publish_plan(state=state)
+        await bridge.publish_plan(state=state, reason=reason)
 
     async def _publish_off(demand_id: str) -> None:
         bridge = bridge_holder["bridge"]

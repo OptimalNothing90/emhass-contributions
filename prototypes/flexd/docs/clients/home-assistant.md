@@ -38,9 +38,13 @@ mqtt:
 
 Add one `sensor`/`binary_sensor` pair per demand id you care about — `<id>` is whatever you
 registered the demand under. `flexd/plan/state` carries a JSON payload
-(`{"state": "ok", "generated_at": "..."}`); the `value_template` above extracts just the state
-string. Note that this topic carries the raw cycle result: `ok|skipped|rejected|down` — treat
-anything other than `ok` as not-ok.
+(`{"state": "ok", "generated_at": "...", "reason": null}`); the `value_template` above extracts
+just the state string. Note that this topic carries the raw cycle result:
+`ok|skipped|stale_inputs|rejected|down` — treat anything other than `ok` as not-ok. `reason` is
+a text only on `stale_inputs` (why flexd did not solve: document age, a `first_step_start` that
+is not this solve's step 0, a list of the wrong length, or the HTTP status and body the
+provider answered with); a second sensor with `value_template: "{{ value_json.reason }}"`
+shows it.
 `flexd/availability` is flexd's MQTT last-will topic — `offline` means flexd itself
 (not just EMHASS) is unreachable.
 
@@ -211,8 +215,9 @@ appliance to confirm the event type and attributes before wiring the automations
 - Actuate only when `state == "ok"` **and** `on == 1`.
 - `flexd/plan/state` carries the **result of the last cycle**, not a plan age: `ok`, `skipped`
   (no demands were registered, nothing was solved), `stale_inputs` (the configured
-  runtime-params provider document was too old, missing or unreadable, so flexd did not solve
-  and the previous plan stays adopted), `rejected` (EMHASS answered but the plan failed flexd's
+  runtime-params provider document was too old, built for another step, had a list of the
+  wrong length or was unreadable, so flexd did not solve and the previous plan stays adopted;
+  the payload's `reason` says which), `rejected` (EMHASS answered but the plan failed flexd's
   guards) or `down` (EMHASS unreachable). `stale` and `no-run` exist only on the
   HTTP side (`/api/v1/plan`, `/simple/status`); this topic never carries them. `/simple/status`
   also answers `down` and `stale_inputs` while they are the last cycle's result. The topic is

@@ -63,6 +63,25 @@ Open `flexd.yaml` and work through it top to bottom:
   Example document: [`tests/fixtures/runtime_params_provider.json`](../tests/fixtures/runtime_params_provider.json).
   Env overrides: `FLEXD_RUNTIME_PARAMS_PATH`, `FLEXD_RUNTIME_PARAMS_URL`,
   `FLEXD_RUNTIME_PARAMS_MAX_AGE_S`. A relative `path` is taken under `data_dir`.
+  Two more checks protect the positional lists, and both report as `stale_inputs` too:
+  - **Every list must be exactly `horizon_steps` long.** The forecast lists are positional
+    (entry *i* is step *i*), and EMHASS is handed `prediction_horizon = horizon_steps`. A
+    shorter or longer list is refused before anything reaches EMHASS, with the key and both
+    lengths in the reason. Scalars and nested objects are not checked.
+  - **Optional `first_step_start`** (ISO 8601 with offset, same rules as `generated_at`): the
+    grid boundary the document was built for. Age alone cannot catch a mid-slot re-solve:
+    with a 30-min step and `ts_round: nearest`, a demand change at 12:20 triggers a solve
+    whose step 0 is **12:30**, while a relay that rebuilt its document at 12:00 is still well
+    inside `max_age_s`. flexd would read every list one step shifted. With the stamp present,
+    flexd compares it with the step 0 of the solve about to run and skips on a mismatch, with
+    both instants in the reason. Without the stamp the document is accepted on age alone, as
+    before. If the relay rebuilds on flexd's cycle (`cycle_offset_s` after every boundary,
+    plus re-solves after demand changes), stamp the boundary it built for; `ts_round` must be
+    the same on both sides.
+  The reason for a `stale_inputs` cycle (the age, the mismatched stamp, the wrong list, or the
+  HTTP status with up to 500 characters of the response body) is written to `last_cycle.json`
+  (`reason`) and published on `flexd/plan/state` (`reason`); `/simple/status` stays a bare
+  status word.
 - `standing_demands:` / `templates:` — both optional and commented out by default. They cover
   recurring daily loads (water heater) and event-triggered appliances (dishwasher) respectively.
   Skip these for the first run; see the [Home Assistant guide](clients/home-assistant.md) for a
@@ -182,9 +201,10 @@ Everything flexd persists lives under `/data` (the `flexd-data` volume in the co
 | `demands.json` | the active demand registry, plus the ids whose retained MQTT topics still need clearing (written in the same snapshot as the withdrawal, so a crash between a withdraw and the next cycle cannot lose the clear) |
 | `standing_ledger.json` | per-day accounting for standing (recurring) demands |
 | `adopted_plan.json` | the last plan flexd accepted from EMHASS |
-| `last_cycle.json` | a debug crumb written every cycle: timestamp, payload hash, result |
+| `last_cycle.json` | a debug crumb written every cycle: timestamp, payload hash, result, and for `stale_inputs` the reason |
 
 If something looks wrong — a setpoint that doesn't match expectations, a demand that seems
 stuck — **`last_cycle.json` is the first thing to check**: it tells you whether the last cycle
 ran (`ok`), skipped (`skipped`: nothing to solve; `stale_inputs`: the runtime-params provider
-document was too old or unreadable, see step 2), or failed (`rejected`, `down`), and why.
+document was too old, built for another step, had a list of the wrong length or was unreadable,
+with the exact reason in `reason`, see step 2), or failed (`rejected`, `down`), and why.

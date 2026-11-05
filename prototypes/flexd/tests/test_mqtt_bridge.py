@@ -514,6 +514,17 @@ async def test_mqtt_correction_energy_is_scaled_at_the_definition_power(
 
 async def test_publish_plan_state_stale_inputs(bridge):
     b, pub, _ = bridge
-    await b.publish_plan(state="stale_inputs")
+    await b.publish_plan(state="stale_inputs", reason="relay: HTTP 503: restarting")
     state = next(p for t, p, _ in pub.published if t == "flexd/plan/state")
-    assert json.loads(state)["state"] == "stale_inputs"
+    assert json.loads(state) == {
+        "state": "stale_inputs",
+        "generated_at": None,
+        "reason": "relay: HTTP 503: restarting",
+    }
+
+
+async def test_publish_plan_state_ok_has_no_reason(bridge):
+    b, pub, _ = bridge
+    await b.publish_plan(state="ok")
+    state = next(p for t, p, _ in pub.published if t == "flexd/plan/state")
+    assert json.loads(state)["reason"] is None

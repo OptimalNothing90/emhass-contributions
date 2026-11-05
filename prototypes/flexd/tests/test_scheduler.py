@@ -4,7 +4,12 @@ from datetime import datetime, timedelta, timezone
 
 from flexd.emhass_driver import PlanRejected
 from flexd.scheduler import Scheduler
-from tests.conftest import file_provider, make_demand, write_provider_doc
+from tests.conftest import (
+    PROVIDER_DOC,
+    file_provider,
+    make_demand,
+    write_provider_doc,
+)
 
 NOW = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
 
@@ -141,7 +146,7 @@ async def test_expired_swept_and_reported(registry):
     driver, view = FakeDriver(result=PLAN), FakeView()
     seen = []
 
-    async def on_end(state, swept_ids):
+    async def on_end(state, swept_ids, reason):
         seen.append((state, swept_ids))
 
     s = Scheduler(
@@ -171,7 +176,7 @@ async def test_deleted_demand_funneled_into_on_cycle_end(registry):
     driver, view = FakeDriver(result=PLAN), FakeView()
     seen = []
 
-    async def on_end(state, swept_ids):
+    async def on_end(state, swept_ids, reason):
         seen.append((state, swept_ids))
 
     s = Scheduler(
@@ -268,7 +273,7 @@ async def test_on_cycle_end_failure_keeps_result_and_redelivers(registry):
     driver, view = FakeDriver(result=PLAN), FakeView()
     calls = []
 
-    async def flaky(state, swept_ids):
+    async def flaky(state, swept_ids, reason):
         calls.append(list(swept_ids))
         if len(calls) == 1:
             raise RuntimeError("mqtt down")
@@ -653,7 +658,7 @@ async def test_pending_swept_keeps_only_the_last_1000_ids(registry):
     )
     delivered = []
 
-    async def failing(state, swept_ids):
+    async def failing(state, swept_ids, reason):
         delivered.append(list(swept_ids))
         raise RuntimeError("broker down")
 
@@ -810,7 +815,7 @@ async def test_pending_clear_survives_a_crash_and_is_delivered_after_restart(
     reg2 = boot()
     seen = []
 
-    async def on_end(state, swept_ids):
+    async def on_end(state, swept_ids, reason):
         seen.append((state, list(swept_ids)))
 
     s = Scheduler(
@@ -841,7 +846,7 @@ async def test_pending_clear_kept_on_disk_while_delivery_fails(tmp_path):
         )
     )
 
-    async def failing(state, swept_ids):
+    async def failing(state, swept_ids, reason):
         raise RuntimeError("broker down")
 
     s = Scheduler(
@@ -980,16 +985,17 @@ async def test_provider_params_are_sent_with_every_solve(registry, tmp_path):
         runtime_params_provider=file_provider(write_provider_doc(tmp_path)),
     )
     assert await s.run_once(now=NOW) == "ok"
-    assert driver.calls[0]["pv_power_forecast"][3] == 850
+    assert driver.calls[0]["pv_power_forecast"] == PROVIDER_DOC["pv_power_forecast"]
     assert "generated_at" not in driver.calls[0]
     # a rewritten document is picked up by the next solve, not cached from boot
     write_provider_doc(
         tmp_path,
         generated_at=(NOW + timedelta(minutes=29)).isoformat(),
-        pv_power_forecast=[1] * 12,
+        first_step_start=(NOW + timedelta(minutes=30)).isoformat(),
+        pv_power_forecast=[1] * 48,
     )
     assert await s.run_once(now=NOW + timedelta(minutes=30)) == "ok"
-    assert driver.calls[1]["pv_power_forecast"] == [1] * 12
+    assert driver.calls[1]["pv_power_forecast"] == [1] * 48
 
 
 async def test_provider_overrides_static_extra_runtime_params(registry, tmp_path):
@@ -1037,8 +1043,8 @@ async def test_stale_provider_skips_the_solve_and_keeps_the_adopted_plan(
     driver, view = FakeDriver(result=PLAN), FakeView()
     seen = []
 
-    async def on_end(state, swept_ids):
-        seen.append((state, swept_ids))
+    async def on_end(state, swept_ids, reason):
+        seen.append((state, swept_ids, reason))
 
     s = make_scheduler(
         registry,
@@ -1049,15 +1055,24 @@ async def test_stale_provider_skips_the_solve_and_keeps_the_adopted_plan(
         crumb_path=tmp_path / "last_cycle.json",
     )
     assert await s.run_once(now=NOW) == "ok"
+    assert s.last_reason is None
+    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    assert crumb["reason"] is None
     # document untouched for an hour: stale, no solve, old plan stays adopted
     result = await s.run_once(now=NOW + timedelta(hours=1))
     assert result == "stale_inputs"
     assert s.last_result == "stale_inputs"
     assert len(driver.calls) == 1
     assert len(view.adopted) == 1
-    assert seen == [("ok", []), ("stale_inputs", [])]
+    # the reason travels with the result: callback, attribute and crumb say the same
+    assert seen[0] == ("ok", [], None)
+    state, swept, reason = seen[1]
+    assert (state, swept) == ("stale_inputs", [])
+    assert "generated_at is 3690s old" in reason
+    assert s.last_reason == reason
     crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
     assert crumb["result"] == "stale_inputs"
+    assert crumb["reason"] == reason
     assert crumb["payload_sha256"] is None
 
 
@@ -1083,3 +1098,78 @@ async def test_provider_is_not_read_when_there_is_nothing_to_solve(registry, tmp
         runtime_params_provider=file_provider(tmp_path / "absent.json"),
     )
     assert await s.run_once(now=NOW) == "skipped"
+
+
+async def test_provider_document_for_the_previous_step_is_stale_mid_slot(
+    registry, tmp_path
+):
+    # a demand change 20 min into the 12:00 slot triggers a re-solve whose step 0 is
+    # 12:30 (nearest); the relay's document is fresh by age but built for 12:00, so
+    # its positional lists would be one step off: skip, and say so in the crumb
+    _seed(registry)
+    driver, view = FakeDriver(result=PLAN), FakeView()
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(
+            write_provider_doc(tmp_path), max_age_s=1800
+        ),
+        crumb_path=tmp_path / "last_cycle.json",
+    )
+    assert await s.run_once(now=NOW + timedelta(minutes=20)) == "stale_inputs"
+    assert driver.calls == []
+    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    assert "12:00:00" in crumb["reason"] and "12:30:00" in crumb["reason"]
+
+
+async def test_provider_step_check_follows_the_scheduler_ts_round(registry, tmp_path):
+    # with ts_round=first the same 12:20 re-solve anchors at 12:00: the document fits
+    _seed(registry)
+    driver, view = FakeDriver(result=PLAN), FakeView()
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        ts_round="first",
+        runtime_params_provider=file_provider(
+            write_provider_doc(tmp_path), max_age_s=1800
+        ),
+    )
+    assert await s.run_once(now=NOW + timedelta(minutes=20)) == "ok"
+
+
+async def test_provider_list_of_the_wrong_length_is_stale_inputs(registry, tmp_path):
+    _seed(registry)
+    driver, view = FakeDriver(result=PLAN), FakeView()
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(
+            write_provider_doc(tmp_path, load_power_forecast=[500] * 47)
+        ),
+        crumb_path=tmp_path / "last_cycle.json",
+    )
+    assert await s.run_once(now=NOW) == "stale_inputs"
+    assert driver.calls == []  # never a short list at EMHASS
+    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    assert "load_power_forecast" in crumb["reason"]
+    assert "47" in crumb["reason"] and "48" in crumb["reason"]
+
+
+async def test_last_reason_is_cleared_by_the_next_good_cycle(registry, tmp_path):
+    _seed(registry)
+    driver, view = FakeDriver(result=PLAN), FakeView()
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(tmp_path / "absent.json"),
+    )
+    assert await s.run_once(now=NOW) == "stale_inputs"
+    assert "absent.json" in s.last_reason
+    write_provider_doc(tmp_path)
+    s._provider = file_provider(tmp_path / "runtime-params.json")
+    assert await s.run_once(now=NOW) == "ok"
+    assert s.last_reason is None
