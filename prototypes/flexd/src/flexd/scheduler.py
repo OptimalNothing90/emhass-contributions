@@ -16,7 +16,7 @@ from flexd.aggregator import build_runtimeparams, grid_anchor
 from flexd.emhass_driver import PlanRejected
 from flexd.models import utcnow
 from flexd.plan_view import verify_plan_structure
-from flexd.runtime_params import StaleInputs
+from flexd.runtime_params import MAX_ERROR_BODY_CHARS, StaleInputs
 
 log = logging.getLogger(__name__)
 
@@ -135,8 +135,7 @@ class Scheduler:
                     self._view.adopt(plan, mapping, now=switch_at)
                     result = "ok"
                 except StaleInputs as exc:
-                    # no solve on old inputs; the adopted plan stays as it is. The
-                    # text is the reason a reader of last_cycle.json / plan/state sees.
+                    # no solve on old inputs; the adopted plan stays as it is
                     log.warning("runtime params stale; cycle skipped: %s", exc)
                     result = "stale_inputs"
                     reason = str(exc)
@@ -151,7 +150,7 @@ class Scheduler:
                         log.error(
                             "emhass rejected the optim request (HTTP %d): %s",
                             exc.response.status_code,
-                            exc.response.text[:500],
+                            exc.response.text[:MAX_ERROR_BODY_CHARS],
                         )
                         result = "rejected"
                     else:
@@ -179,8 +178,7 @@ class Scheduler:
         raises StaleInputs. flexd's own keys are filtered by build_runtimeparams."""
         if self._provider is None:
             return self._extra
-        # the same step 0 build_runtimeparams will anchor on: a document stamped
-        # for another boundary would be read one step shifted
+        # the same step 0 build_runtimeparams anchors on
         first_step = grid_anchor(now, self._timestep_min, self._ts_round)
         fresh = await self._provider.fetch(now=now, first_step_start=first_step)
         return {**self._extra, **fresh}

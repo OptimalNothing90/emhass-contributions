@@ -27,6 +27,7 @@ async def test_file_provider_returns_params_without_generated_at(tmp_path):
         first_step_start=STEP0, now=T0 + timedelta(seconds=90)
     )
     assert "generated_at" not in params
+    assert "first_step_start" not in params  # consumed, not forwarded to EMHASS
     assert params["soc_init"] == 0.62
     assert len(params["pv_power_forecast"]) == 48
 
@@ -232,17 +233,8 @@ async def test_deeply_nested_document_is_stale(tmp_path):
 # -- LesIT1 asks (issue #1, 2026-11-04): step stamp, list lengths, readable reason --
 
 
-async def test_first_step_start_matching_the_cycle_anchor_is_accepted(tmp_path):
-    params = await file_provider(write_provider_doc(tmp_path)).fetch(
-        first_step_start=STEP0, now=T0 + timedelta(seconds=90)
-    )
-    assert "first_step_start" not in params  # consumed, not forwarded to EMHASS
-    assert params["soc_init"] == 0.62
-
-
 async def test_first_step_start_one_step_off_is_stale(tmp_path):
-    # mid-slot re-solve after a demand change: the document is 20 min old (fresh by
-    # age) but was built for 12:00, and this solve starts at 12:30
+    # mid-slot re-solve (module docstring): fresh by age, built for 12:00, solve at 12:30
     provider = file_provider(write_provider_doc(tmp_path), max_age_s=1800)
     with pytest.raises(StaleInputs, match="12:00:00.*12:30:00") as info:
         await provider.fetch(
@@ -268,10 +260,12 @@ async def test_first_step_start_without_offset_is_stale(tmp_path):
         await provider.fetch(first_step_start=STEP0, now=T0)
 
 
-async def test_first_step_start_that_is_not_a_string_is_stale(tmp_path):
-    provider = file_provider(write_provider_doc(tmp_path, first_step_start=12))
-    with pytest.raises(StaleInputs, match="first_step_start"):
+@pytest.mark.parametrize("value", [12, "", "x" * 65])
+async def test_first_step_start_that_is_not_a_short_string_is_stale(tmp_path, value):
+    provider = file_provider(write_provider_doc(tmp_path, first_step_start=value))
+    with pytest.raises(StaleInputs, match="first_step_start must be") as info:
         await provider.fetch(first_step_start=STEP0, now=T0)
+    assert "x" * 65 not in str(info.value)  # never echoed unbounded
 
 
 async def test_document_without_first_step_start_passes_on_age_alone(tmp_path):
@@ -330,16 +324,12 @@ async def test_url_http_error_carries_the_response_body():
 
 
 @respx.mock
-async def test_url_http_error_body_is_bounded():
-    respx.get(URL).respond(503, text="x" * 2000)
-    with pytest.raises(StaleInputs) as info:
-        await url_provider(URL).fetch(first_step_start=STEP0, now=T0)
-    assert "x" * 500 in str(info.value)
-    assert "x" * 501 not in str(info.value)
-
-
-@respx.mock
-async def test_url_http_error_without_body_has_no_dangling_separator():
-    respx.get(URL).respond(502, text="")
-    with pytest.raises(StaleInputs, match=r"HTTP 502$"):
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [("x" * 2000, r"HTTP 503: x{500}$"), ("", r"HTTP 503$")],
+    ids=["bounded", "no-body"],
+)
+async def test_url_http_error_body_is_bounded(body, expected):
+    respx.get(URL).respond(503, text=body)
+    with pytest.raises(StaleInputs, match=expected):
         await url_provider(URL).fetch(first_step_start=STEP0, now=T0)

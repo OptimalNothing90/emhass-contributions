@@ -35,8 +35,11 @@ FETCH_TIMEOUT_S = 10.0
 # forecasts are a few KB; anything bigger is not a provider document
 MAX_DOC_BYTES = 1_000_000
 # an HTTP error body is the relay's own explanation (a bridge answering 503 with
-# text); keep enough to read, bounded like the EMHASS 4xx tail in the scheduler
+# text); keep enough to read, bounded. The scheduler uses the same bound for the
+# EMHASS 4xx log tail.
 MAX_ERROR_BODY_CHARS = 500
+# an ISO 8601 instant with offset is under 40 characters
+MAX_STAMP_CHARS = 64
 # lists the aggregator overrides and drops with a warning anyway: their length says
 # nothing about the forecasts, so they are not held to prediction_horizon
 _FLEXD_OWNED_KEYS = FLEXD_CANONICAL_KEYS | FLEXD_LEGACY_ALIASES
@@ -61,9 +64,8 @@ class RuntimeParamsProvider:
         self._horizon_steps = horizon_steps
 
     async def fetch(self, *, now: datetime, first_step_start: datetime) -> dict:
-        """Return the runtime parameters (without `generated_at` / `first_step_start`)
-        or raise StaleInputs. `first_step_start` is step 0 of the solve about to run
-        (the grid anchor); a document that stamps a different step is refused."""
+        """Return the runtime parameters (metadata keys removed) or raise StaleInputs.
+        `first_step_start` is step 0 of the solve about to run (the grid anchor)."""
         text = await self._read()
         if len(text) > MAX_DOC_BYTES:
             raise StaleInputs(
@@ -98,20 +100,20 @@ class RuntimeParamsProvider:
                 f"{self.source}: generated_at is {age_s:.0f}s old, "
                 f"max_age_s is {self.max_age_s:.0f}"
             )
-        self._check_first_step(doc, first_step_start)
+        self._check_first_step(doc.pop("first_step_start", None), first_step_start)
         self._check_list_lengths(doc)
         return doc
 
-    def _check_first_step(self, doc: dict, first_step_start: datetime) -> None:
+    def _check_first_step(self, raw, first_step_start: datetime) -> None:
         """Optional stamp: when present, the document must be built for this solve's
-        step 0. Absent: the age check above is all there is (older relays)."""
-        if "first_step_start" not in doc:
+        step 0. Absent (None): the age check above is all there is (older relays)."""
+        if raw is None:
             return
-        raw = doc.pop("first_step_start")
-        if not isinstance(raw, str) or not raw:
+        # the text ends up in a retained MQTT payload: never echo an unbounded value
+        if not isinstance(raw, str) or not 0 < len(raw) <= MAX_STAMP_CHARS:
             raise StaleInputs(
                 f"{self.source}: first_step_start must be an ISO 8601 string, "
-                f"got {raw!r}"
+                f"got {raw!r:.{MAX_STAMP_CHARS}}"
             )
         try:
             stamped = parse_generated_at(raw, field="first_step_start")
@@ -119,8 +121,8 @@ class RuntimeParamsProvider:
             raise StaleInputs(f"{self.source}: {exc}") from exc
         if stamped != first_step_start:
             raise StaleInputs(
-                f"{self.source}: first_step_start {raw} is not this solve's first "
-                f"step {first_step_start.isoformat()}"
+                f"{self.source}: first_step_start {stamped.isoformat()} is not this "
+                f"solve's first step {first_step_start.isoformat()}"
             )
 
     def _check_list_lengths(self, doc: dict) -> None:

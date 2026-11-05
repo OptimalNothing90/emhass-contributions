@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime, timedelta, timezone
 
 from flexd.emhass_driver import PlanRejected
@@ -8,6 +7,7 @@ from tests.conftest import (
     PROVIDER_DOC,
     file_provider,
     make_demand,
+    read_crumb,
     write_provider_doc,
 )
 
@@ -1056,7 +1056,7 @@ async def test_stale_provider_skips_the_solve_and_keeps_the_adopted_plan(
     )
     assert await s.run_once(now=NOW) == "ok"
     assert s.last_reason is None
-    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    crumb = read_crumb(tmp_path)
     assert crumb["reason"] is None
     # document untouched for an hour: stale, no solve, old plan stays adopted
     result = await s.run_once(now=NOW + timedelta(hours=1))
@@ -1070,7 +1070,7 @@ async def test_stale_provider_skips_the_solve_and_keeps_the_adopted_plan(
     assert (state, swept) == ("stale_inputs", [])
     assert "generated_at is 3690s old" in reason
     assert s.last_reason == reason
-    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    crumb = read_crumb(tmp_path)
     assert crumb["result"] == "stale_inputs"
     assert crumb["reason"] == reason
     assert crumb["payload_sha256"] is None
@@ -1103,9 +1103,8 @@ async def test_provider_is_not_read_when_there_is_nothing_to_solve(registry, tmp
 async def test_provider_document_for_the_previous_step_is_stale_mid_slot(
     registry, tmp_path
 ):
-    # a demand change 20 min into the 12:00 slot triggers a re-solve whose step 0 is
-    # 12:30 (nearest); the relay's document is fresh by age but built for 12:00, so
-    # its positional lists would be one step off: skip, and say so in the crumb
+    # re-solve 20 min into the 12:00 slot anchors on 12:30 (nearest); the document
+    # is fresh by age but stamped 12:00: skip, and say so in the crumb
     _seed(registry)
     driver, view = FakeDriver(result=PLAN), FakeView()
     s = make_scheduler(
@@ -1119,7 +1118,7 @@ async def test_provider_document_for_the_previous_step_is_stale_mid_slot(
     )
     assert await s.run_once(now=NOW + timedelta(minutes=20)) == "stale_inputs"
     assert driver.calls == []
-    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    crumb = read_crumb(tmp_path)
     assert "12:00:00" in crumb["reason"] and "12:30:00" in crumb["reason"]
 
 
@@ -1153,7 +1152,7 @@ async def test_provider_list_of_the_wrong_length_is_stale_inputs(registry, tmp_p
     )
     assert await s.run_once(now=NOW) == "stale_inputs"
     assert driver.calls == []  # never a short list at EMHASS
-    crumb = json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
+    crumb = read_crumb(tmp_path)
     assert "load_power_forecast" in crumb["reason"]
     assert "47" in crumb["reason"] and "48" in crumb["reason"]
 
@@ -1165,11 +1164,10 @@ async def test_last_reason_is_cleared_by_the_next_good_cycle(registry, tmp_path)
         registry,
         driver,
         view,
-        runtime_params_provider=file_provider(tmp_path / "absent.json"),
+        runtime_params_provider=file_provider(tmp_path / "runtime-params.json"),
     )
-    assert await s.run_once(now=NOW) == "stale_inputs"
-    assert "absent.json" in s.last_reason
+    assert await s.run_once(now=NOW) == "stale_inputs"  # not written yet
+    assert "runtime-params.json" in s.last_reason
     write_provider_doc(tmp_path)
-    s._provider = file_provider(tmp_path / "runtime-params.json")
     assert await s.run_once(now=NOW) == "ok"
     assert s.last_reason is None

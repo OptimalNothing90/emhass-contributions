@@ -19,7 +19,7 @@ PROVIDER_DOC = json.loads(PROVIDER_FIXTURE.read_text(encoding="utf-8"))
 PROVIDER_GENERATED_AT = datetime(2026, 7, 5, 11, 58, 30, tzinfo=timezone.utc)
 # the fixture's first_step_start: the 30-min grid boundary the document was built for
 PROVIDER_FIRST_STEP = datetime(2026, 7, 5, 12, 0, tzinfo=timezone.utc)
-PROVIDER_HORIZON_STEPS = 48  # every list in the fixture has this many entries
+PROVIDER_HORIZON_STEPS = len(PROVIDER_DOC["pv_power_forecast"])
 
 
 def write_provider_doc(tmp_path: Path, **overrides) -> Path:
@@ -28,6 +28,10 @@ def write_provider_doc(tmp_path: Path, **overrides) -> Path:
     p = tmp_path / "runtime-params.json"
     p.write_text(json.dumps(doc), encoding="utf-8")
     return p
+
+
+def read_crumb(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "last_cycle.json").read_text(encoding="utf-8"))
 
 
 def file_provider(

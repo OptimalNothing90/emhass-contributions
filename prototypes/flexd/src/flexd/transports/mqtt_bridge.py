@@ -159,8 +159,7 @@ class MqttBridge:
                 {
                     "state": state,
                     "generated_at": self._view.generated_at,
-                    # why a stale_inputs cycle did not solve; null otherwise
-                    "reason": reason,
+                    "reason": reason,  # stale_inputs only; relay text, display only
                 }
             ),
             retain=True,
