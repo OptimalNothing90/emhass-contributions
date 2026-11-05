@@ -44,7 +44,8 @@ just the state string. Note that this topic carries the raw cycle result:
 a text only on `stale_inputs` (why flexd did not solve: document age, a `first_step_start` that
 is not this solve's step 0, a list of the wrong length, or the HTTP status and body the
 provider answered with); a second sensor with `value_template: "{{ value_json.reason }}"`
-shows it.
+shows it. It is text from the provider (a 503 body is whatever the relay wrote), bounded to a
+few hundred characters: show it, never key an automation on its content.
 `flexd/availability` is flexd's MQTT last-will topic — `offline` means flexd itself
 (not just EMHASS) is unreachable.
 

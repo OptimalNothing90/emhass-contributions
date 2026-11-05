@@ -67,7 +67,10 @@ Open `flexd.yaml` and work through it top to bottom:
   - **Every list must be exactly `horizon_steps` long.** The forecast lists are positional
     (entry *i* is step *i*), and EMHASS is handed `prediction_horizon = horizon_steps`. A
     shorter or longer list is refused before anything reaches EMHASS, with the key and both
-    lengths in the reason. Scalars and nested objects are not checked.
+    lengths in the reason. Scalars and nested objects are not checked. A runtime list that is
+    not per-step (per-plant PV settings such as `surface_tilt` or `pv_module_model`) does not
+    belong in this document: put it in `extra_runtime_params`, which is static and not
+    length-checked.
   - **Optional `first_step_start`** (ISO 8601 with offset, same rules as `generated_at`): the
     grid boundary the document was built for. Age alone cannot catch a mid-slot re-solve:
     with a 30-min step and `ts_round: nearest`, a demand change at 12:20 triggers a solve
@@ -77,7 +80,11 @@ Open `flexd.yaml` and work through it top to bottom:
     both instants in the reason. Without the stamp the document is accepted on age alone, as
     before. If the relay rebuilds on flexd's cycle (`cycle_offset_s` after every boundary,
     plus re-solves after demand changes), stamp the boundary it built for; `ts_round` must be
-    the same on both sides.
+    the same on both sides. Mind the order at the boundary: the regular cycle fires
+    `cycle_offset_s` (default 5 s) after it, and a document the relay has not rewritten by
+    then still carries the previous stamp and is skipped, not used shifted. Either write the
+    document for the upcoming boundary shortly before it, or set `cycle_offset_s` above the
+    relay's write latency.
   The reason for a `stale_inputs` cycle (the age, the mismatched stamp, the wrong list, or the
   HTTP status with up to 500 characters of the response body) is written to `last_cycle.json`
   (`reason`) and published on `flexd/plan/state` (`reason`); `/simple/status` stays a bare

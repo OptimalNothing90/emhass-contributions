@@ -1017,6 +1017,8 @@ async def test_provider_conflict_key_is_discarded_with_warning(
     registry, tmp_path, caplog
 ):
     _seed(registry)
+    # def_total_hours is a one-entry list: exempt from the horizon length check
+    # (flexd overrides it anyway), so the cycle must still solve
     doc = write_provider_doc(
         tmp_path, prediction_horizon=12, def_total_hours=[9], soc_init=0.7
     )

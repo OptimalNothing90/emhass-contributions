@@ -104,7 +104,7 @@ class RuntimeParamsProvider:
         self._check_list_lengths(doc)
         return doc
 
-    def _check_first_step(self, raw, first_step_start: datetime) -> None:
+    def _check_first_step(self, raw: object, first_step_start: datetime) -> None:
         """Optional stamp: when present, the document must be built for this solve's
         step 0. Absent (None): the age check above is all there is (older relays)."""
         if raw is None:
@@ -127,7 +127,9 @@ class RuntimeParamsProvider:
 
     def _check_list_lengths(self, doc: dict) -> None:
         """Every top-level list is positional over the horizon: a wrong length would
-        reach EMHASS as a short or shifted forecast, so it is stale, not a warning."""
+        reach EMHASS as a short or shifted forecast, so it is stale, not a warning.
+        Lists that are not per-step (per-plant PV settings) belong in the static
+        extra_runtime_params, which is not checked."""
         for key, value in doc.items():
             if not isinstance(value, list) or key in _FLEXD_OWNED_KEYS:
                 continue
