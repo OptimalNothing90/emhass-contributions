@@ -1159,6 +1159,27 @@ async def test_provider_list_of_the_wrong_length_is_stale_inputs(registry, tmp_p
     assert "47" in crumb["reason"] and "48" in crumb["reason"]
 
 
+async def test_last_reason_is_cleared_by_a_down_cycle_too(registry, tmp_path):
+    # the reason belongs to stale_inputs only; any other result resets it
+    _seed(registry)
+    driver, view = FakeDriver(result=PLAN), FakeView()
+    s = make_scheduler(
+        registry,
+        driver,
+        view,
+        runtime_params_provider=file_provider(tmp_path / "runtime-params.json"),
+        crumb_path=tmp_path / "last_cycle.json",
+    )
+    assert await s.run_once(now=NOW) == "stale_inputs"
+    write_provider_doc(tmp_path)
+    import httpx
+
+    driver.error = httpx.ConnectError("refused")
+    assert await s.run_once(now=NOW) == "down"
+    assert s.last_reason is None
+    assert read_crumb(tmp_path)["reason"] is None
+
+
 async def test_last_reason_is_cleared_by_the_next_good_cycle(registry, tmp_path):
     _seed(registry)
     driver, view = FakeDriver(result=PLAN), FakeView()

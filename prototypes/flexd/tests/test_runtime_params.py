@@ -244,10 +244,12 @@ async def test_first_step_start_one_step_off_is_stale(tmp_path):
     assert "first_step_start" in str(info.value)
 
 
-async def test_first_step_start_in_another_offset_compares_as_an_instant(tmp_path):
-    provider = file_provider(
-        write_provider_doc(tmp_path, first_step_start="2026-07-05T14:00:00+02:00")
-    )
+@pytest.mark.parametrize(
+    "stamp",
+    ["2026-07-05T14:00:00+02:00", "2026-07-05T12:00:00.000000Z", "2026-07-05T12:00Z"],
+)
+async def test_first_step_start_compares_as_an_instant(tmp_path, stamp):
+    provider = file_provider(write_provider_doc(tmp_path, first_step_start=stamp))
     params = await provider.fetch(first_step_start=STEP0, now=T0)
     assert params["soc_init"] == 0.62
 
@@ -321,6 +323,25 @@ async def test_url_http_error_carries_the_response_body():
     respx.get(URL).respond(503, text="bridge: evcc unreachable, no forecast")
     with pytest.raises(StaleInputs, match="HTTP 503.*evcc unreachable"):
         await url_provider(URL).fetch(first_step_start=STEP0, now=T0)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"k" * 5000: []},  # key echoed by the length check
+        {"generated_at": "2026-07-05T" + "9" * 5000},  # value echoed by the parser
+    ],
+    ids=["long-key", "long-generated_at"],
+)
+async def test_reason_text_is_bounded_on_every_path(tmp_path, overrides):
+    # the text goes to a retained MQTT payload and last_cycle.json: never unbounded
+    from flexd.runtime_params import MAX_REASON_CHARS
+
+    provider = file_provider(write_provider_doc(tmp_path, **overrides))
+    with pytest.raises(StaleInputs) as info:
+        await provider.fetch(first_step_start=STEP0, now=T0)
+    assert len(str(info.value)) <= MAX_REASON_CHARS
+    assert str(info.value).startswith(str(tmp_path))
 
 
 @respx.mock

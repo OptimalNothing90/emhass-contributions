@@ -40,6 +40,9 @@ MAX_DOC_BYTES = 1_000_000
 MAX_ERROR_BODY_CHARS = 500
 # an ISO 8601 instant with offset is under 40 characters
 MAX_STAMP_CHARS = 64
+# the StaleInputs text is retained on MQTT and written to last_cycle.json; a
+# document key or value echoed into it must never make either unbounded
+MAX_REASON_CHARS = 1000
 # lists the aggregator overrides and drops with a warning anyway: their length says
 # nothing about the forecasts, so they are not held to prediction_horizon
 _FLEXD_OWNED_KEYS = FLEXD_CANONICAL_KEYS | FLEXD_LEGACY_ALIASES
@@ -51,7 +54,13 @@ def _reject_constant(name: str):
 
 
 class StaleInputs(Exception):
-    """The provider document is unusable for this cycle; the message says why."""
+    """The provider document is unusable for this cycle; the message says why.
+    The text is bounded here, at the one place every reason passes through."""
+
+    def __init__(self, message: str):
+        if len(message) > MAX_REASON_CHARS:
+            message = message[: MAX_REASON_CHARS - 3] + "..."
+        super().__init__(message)
 
 
 class RuntimeParamsProvider:
